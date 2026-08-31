@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none">
+  <!-- Background circle -->
+  <rect width="48" height="48" rx="12" fill="#6366f1"/>
+  <!-- Stylized S -->
+  <path d="M16 14c0-2.2 1.8-4 4-4h8c2.2 0 4 1.8 4 4v2c0 1.1-.9 2-2 2h-10c-2.2 0-4 1.8-4 4v2c0 2.2 1.8 4 4 4h12c2.2 0 4 1.8 4 4v2c0 2.2-1.8 4-4 4h-8c-2.2 0-4-1.8-4-4v-2" stroke="white" stroke-width="3" stroke-linecap="round" fill="none"/>
+  <!-- Live broadcast dot -->
+  <circle cx="38" cy="10" r="4" fill="#22c55e"/>
+</svg>

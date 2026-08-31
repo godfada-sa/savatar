@@ -1,0 +1,6 @@
+⚠ Fast Refresh had to perform a full reload when ./src/lib/firebase.ts changed. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+\avatar\frontend
+- Log:          .next\dev\logs\next-development.log
+
+You can access the existing server at http://localhost:51594,
+or run taskkill /PID 936 /F to stop it and start a new one.
