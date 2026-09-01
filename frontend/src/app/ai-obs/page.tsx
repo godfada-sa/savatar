@@ -8,11 +8,13 @@ interface Background {
   id: string;
   name: string;
   category: string;
+  position?: string;
 }
 
 export default function AiObsPage() {
   const { user } = useAuth();
   const videoRef = useRef<HTMLVideoElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [streaming, setStreaming] = useState(false);
   const [cameraActive, setCameraActive] = useState(false);
   const [selectedBg, setSelectedBg] = useState("original");
@@ -20,15 +22,19 @@ export default function AiObsPage() {
   const [obsUrl, setObsUrl] = useState("");
   const [resolution, setResolution] = useState("1080p");
   const [bgCategory, setBgCategory] = useState("all");
+  const [referenceImage, setReferenceImage] = useState<string | null>(null);
+  const [lookModalOpen, setLookModalOpen] = useState(false);
+  const [error, setError] = useState("");
 
   const backgrounds: Background[] = [
     { id: "original", name: "Original", category: "all" },
     // Professional
-    { id: "studio", name: "News Studio", category: "professional" },
-    { id: "podcast", name: "Podcast Setup", category: "professional" },
-    { id: "ceo-office", name: "CEO Office", category: "professional" },
-    { id: "meeting-room", name: "Boardroom", category: "professional" },
-    { id: "workspace", name: "Creative Studio", category: "professional" },
+    { id: "luxury-suite", name: "Luxury Modern Suite", category: "luxury", position: "0% 0%" },
+    { id: "presidential", name: "Presidential Suite", category: "luxury", position: "50% 0%" },
+    { id: "business-room", name: "Premium Business Room", category: "luxury", position: "100% 0%" },
+    { id: "ceo-office", name: "Executive CEO Office", category: "professional", position: "0% 100%" },
+    { id: "meeting-room", name: "Corporate Meeting Room", category: "professional", position: "50% 100%" },
+    { id: "workspace", name: "Modern Creative Workspace", category: "professional", position: "100% 100%" },
     // Luxury
     { id: "luxury-suite", name: "Luxury Suite", category: "luxury" },
     { id: "penthouse", name: "Penthouse View", category: "luxury" },
@@ -55,17 +61,34 @@ export default function AiObsPage() {
     return () => cancelAnimationFrame(frame);
   }, [user]);
 
+  useEffect(() => {
+    setReferenceImage(localStorage.getItem("savatar-reference-image"));
+  }, []);
+
   const startCamera = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: 1280, height: 720, frameRate: { ideal: 30 } },
+        video: { width: resolution === "1080p" ? 1920 : 1280, height: resolution === "1080p" ? 1080 : 720, frameRate: { ideal: 30 } },
         audio: true,
       });
       if (videoRef.current) videoRef.current.srcObject = stream;
       setCameraActive(true);
     } catch {
-      alert("Camera access denied");
+      setError("Camera or microphone permission was denied.");
     }
+  };
+
+  const toggleMic = () => {
+    const stream = videoRef.current?.srcObject as MediaStream | null;
+    stream?.getAudioTracks().forEach((track) => { track.enabled = !track.enabled; });
+  };
+
+  const uploadReference = (file?: File) => {
+    if (!file) return;
+    if (!file.type.startsWith("image/") || file.size > 2_000_000) { setError("Use an image under 2 MB."); return; }
+    const reader = new FileReader();
+    reader.onload = () => { const image = String(reader.result); localStorage.setItem("savatar-reference-image", image); setReferenceImage(image); setSelectedLook("reference"); setLookModalOpen(false); };
+    reader.readAsDataURL(file);
   };
 
   const stopCamera = () => {
@@ -82,11 +105,11 @@ export default function AiObsPage() {
     <DashboardLayout>
       <div className="p-6">
         {/* Error banner */}
-        {!cameraActive && (
+        {(error || !cameraActive) && (
           <div className="mb-4 p-4 rounded-xl bg-red-950/30 border border-red-500/20">
             <div className="text-sm font-semibold text-red-400">Streaming error</div>
             <div className="text-xs text-red-300/70 mt-0.5">
-              No camera was found. Connect a camera, then reload this page.
+              {error || "Start your camera to preview and stream."}
             </div>
           </div>
         )}
@@ -117,8 +140,8 @@ export default function AiObsPage() {
                   </div>
                 </div>
                 <div className="p-2 border-t border-white/5 flex items-center gap-2">
-                  <button className="px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-[11px] text-neutral-300">Camera</button>
-                  <button className="px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-[11px] text-neutral-300">Mic</button>
+                  <button onClick={cameraActive ? stopCamera : startCamera} className="px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-[11px] text-neutral-300">{cameraActive ? "Stop camera" : "Camera"}</button>
+                  <button onClick={toggleMic} disabled={!cameraActive} className="px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-[11px] text-neutral-300 disabled:opacity-40">Mic</button>
                 </div>
               </div>
 
@@ -199,7 +222,7 @@ export default function AiObsPage() {
                     }`}
                   >
                     <div className="w-8 h-8 rounded bg-white/10 flex items-center justify-center text-[10px] text-neutral-500">
-                      {bg.id === "original" ? "CAM" : bg.name[0]}
+                      {bg.id === "original" ? "CAM" : <span className="h-full w-full rounded bg-cover" style={{ backgroundImage: "url('/backgrounds/studio-scenes.png')", backgroundPosition: bg.position, backgroundSize: "300% 200%" }} />}
                     </div>
                     <span className="text-[9px] text-neutral-400 leading-tight">{bg.name}</span>
                   </button>
@@ -227,13 +250,12 @@ export default function AiObsPage() {
                     </button>
                   ))}
                 </div>
-                <label className="flex items-center gap-2 px-4 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-xs text-neutral-300 cursor-pointer transition">
+                <button onClick={() => setLookModalOpen(true)} className="flex items-center gap-2 px-4 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-xs text-neutral-300 transition">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                   </svg>
-                  Upload reference image
-                  <input type="file" accept="image/*" className="hidden" />
-                </label>
+                  {referenceImage ? "Change reference image" : "Upload reference image"}
+                </button>
               </div>
             </div>
           </div>
@@ -284,6 +306,7 @@ export default function AiObsPage() {
             </div>
           </div>
         </div>
+        {lookModalOpen && <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4 backdrop-blur-sm"><div className="w-full max-w-md rounded-2xl border border-indigo-400/30 bg-[#111827] p-5 shadow-2xl"><div className="flex items-center justify-between"><h2 className="font-semibold">Choose your look</h2><button onClick={() => setLookModalOpen(false)} className="rounded border border-white/10 px-2">×</button></div><p className="mt-1 text-xs text-neutral-400">Stored only in this browser until its site data is cleared.</p>{referenceImage && <img src={referenceImage} alt="Saved reference" className="mt-4 h-28 w-28 rounded-lg object-cover" />}<input ref={fileInputRef} onChange={(event) => uploadReference(event.target.files?.[0])} type="file" accept="image/*" className="hidden"/><button onClick={() => fileInputRef.current?.click()} className="mt-4 rounded-lg bg-indigo-500 px-4 py-2 text-sm font-medium text-white">Upload reference image</button></div></div>}
       </div>
     </DashboardLayout>
   );
