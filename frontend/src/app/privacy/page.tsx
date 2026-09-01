@@ -20,7 +20,7 @@ export default function PrivacyPage() {
 
       <LegalSection id="collect" title="1. Information we collect">
         <p><strong className="font-semibold text-neutral-200">Account information.</strong> Your name, email address, profile image, account identifier, authentication provider, account creation date, and sign-in information. Passwords are handled by Firebase Authentication and are not visible to SaffulTech.</p>
-        <p><strong className="font-semibold text-neutral-200">Wallet and transaction information.</strong> Credit balance, time purchased and used, plan, promo-code usage, payment amount, network, mobile-money phone number, payment reference, provider response, and transaction status.</p>
+        <p><strong className="font-semibold text-neutral-200">Wallet and transaction information.</strong> Credit balance, time purchased and used, plan, promo-code usage, payment amount, payment channel, payment reference, provider response, and transaction status.</p>
         <p><strong className="font-semibold text-neutral-200">Creation and live-session information.</strong> AI prompts, selected transformation mode, reference images you choose, camera and microphone streams, room identifiers, viewer counts, connection data, and live-chat messages.</p>
         <p><strong className="font-semibold text-neutral-200">Device and service information.</strong> Browser and device information, IP address and approximate location derived from it, timestamps, diagnostic logs, security events, and service-performance data. Stream preferences such as resolution and frame rate may be stored locally in your browser.</p>
       </LegalSection>

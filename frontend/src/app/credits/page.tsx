@@ -9,8 +9,6 @@ import DashboardLayout from "@/components/DashboardLayout";
 function CreditsContent() {
   const { user, userData } = useAuth();
   const [selectedPack, setSelectedPack] = useState<string | null>(null);
-  const [paymentMethod, setPaymentMethod] = useState<"mtn" | "telecel" | "airteltigo">("mtn");
-  const [phoneNumber, setPhoneNumber] = useState("");
   const [processing, setProcessing] = useState(false);
 
   // Promo code state
@@ -31,7 +29,11 @@ function CreditsContent() {
 
   useEffect(() => {
     if (paymentStatus === "success" && paymentRef) {
-      alert(`Payment completed! Reference: ${paymentRef}. Your credits will appear shortly after confirmation.`);
+      alert(`Payment verified. Your credits have been added. Reference: ${paymentRef}`);
+    } else if (paymentStatus === "pending" && paymentRef) {
+      alert(`Payment is still being confirmed. Reference: ${paymentRef}`);
+    } else if (paymentStatus === "failed") {
+      alert("The payment could not be verified. You have not been credited.");
     }
   }, [paymentStatus, paymentRef]);
 
@@ -86,7 +88,7 @@ function CreditsContent() {
   };
 
   const handlePurchase = async () => {
-    if (!selectedPack || !phoneNumber || !user) return;
+    if (!selectedPack || !user) return;
     setProcessing(true);
     try {
       const idToken = await user.getIdToken();
@@ -98,8 +100,6 @@ function CreditsContent() {
         },
         body: JSON.stringify({
           packId: selectedPack,
-          phone: phoneNumber,
-          method: paymentMethod,
           promoCode: promoResult ? promoCode.toUpperCase().trim() : "",
         }),
       });
@@ -129,7 +129,7 @@ function CreditsContent() {
             <div className="text-[10px] text-indigo-400 font-semibold uppercase tracking-wider mb-1">Credits & Billing</div>
             <h1 className="text-xl font-bold">Buy Credits, Unlock Possibilities</h1>
             <p className="text-xs text-neutral-500 mt-1 max-w-lg">
-              Choose a pack, pay via MoMo or Telecel Cash. Credits are added instantly after payment confirmation.
+              Choose a pack and pay securely by mobile money or card through Paystack. Credits are added after verification.
             </p>
           </div>
           <div className="w-full text-left px-4 py-3 rounded-xl bg-[#111] border border-white/5 sm:w-auto sm:px-6 sm:text-center">
@@ -182,39 +182,9 @@ function CreditsContent() {
           <div className="max-w-md mx-auto p-5 rounded-xl bg-[#111] border border-white/5 space-y-4">
             <h3 className="text-sm font-semibold">Payment</h3>
 
-            {/* Payment Method */}
-            <div>
-              <label className="block text-xs text-neutral-400 mb-2">Payment Method</label>
-              <div className="grid grid-cols-3 gap-2">
-                {[
-                  { id: "mtn" as const, label: "MTN MoMo", color: "bg-yellow-500/10 border-yellow-500/30 text-yellow-400" },
-                  { id: "telecel" as const, label: "Telecel", color: "bg-red-500/10 border-red-500/30 text-red-400" },
-                  { id: "airteltigo" as const, label: "AirtelTigo", color: "bg-red-600/10 border-red-600/30 text-red-400" },
-                ].map((m) => (
-                  <button
-                    key={m.id}
-                    onClick={() => setPaymentMethod(m.id)}
-                    className={`p-3 rounded-lg border text-xs font-medium text-center transition ${
-                      paymentMethod === m.id ? m.color : "bg-white/5 border-white/10 text-neutral-400"
-                    }`}
-                  >
-                    {m.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Phone Number */}
-            <div>
-              <label className="block text-xs text-neutral-400 mb-1.5">Phone Number</label>
-              <input
-                type="tel"
-                value={phoneNumber}
-                onChange={(e) => setPhoneNumber(e.target.value)}
-                placeholder="024 123 4567"
-                className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-white placeholder-neutral-600 focus:outline-none focus:border-indigo-500 transition"
-              />
-              <p className="text-[11px] text-neutral-600 mt-1">You&apos;ll be redirected to a secure payment page</p>
+            <div className="rounded-lg border border-blue-500/20 bg-blue-500/[0.06] p-3">
+              <div className="text-xs font-medium text-blue-300">Secure Paystack checkout</div>
+              <p className="mt-1 text-[11px] text-neutral-500">Choose MTN MoMo, Telecel Cash, AT Money, or card on Paystack&apos;s payment page.</p>
             </div>
 
             {/* Promo Code */}
@@ -316,10 +286,10 @@ function CreditsContent() {
 
             <button
               onClick={handlePurchase}
-              disabled={!selectedPack || !phoneNumber || processing}
+              disabled={!selectedPack || processing}
               className="w-full py-3 bg-indigo-500 hover:bg-indigo-600 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium rounded-xl transition"
             >
-              {processing ? "Processing..." : `Pay GH ${finalPrice.toFixed(0)} via ${paymentMethod.toUpperCase()}`}
+              {processing ? "Opening Paystack..." : `Pay GH ${finalPrice.toFixed(0)} securely`}
             </button>
           </div>
         )}
