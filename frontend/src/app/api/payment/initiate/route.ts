@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
     const promoCode = typeof body.promoCode === "string" ? body.promoCode.toUpperCase().trim() : "";
 
     const pack = getCreditPack(packId);
-    if (!pack || !/^0\d{9}$/.test(phone)) {
+    if (!pack || !["mtn", "telecel", "airteltigo"].includes(method) || !/^0\d{9}$/.test(phone)) {
       throw new RequestError(400, "Choose a valid credit pack and 10-digit Ghana phone number");
     }
 
@@ -77,8 +77,12 @@ export async function POST(req: NextRequest) {
         throw new RequestError(400, "You have already used this promo code");
       }
 
-      discountPercent = promoData.discountPercent || 0;
-      bonusSeconds = promoData.bonusSeconds || 0;
+      discountPercent = Math.floor(Number(promoData.discountPercent ?? 0));
+      bonusSeconds = Math.floor(Number(promoData.bonusSeconds ?? 0));
+      if (!Number.isInteger(discountPercent) || discountPercent < 0 || discountPercent > 100 ||
+          !Number.isInteger(bonusSeconds) || bonusSeconds < 0 || bonusSeconds > 86_400) {
+        throw new RequestError(400, "Promo configuration is invalid");
+      }
     }
 
     // ─── Calculate final price ────────────────────────────

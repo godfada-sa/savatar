@@ -76,6 +76,8 @@ export default function Dashboard() {
           }
         } catch (err) {
           console.error("Debit failed:", err);
+          setIsStreaming(false);
+          setError("Unable to verify credit usage. Streaming was stopped to protect your balance.");
         }
       }, 1000);
     } else {
@@ -98,6 +100,20 @@ export default function Dashboard() {
       streamRef.current?.getTracks().forEach((track) => track.stop());
     };
   }, []);
+
+  // A failed debit or signaling authorization must also release the paid AI
+  // session; merely changing the UI state would leave it running remotely.
+  useEffect(() => {
+    if (isStreaming) return;
+    clientRef.current?.disconnect();
+    clientRef.current = null;
+    socketRef.current?.disconnect();
+    socketRef.current = null;
+    for (const connection of peerConnectionsRef.current.values()) connection.close();
+    peerConnectionsRef.current.clear();
+    pendingPeerCandidatesRef.current.clear();
+    transformedStreamRef.current = null;
+  }, [isStreaming]);
 
   const formatTime = (s: number) => {
     const m = Math.floor(s / 60);
@@ -232,6 +248,17 @@ export default function Dashboard() {
 
       socket.on("connect_error", () => {
         setError("Could not reach the live-stream signaling service.");
+        setIsStreaming(false);
+      });
+
+      socket.on("authorization-error", () => {
+        setError("Your account is not authorized to broadcast.");
+        setIsStreaming(false);
+      });
+
+      socket.on("room-error", (message: string) => {
+        setError(message || "Unable to open a live stream room.");
+        setIsStreaming(false);
       });
 
       socket.on("viewer-count", (count: number) => {

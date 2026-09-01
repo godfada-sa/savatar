@@ -126,8 +126,12 @@ export async function POST(req: NextRequest) {
       }
 
       // Use stored seconds (includes bonus) and stored amount (includes discount)
-      const secondsToCredit = Number(order.seconds) || orderPack.seconds;
-      const amountPaid = Number(order.amount) || orderPack.priceGHS;
+      const secondsToCredit = Math.floor(Number(order.seconds));
+      const amountPaid = Number(order.amount);
+      if (!Number.isSafeInteger(secondsToCredit) || secondsToCredit < orderPack.seconds ||
+          !Number.isFinite(amountPaid) || amountPaid < 1) {
+        throw new Error("Stored payment order has invalid credit values");
+      }
 
       const userRef = db.collection("users").doc(order.userId);
       const user = await transaction.get(userRef);
@@ -140,27 +144,25 @@ export async function POST(req: NextRequest) {
       });
 
       // Mark promo as used (if applicable)
-      const promoCode = order.promoCode;
+      const promoCode = typeof order.promoCode === "string" ? order.promoCode : "";
       if (promoCode) {
         const userData = user.data()!;
         const promoUsed = userData.promoUsed || [];
-        if (!promoUsed.includes(promoCode)) {
-          transaction.update(userRef, {
-            promoUsed: [...promoUsed, promoCode],
-          });
-        }
+        const promoDocId = typeof order.promoDocId === "string" ? order.promoDocId : "";
+        const promoRef = promoDocId ? db.collection("promos").doc(promoDocId) : null;
+        const promoSnap = promoRef ? await transaction.get(promoRef) : null;
+        const promo = promoSnap?.data();
+        const expiresAt = promo?.expiresAt ? new Date(String(promo.expiresAt)) : null;
+        const isPromoUsable = Boolean(
+          promoSnap?.exists && promo?.code === promoCode && promo?.active === true &&
+          !promoUsed.includes(promoCode) &&
+          (!promo?.maxUses || Number(promo.usedCount ?? 0) < Number(promo.maxUses)) &&
+          (!expiresAt || (Number.isFinite(expiresAt.getTime()) && expiresAt >= new Date()))
+        );
+        if (!isPromoUsable) throw new Error("Promo is no longer eligible for this payment");
 
-        // Increment promo usage count
-        const promoDocId = order.promoDocId;
-        if (promoDocId) {
-          const promoRef = db.collection("promos").doc(promoDocId);
-          const promoSnap = await transaction.get(promoRef);
-          if (promoSnap.exists) {
-            transaction.update(promoRef, {
-              usedCount: FieldValue.increment(1),
-            });
-          }
-        }
+        transaction.update(userRef, { promoUsed: [...promoUsed, promoCode] });
+        transaction.update(promoRef!, { usedCount: FieldValue.increment(1) });
       }
 
       // Mark payment as completed

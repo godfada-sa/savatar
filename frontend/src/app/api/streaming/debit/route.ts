@@ -22,13 +22,21 @@ export async function POST(req: NextRequest) {
     // Rate limit: max 1 debit per 800ms (slightly faster than 1/sec to account for network)
     await enforceRateLimit(db, "streaming-debit", user.uid, 75, 60_000);
 
-    const userSnap = await userRef.get();
-    if (!userSnap.exists) {
-      throw new RequestError(404, "User not found");
-    }
+    // Read and debit in one transaction. A separate read/update sequence lets
+    // concurrent requests spend the same final second more than once.
+    const balance = await db.runTransaction(async (transaction) => {
+      const userSnap = await transaction.get(userRef);
+      if (!userSnap.exists) throw new RequestError(404, "User not found");
 
-    const data = userSnap.data()!;
-    const balance = data?.wallet?.balanceSeconds || 0;
+      const currentBalance = Math.floor(Number(userSnap.data()?.wallet?.balanceSeconds ?? 0));
+      if (!Number.isFinite(currentBalance) || currentBalance <= 0) return 0;
+
+      transaction.update(userRef, {
+        "wallet.balanceSeconds": FieldValue.increment(-1),
+        "wallet.totalUsed": FieldValue.increment(1),
+      });
+      return currentBalance;
+    });
 
     if (balance <= 0) {
       return privateJson({
@@ -37,12 +45,6 @@ export async function POST(req: NextRequest) {
         message: "No credits remaining. Purchase more to continue streaming.",
       });
     }
-
-    // Deduct one second
-    await userRef.update({
-      "wallet.balanceSeconds": FieldValue.increment(-1),
-      "wallet.totalUsed": FieldValue.increment(1),
-    });
 
     return privateJson({
       success: true,

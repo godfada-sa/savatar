@@ -11,6 +11,8 @@
 
 const { Server } = require("socket.io");
 const http = require("http");
+const { cert, getApps, initializeApp } = require("firebase-admin/app");
+const { getAuth } = require("firebase-admin/auth");
 
 const PORT = Number(process.env.PORT || process.env.SIGNALING_PORT || 4000);
 const allowedOrigins = (process.env.ALLOWED_ORIGINS || "http://localhost:3000,http://127.0.0.1:3000")
@@ -22,6 +24,28 @@ function allowOrigin(origin, callback) {
   // Health checks and other non-browser clients do not send an Origin header.
   if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
   return callback(new Error("Origin is not allowed"));
+}
+
+function firebaseAuth() {
+  if (getApps().length === 0) {
+    const projectId = process.env.FIREBASE_PROJECT_ID;
+    const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+    const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n");
+    if (!projectId || !clientEmail || !privateKey) throw new Error("Firebase Admin is not configured");
+    initializeApp({ credential: cert({ projectId, clientEmail, privateKey }), projectId });
+  }
+  return getAuth();
+}
+
+async function authenticatedBroadcaster(socket) {
+  const token = socket.handshake.auth?.token;
+  if (typeof token !== "string" || token.length === 0 || token.length > 8192) return null;
+  try {
+    const decoded = await firebaseAuth().verifyIdToken(token, true);
+    return decoded.email_verified ? decoded.uid : null;
+  } catch {
+    return null;
+  }
 }
 
 const server = http.createServer((req, res) => {
@@ -52,9 +76,18 @@ io.on("connection", (socket) => {
   console.log(`[connect] ${socket.id}`);
 
   // ─── Join Room ──────────────────────────────────────
-  socket.on("join-room", ({ roomId, role }) => {
+  socket.on("join-room", async ({ roomId, role }) => {
     if (typeof roomId !== "string" || !/^[a-z0-9-]{1,64}$/i.test(roomId)) return;
     if (role !== "broadcaster" && role !== "viewer") return;
+    if (role === "broadcaster") {
+      const userId = await authenticatedBroadcaster(socket);
+      if (!userId) {
+        socket.emit("authorization-error", "Sign in with a verified account to broadcast.");
+        socket.disconnect(true);
+        return;
+      }
+      socket.userId = userId;
+    }
     console.log(`[join-room] ${socket.id} -> ${roomId} (${role})`);
 
     // Leave any previous rooms
@@ -66,7 +99,7 @@ io.on("connection", (socket) => {
 
     // Create room if it doesn't exist
     if (!rooms[roomId]) {
-      rooms[roomId] = { broadcaster: null, viewers: new Set(), streamActive: false };
+      rooms[roomId] = { broadcaster: null, broadcasterUserId: null, viewers: new Set(), streamActive: false };
     }
 
     const room = rooms[roomId];
@@ -74,7 +107,12 @@ io.on("connection", (socket) => {
     socket.role = role;
 
     if (role === "broadcaster") {
+      if (room.broadcaster) {
+        socket.emit("room-error", "This stream is already being broadcast.");
+        return;
+      }
       room.broadcaster = socket.id;
+      room.broadcasterUserId = socket.userId;
       room.streamActive = true;
       socket.join(roomId);
 
@@ -136,7 +174,7 @@ io.on("connection", (socket) => {
   // ─── Broadcaster Events ─────────────────────────────
   socket.on("broadcaster-started", ({ roomId }) => {
     const room = rooms[roomId];
-    if (room) {
+    if (room?.broadcaster === socket.id) {
       room.streamActive = true;
       socket.to(roomId).emit("stream-started");
     }
@@ -144,7 +182,7 @@ io.on("connection", (socket) => {
 
   socket.on("broadcaster-stopped", ({ roomId }) => {
     const room = rooms[roomId];
-    if (room) {
+    if (room?.broadcaster === socket.id) {
       room.streamActive = false;
       socket.to(roomId).emit("stream-stopped");
     }
@@ -152,9 +190,14 @@ io.on("connection", (socket) => {
 
   // ─── Chat ───────────────────────────────────────────
   socket.on("chat-message", ({ roomId, username, message }) => {
+    const room = rooms[roomId];
+    if (!room || socket.roomId !== roomId || typeof username !== "string" || typeof message !== "string") return;
+    const safeUsername = username.trim().slice(0, 40);
+    const safeMessage = message.trim().slice(0, 500);
+    if (!safeUsername || !safeMessage) return;
     io.to(roomId).emit("chat-message", {
-      username,
-      message,
+      username: safeUsername,
+      message: safeMessage,
       timestamp: Date.now(),
     });
   });
@@ -173,6 +216,7 @@ io.on("connection", (socket) => {
 
     if (room.broadcaster === sock.id) {
       room.broadcaster = null;
+      room.broadcasterUserId = null;
       room.streamActive = false;
       sock.to(roomId).emit("broadcaster-left");
       console.log(`[broadcaster-left] ${roomId}`);

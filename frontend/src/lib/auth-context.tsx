@@ -56,7 +56,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Listen to auth state
   useEffect(() => {
+    let unsubscribeWallet: (() => void) | undefined;
     const unsubscribe = onAuthStateChanged(getAuthInstance(), async (firebaseUser) => {
+      unsubscribeWallet?.();
+      unsubscribeWallet = undefined;
       setUser(firebaseUser);
 
       if (firebaseUser) {
@@ -83,21 +86,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         // Listen to real-time wallet updates
-        const unsubWallet = onSnapshot(userRef, (doc) => {
+        unsubscribeWallet = onSnapshot(userRef, (doc) => {
           if (doc.exists()) {
             setUserData(doc.data() as UserData);
           }
         });
 
         setLoading(false);
-        return () => unsubWallet();
       } else {
         setUserData(null);
         setLoading(false);
       }
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribeWallet?.();
+      unsubscribe();
+    };
   }, []);
 
   const login = async (email: string, password: string) => {
