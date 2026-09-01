@@ -460,9 +460,10 @@ export default function AdminPage() {
                       className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-white focus:outline-none focus:border-indigo-500" />
                   </div>
                   <div className="w-28">
-                    <label className="block text-[10px] text-neutral-500 uppercase tracking-wider mb-1">Seconds</label>
-                    <input type="number" value={creditSeconds} onChange={(e) => setCreditSeconds(e.target.value)} placeholder="300" required
+                    <label className="block text-[10px] text-neutral-500 uppercase tracking-wider mb-1">Wallet seconds</label>
+                    <input type="number" value={creditSeconds} onChange={(e) => setCreditSeconds(e.target.value)} placeholder="500" required
                       className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-white focus:outline-none focus:border-indigo-500" />
+                    <p className="mt-1 text-[9px] text-neutral-600">1,000 Lucy credits = 500 seconds</p>
                   </div>
                   <div className="flex-1 min-w-[140px]">
                     <label className="block text-[10px] text-neutral-500 uppercase tracking-wider mb-1">Reason</label>
