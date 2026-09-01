@@ -47,5 +47,5 @@ export default function ObsSourcePage() {
     return () => { pcRef.current?.close(); socket.disconnect(); };
   }, [id]);
 
-  return <main className="grid min-h-screen place-items-center bg-black"><video ref={videoRef} autoPlay playsInline muted={muted} className="h-screen w-screen object-contain" />{status && <span className="absolute rounded bg-black/70 px-4 py-2 text-sm text-white">{status}</span>}</main>;
+  return <main className="grid min-h-screen place-items-center bg-gradient-to-br from-[#11284b] via-[#0a2942] to-[#020711]"><video ref={videoRef} autoPlay playsInline muted={muted} className="h-screen w-screen object-contain" />{status && <span className="absolute rounded bg-black/35 px-4 py-2 text-sm text-blue-100/70">{status}</span>}</main>;
 }

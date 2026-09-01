@@ -6,7 +6,7 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
-        source: "/:path*",
+        source: "/:path((?!obs/).*)",
         headers: [
           { key: "Content-Security-Policy", value: "base-uri 'self'; form-action 'self'; frame-ancestors 'none'; object-src 'none'" },
           { key: "Cross-Origin-Opener-Policy", value: "same-origin-allow-popups" },
@@ -17,6 +17,16 @@ const nextConfig: NextConfig = {
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "X-Frame-Options", value: "DENY" },
           { key: "X-Permitted-Cross-Domain-Policies", value: "none" },
+        ],
+      },
+      {
+        source: "/obs/:path*",
+        headers: [
+          { key: "Content-Security-Policy", value: "base-uri 'self'; frame-ancestors 'self'; object-src 'none'" },
+          { key: "Cross-Origin-Resource-Policy", value: "same-origin" },
+          { key: "Referrer-Policy", value: "no-referrer" },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "X-Frame-Options", value: "SAMEORIGIN" },
         ],
       },
       {
