@@ -201,11 +201,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <div className="text-xs font-semibold text-white mb-1">Community</div>
             <p className="text-[10px] text-neutral-500 mb-2">Join our groups for updates and support.</p>
             <div className="space-y-1.5">
-              <a href="#" className="block px-3 py-2 rounded-lg bg-blue-500 hover:bg-blue-600 text-white text-[11px] font-medium text-center transition">
-                Join Telegram Group
+              <a href="https://t.me/saf_ful" target="_blank" rel="noreferrer" className="block px-3 py-2 rounded-lg bg-blue-500 hover:bg-blue-600 text-white text-[11px] font-medium text-center transition">
+                Message on Telegram
               </a>
-              <a href="#" className="block px-3 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-[11px] font-medium text-center transition">
-                Join WhatsApp Group
+              <a href="https://wa.me/233256238978" target="_blank" rel="noreferrer" className="block px-3 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-[11px] font-medium text-center transition">
+                Message on WhatsApp
               </a>
             </div>
           </div>

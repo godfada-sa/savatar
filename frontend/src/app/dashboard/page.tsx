@@ -445,7 +445,7 @@ export default function Dashboard() {
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
           {/* Left: Camera Preview */}
           <div className="xl:col-span-2 space-y-3">
-            <div className="rounded-xl bg-[#111] border border-white/5 overflow-hidden">
+            <div className="overflow-hidden rounded-xl border border-blue-400/15 bg-[#111] shadow-[0_0_34px_rgba(37,99,235,0.09)]">
               <div className="p-3 border-b border-white/5 flex items-center justify-between">
                 <span className="text-xs font-semibold">Camera preview</span>
                 <span className="text-[10px] text-neutral-500 px-2 py-0.5 rounded bg-white/5">
@@ -481,7 +481,7 @@ export default function Dashboard() {
                 className={`px-4 py-2 rounded-lg text-xs font-medium transition ${
                   isStreaming
                     ? "bg-red-500 hover:bg-red-600 text-white"
-                    : "bg-indigo-500 hover:bg-indigo-600 text-white"
+                    : "bg-indigo-500 hover:bg-indigo-600 text-white shadow-[0_0_18px_rgba(59,130,246,0.18)]"
                 }`}
               >
                 {isStreaming ? "Stop" : cameraActive ? "Go Live" : "Start camera"}
@@ -585,7 +585,7 @@ export default function Dashboard() {
                 className={`w-full mt-3 py-2.5 rounded-lg text-sm font-medium transition ${
                   isStreaming
                     ? "bg-red-500 hover:bg-red-600 text-white"
-                    : "bg-indigo-500 hover:bg-indigo-600 text-white"
+                    : "bg-indigo-500 hover:bg-indigo-600 text-white shadow-[0_0_18px_rgba(59,130,246,0.18)]"
                 }`}
               >
                 {isStreaming ? "Stop" : cameraActive ? "Go Live" : "Start camera"}
