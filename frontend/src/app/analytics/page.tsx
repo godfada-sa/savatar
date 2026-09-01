@@ -19,16 +19,16 @@ export default function AnalyticsPage() {
 
   return (
     <DashboardLayout>
-      <div className="p-6">
+      <div className="p-3 sm:p-6">
         {/* Stats Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-6 gap-3 mb-6">
+        <div className="grid grid-cols-2 gap-2 mb-5 sm:gap-3 md:grid-cols-4">
           {[
             { label: "Credits purchased", value: totalPurchased + "m", sub: "All time", color: "text-white" },
             { label: "AI usage", value: totalUsed + "m", sub: "All time", color: "text-white" },
             { label: "Sessions", value: String(usage.length), sub: "Recorded", color: "text-emerald-400" },
             { label: "Credits Left", value: balanceMinutes + "m", sub: "Available", color: "text-white" },
           ].map((stat) => (
-            <div key={stat.label} className="p-4 rounded-xl bg-[#111] border border-white/5">
+            <div key={stat.label} className="min-w-0 p-3 sm:p-4 rounded-xl bg-[#111] border border-white/5">
               <div className="text-[10px] text-neutral-500 uppercase tracking-wider leading-none mb-2">{stat.label}</div>
               <div className={`font-display text-xl font-bold ${stat.color}`}>{stat.value}</div>
               <div className="text-[11px] text-neutral-500 mt-0.5">{stat.sub}</div>

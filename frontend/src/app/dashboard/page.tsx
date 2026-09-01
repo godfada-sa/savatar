@@ -375,7 +375,7 @@ export default function Dashboard() {
 
   return (
     <DashboardLayout>
-      <div className="p-6 space-y-4">
+      <div className="p-3 sm:p-6 space-y-4">
         {/* Error Banner */}
         {error && (
           <div className="p-4 rounded-xl bg-red-950/30 border border-red-500/20">

@@ -82,14 +82,14 @@ export default function FeedPage() {
 
   return (
     <DashboardLayout>
-      <div className="p-6">
+      <div className="p-3 sm:p-6">
         {/* Feed Tabs */}
-        <div className="flex items-center gap-1 mb-6 bg-[#111] p-1 rounded-lg w-fit border border-white/5">
+        <div className="mb-5 flex max-w-full items-center gap-1 overflow-x-auto rounded-lg border border-white/5 bg-[#111] p-1">
           {(["home", "explore", "trending", "messages", "profile"] as const).map((t) => (
             <button
               key={t}
               onClick={() => setActiveTab(t)}
-              className={`px-4 py-1.5 rounded-md text-xs font-medium transition capitalize ${
+              className={`shrink-0 px-4 py-1.5 rounded-md text-xs font-medium transition capitalize ${
                 activeTab === t ? "bg-indigo-500 text-white" : "text-neutral-400 hover:text-white"
               }`}
             >

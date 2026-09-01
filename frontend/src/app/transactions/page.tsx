@@ -45,6 +45,8 @@ export default function TransactionsPage() {
   }, [user]);
 
   const balanceMinutes = ((userData?.wallet?.balanceSeconds || 0) / 60).toFixed(1);
+  const paymentCount = transactions.filter((transaction) => transaction.type === "purchase").length;
+  const sessionCount = transactions.filter((transaction) => transaction.type === "usage").length;
   const formatTime = (seconds: number) => {
     const m = Math.floor(seconds / 60);
     const s = seconds % 60;
@@ -63,31 +65,25 @@ export default function TransactionsPage() {
 
   return (
     <DashboardLayout>
-      <div className="p-6">
-        {/* Error banner */}
-        <div className="mb-4 p-4 rounded-xl bg-red-950/30 border border-red-500/20">
-          <div className="text-sm font-semibold text-red-400">Session error</div>
-          <div className="text-xs text-red-300/70 mt-0.5">No camera was found. Connect a camera, then reload this page.</div>
-        </div>
-
+      <div className="p-3 sm:p-6">
         {/* Header */}
-        <div className="p-6 rounded-xl bg-indigo-500/[0.06] border border-indigo-500/15 mb-6 flex items-center justify-between">
-          <div>
+        <div className="p-5 sm:p-6 rounded-xl bg-indigo-500/[0.06] border border-indigo-500/15 mb-5 flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+          <div className="min-w-0">
             <div className="text-[10px] text-indigo-400 font-semibold uppercase tracking-wider mb-1">Wallet & Activity</div>
             <h1 className="text-xl font-bold">Transactions</h1>
             <p className="text-xs text-neutral-500 mt-1">
               Payments, credit movements, and streaming sessions — everything that affects your wallet in one place.
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="grid w-full grid-cols-2 gap-2 sm:grid-cols-4 lg:w-auto">
             {[
-              { label: "Payments", value: "0" },
-              { label: "Credit Events", value: "0" },
-              { label: "Sessions", value: "0" },
+              { label: "Payments", value: String(paymentCount) },
+              { label: "Credit Events", value: String(transactions.length) },
+              { label: "Sessions", value: String(sessionCount) },
               { label: "Balance", value: balanceMinutes + "m", color: "text-indigo-400" },
             ].map((s) => (
-              <div key={s.label} className="text-center px-3 py-2 rounded-lg bg-[#111] border border-white/5">
-                <div className="text-[9px] text-neutral-500 uppercase tracking-wider">{s.label}</div>
+              <div key={s.label} className="min-w-0 text-center px-2 py-3 rounded-lg bg-[#111] border border-white/5">
+                <div className="truncate text-[9px] text-neutral-500 uppercase tracking-wider">{s.label}</div>
                 <div className={`font-display text-sm font-bold ${s.color || "text-white"}`}>{s.value}</div>
               </div>
             ))}
@@ -102,13 +98,11 @@ export default function TransactionsPage() {
                 <h3 className="text-sm font-semibold">Payment transactions</h3>
                 <p className="text-[11px] text-neutral-500">Checkout history and payment status</p>
               </div>
-              <span className="text-xs text-neutral-500">0</span>
+              <span className="text-xs text-neutral-500">{paymentCount}</span>
             </div>
             <div className="text-center py-8">
-              <div className="text-neutral-600 text-sm">No payments yet</div>
-              <Link href="/credits" className="inline-block mt-3 px-4 py-2 bg-indigo-500 hover:bg-indigo-600 text-white text-xs font-medium rounded-lg transition">
-                Buy credits
-              </Link>
+              <div className="text-neutral-600 text-sm">{paymentCount ? `${paymentCount} payment${paymentCount === 1 ? "" : "s"} recorded` : "No payments yet"}</div>
+              {!paymentCount && <Link href="/credits" className="inline-block mt-3 px-4 py-2 bg-indigo-500 hover:bg-indigo-600 text-white text-xs font-medium rounded-lg transition">Buy credits</Link>}
             </div>
           </div>
 
@@ -118,10 +112,10 @@ export default function TransactionsPage() {
                 <h3 className="text-sm font-semibold">Credit activity</h3>
                 <p className="text-[11px] text-neutral-500">Every credit added or consumed</p>
               </div>
-              <span className="text-xs text-neutral-500">0</span>
+              <span className="text-xs text-neutral-500">{transactions.length}</span>
             </div>
             <div className="text-center py-8">
-              <div className="text-neutral-600 text-sm">No credit activity yet</div>
+              <div className="text-neutral-600 text-sm">{transactions.length ? `${transactions.length} wallet event${transactions.length === 1 ? "" : "s"} recorded` : "No credit activity yet"}</div>
             </div>
           </div>
         </div>
@@ -133,10 +127,10 @@ export default function TransactionsPage() {
               <h3 className="text-sm font-semibold">Session history</h3>
               <p className="text-[11px] text-neutral-500">Streaming sessions and credit usage</p>
             </div>
-            <span className="text-xs text-neutral-500">0</span>
+            <span className="text-xs text-neutral-500">{sessionCount}</span>
           </div>
           <div className="text-center py-8">
-            <div className="text-neutral-600 text-sm">No sessions yet</div>
+            <div className="text-neutral-600 text-sm">{sessionCount ? `${sessionCount} streaming session${sessionCount === 1 ? "" : "s"} recorded` : "No sessions yet"}</div>
           </div>
         </div>
 
@@ -144,25 +138,25 @@ export default function TransactionsPage() {
         {!loading && transactions.length > 0 && (
           <div className="mt-4 space-y-2">
             {transactions.map((t) => (
-              <div key={t.id} className="p-4 rounded-xl bg-[#111] border border-white/5 flex items-center justify-between">
-                <div className="flex items-center gap-3">
+              <div key={t.id} className="flex flex-col gap-3 rounded-xl border border-white/5 bg-[#111] p-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex min-w-0 items-center gap-3">
                   <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-semibold ${getTypeColor(t.type)}`}>
                     {t.type === "purchase" ? "+" : t.type === "usage" ? "-" : t.type === "promo" ? "P" : "A"}
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <div className="text-sm font-medium text-white">
                       {t.type === "purchase" && `Purchased ${formatTime(t.seconds)}`}
                       {t.type === "usage" && `Used ${formatTime(t.seconds)}`}
                       {t.type === "promo" && `Promo bonus: ${formatTime(t.seconds)}`}
                       {t.type === "admin" && `Admin credit: ${formatTime(t.seconds)}`}
                     </div>
-                    <div className="text-[11px] text-neutral-500">
+                    <div className="break-all text-[11px] text-neutral-500">
                       {t.amount ? `GH ${t.amount}` : ""}
                       {t.paymentRef ? ` - ${t.paymentRef}` : ""}
                     </div>
                   </div>
                 </div>
-                <div className="text-right">
+                <div className="pl-11 text-left sm:pl-0 sm:text-right">
                   <div className={`font-display text-sm font-medium ${t.type === "purchase" || t.type === "promo" || t.type === "admin" ? "text-emerald-400" : "text-red-400"}`}>
                     {t.type === "purchase" || t.type === "promo" || t.type === "admin" ? "+" : "-"}{formatTime(t.seconds)}
                   </div>

@@ -171,7 +171,7 @@ export default function WatchPage() {
   return (
     <div className="min-h-screen bg-black text-white">
       {/* Header */}
-      <header className="h-14 border-b border-white/5 bg-black/80 backdrop-blur-xl flex items-center justify-between px-6">
+      <header className="h-14 border-b border-white/5 bg-black/80 backdrop-blur-xl flex items-center justify-between px-3 sm:px-6">
         <div className="flex items-center gap-2">
           <img src="/logo.svg" alt="Savatar" className="w-7 h-7" />
           <span className="font-semibold text-sm">Savatar</span>
@@ -201,10 +201,10 @@ export default function WatchPage() {
         </div>
       </header>
 
-      <div className="flex h-[calc(100vh-3.5rem)]">
+      <div className="flex min-h-[calc(100vh-3.5rem)] flex-col md:h-[calc(100vh-3.5rem)] md:flex-row">
         {/* Video Player */}
-        <main className="flex-1 flex flex-col">
-          <div className="flex-1 relative bg-[#0a0a0a] flex items-center justify-center">
+        <main className="flex min-w-0 flex-1 flex-col">
+          <div className="relative flex min-h-[55vh] flex-1 items-center justify-center bg-[#0a0a0a] md:min-h-0">
             <video
               ref={videoRef}
               autoPlay
@@ -230,7 +230,7 @@ export default function WatchPage() {
 
           {/* Stream Info */}
           <div className="p-4 border-t border-white/5 bg-[#080808]">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h3 className="text-sm font-semibold text-white">Creator&apos;s AI Stream</h3>
                 <p className="text-xs text-neutral-500">
@@ -271,7 +271,7 @@ export default function WatchPage() {
         </main>
 
         {/* Chat Sidebar */}
-        <aside className="w-80 border-l border-white/5 bg-[#080808] flex flex-col">
+        <aside className="flex min-h-[360px] w-full flex-col border-t border-white/5 bg-[#080808] md:min-h-0 md:w-80 md:border-l md:border-t-0">
           <div className="p-4 border-b border-white/5">
             <h3 className="text-xs font-semibold text-white uppercase tracking-wider">
               Live Chat
@@ -300,7 +300,7 @@ export default function WatchPage() {
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}
                 placeholder="Send a message..."
-                className="flex-1 px-3 py-2 bg-black border border-white/10 rounded-lg text-xs text-white placeholder-neutral-600 focus:outline-none focus:border-indigo-500 transition"
+                className="min-w-0 flex-1 px-3 py-2 bg-black border border-white/10 rounded-lg text-xs text-white placeholder-neutral-600 focus:outline-none focus:border-indigo-500 transition"
               />
               <button
                 type="submit"

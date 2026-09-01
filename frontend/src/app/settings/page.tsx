@@ -57,15 +57,9 @@ export default function SettingsPage() {
 
   return (
     <DashboardLayout>
-      <div className="p-6">
-        {/* Error banner */}
-        <div className="mb-4 p-4 rounded-xl bg-red-950/30 border border-red-500/20">
-          <div className="text-sm font-semibold text-red-400">Session error</div>
-          <div className="text-xs text-red-300/70 mt-0.5">No camera was found. Connect a camera, then reload this page.</div>
-        </div>
-
+      <div className="p-3 sm:p-6">
         {/* Preferences Header */}
-        <div className="p-6 rounded-xl bg-indigo-500/[0.06] border border-indigo-500/15 mb-6 flex items-center justify-between">
+        <div className="p-5 sm:p-6 rounded-xl bg-indigo-500/[0.06] border border-indigo-500/15 mb-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <div className="text-[10px] text-indigo-400 font-semibold uppercase tracking-wider mb-1">Preferences</div>
             <h1 className="text-xl font-bold">Settings</h1>
@@ -73,12 +67,12 @@ export default function SettingsPage() {
               Manage your stream quality, devices, account details, and security — all in one place.
             </p>
           </div>
-          <div className="flex items-center gap-3 px-4 py-2 rounded-xl bg-[#111] border border-white/5">
+          <div className="flex min-w-0 items-center gap-3 px-4 py-2 rounded-xl bg-[#111] border border-white/5">
             <div className="w-8 h-8 rounded-full bg-indigo-500/20 flex items-center justify-center text-indigo-400 text-xs font-semibold">
               {(user?.displayName || user?.email || "U")[0].toUpperCase()}
             </div>
-            <div>
-              <div className="text-sm font-medium">{user?.email}</div>
+            <div className="min-w-0">
+              <div className="truncate text-sm font-medium">{user?.email}</div>
               <div className="text-[11px] text-neutral-500 capitalize">{userData?.plan || "Standard"} account</div>
             </div>
           </div>
@@ -90,7 +84,7 @@ export default function SettingsPage() {
             <h2 className="text-sm font-semibold mb-1">Stream & devices</h2>
             <p className="text-xs text-neutral-500 mb-4">Output quality and input controls</p>
 
-            <div className="grid grid-cols-3 gap-3 mb-4">
+            <div className="grid grid-cols-1 gap-3 mb-4 sm:grid-cols-3">
               <div>
                 <label className="block text-[10px] text-neutral-500 uppercase tracking-wider mb-1">Resolution</label>
                 <select
@@ -172,7 +166,7 @@ export default function SettingsPage() {
             <div className="space-y-2">
               <div className="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/10">
                 <span className="text-xs text-neutral-400">Email</span>
-                <span className="text-sm text-white">{user?.email}</span>
+                <span className="ml-4 break-all text-right text-sm text-white">{user?.email}</span>
               </div>
               <div className="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/10">
                 <span className="text-xs text-neutral-400">Sponsored access</span>

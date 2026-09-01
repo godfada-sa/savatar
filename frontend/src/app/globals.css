@@ -16,6 +16,9 @@
 }
 
 body {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-body), -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -61,11 +64,4 @@ body {
 /* Safe area for iPhone notch */
 .safe-area-bottom {
   padding-bottom: env(safe-area-inset-bottom, 0);
-}
-
-/* Mobile responsive helpers */
-@media (max-width: 768px) {
-  .grid-cols-2.md\:grid-cols-5 {
-    grid-template-columns: repeat(2, 1fr);
-  }
 }
