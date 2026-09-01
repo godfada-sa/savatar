@@ -57,7 +57,7 @@ const plans = [
   {
     name: "Starter",
     credits: "300 credits",
-    price: "GH 133",
+    price: "GH 139",
     duration: "~2.5 min AI streaming",
     description: "For trying a focused creative idea.",
     features: ["All transformation modes", "Live room access", "Viewer chat"],
@@ -65,7 +65,7 @@ const plans = [
   {
     name: "Basic",
     credits: "1,000 credits",
-    price: "GH 427",
+    price: "GH 439",
     duration: "~8 min AI streaming",
     description: "For short shows and product demos.",
     features: ["All transformation modes", "Live room access", "Viewer chat"],
@@ -82,7 +82,7 @@ const plans = [
   {
     name: "Ultimate",
     credits: "5,000 credits",
-    price: "GH 2,183",
+    price: "GH 2,189",
     duration: "~42 min AI streaming",
     description: "For longer broadcasts and campaigns.",
     features: ["All transformation modes", "Live room access", "Viewer chat"],
