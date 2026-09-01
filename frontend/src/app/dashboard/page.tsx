@@ -53,11 +53,30 @@ export default function Dashboard() {
     }
   }, [cameraActive]);
 
-  // Duration timer
+  // Duration timer + server-side credit debit
   useEffect(() => {
-    if (isStreaming) {
-      durationRef.current = setInterval(() => {
+    if (isStreaming && user) {
+      durationRef.current = setInterval(async () => {
         setStreamDuration((d) => d + 1);
+        // Debit 1 second from wallet via server
+        try {
+          const idToken = await user.getIdToken();
+          const res = await fetch("/api/streaming/debit", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${idToken}`,
+            },
+          });
+          const data = await res.json();
+          if (!data.success || data.balance <= 0) {
+            // Out of credits — stop streaming
+            setIsStreaming(false);
+            setError("Out of credits. Purchase more to continue streaming.");
+          }
+        } catch (err) {
+          console.error("Debit failed:", err);
+        }
       }, 1000);
     } else {
       if (durationRef.current) clearInterval(durationRef.current);
@@ -65,7 +84,7 @@ export default function Dashboard() {
     return () => {
       if (durationRef.current) clearInterval(durationRef.current);
     };
-  }, [isStreaming]);
+  }, [isStreaming, user]);
 
   useEffect(() => {
     const peers = peerConnectionsRef.current;

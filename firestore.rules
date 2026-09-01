@@ -38,17 +38,39 @@ service cloud.firestore {
         && request.resource.data.promoUsed.size() == 0;
     }
 
+    function walletUpdateAllowed() {
+      // Users can only decrement balanceSeconds and increment totalUsed
+      // (streaming debit). They cannot increase their own balance.
+      let newBalance = request.resource.data.wallet.balanceSeconds;
+      let oldBalance = resource.data.wallet.balanceSeconds;
+      let newUsed = request.resource.data.wallet.totalUsed;
+      let oldUsed = resource.data.wallet.totalUsed;
+      let newPurchased = request.resource.data.wallet.totalPurchased;
+      let oldPurchased = resource.data.wallet.totalPurchased;
+
+      return newBalance <= oldBalance           // Can only decrease balance
+        && newUsed >= oldUsed                   // Can only increase used
+        && newPurchased == oldPurchased         // Cannot change purchased
+        && newBalance >= 0                      // Balance cannot go negative
+        && (newUsed - oldUsed) == (oldBalance - newBalance);  // Used must equal what was deducted
+    }
+
     match /users/{userId} {
       allow create: if owns(userId) && validNewUser(userId);
       allow read: if owns(userId) || isAdmin();
       allow update: if isAdmin() || (
         owns(userId)
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["displayName", "photoURL"])
-        && request.resource.data.displayName is string
-        && request.resource.data.displayName.size() >= 1
-        && request.resource.data.displayName.size() <= 80
-        && request.resource.data.photoURL is string
-        && request.resource.data.photoURL.size() <= 2048
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["displayName", "photoURL", "wallet"])
+        && (
+          // Profile update (name/photo only)
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(["displayName", "photoURL"])
+          ||
+          // Wallet debit (streaming consumption)
+          (
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(["wallet"])
+            && walletUpdateAllowed()
+          )
+        )
       );
       allow delete: if false;
     }
