@@ -70,7 +70,7 @@ export async function POST(req: NextRequest) {
       return privateJson({ received: true, message: "Already processed" });
     }
 
-    // Treat callbacks as notifications; verify the final state directly with Moolre.
+    // Verify payment with Moolre
     const verificationResponse = await fetch(`${MOOLRE_BASE_URL}/open/transact/status`, {
       method: "POST",
       headers: {
@@ -93,6 +93,9 @@ export async function POST(req: NextRequest) {
     const payment = paymentSnapshot.data()!;
     const pack = getCreditPack(String(payment.packId ?? ""));
     const verifiedAmount = Number(verifiedData.amount);
+    
+    // Use the stored payment amount (includes promo discount) for verification
+    const storedAmount = Number(payment.amount);
     const isVerified =
       Boolean(pack) &&
       verificationResponse.ok &&
@@ -101,7 +104,7 @@ export async function POST(req: NextRequest) {
       text(verifiedData.externalref) === reference &&
       text(verifiedData.accountnumber) === accountNumber &&
       Number.isFinite(verifiedAmount) &&
-      Math.abs(verifiedAmount - Number(pack?.priceGHS)) < 0.01;
+      Math.abs(verifiedAmount - storedAmount) < 0.01;
 
     if (!isVerified) {
       await paymentRef.update({
@@ -118,24 +121,49 @@ export async function POST(req: NextRequest) {
       if (!order || order.status === "completed") return;
 
       const orderPack = getCreditPack(String(order.packId ?? ""));
-      if (
-        !orderPack ||
-        Number(order.amount) !== orderPack.priceGHS ||
-        Number(order.seconds) !== orderPack.seconds ||
-        order.accountNumber !== accountNumber
-      ) {
+      if (!orderPack || order.accountNumber !== accountNumber) {
         throw new Error("Stored payment order does not match the server catalog");
       }
+
+      // Use stored seconds (includes bonus) and stored amount (includes discount)
+      const secondsToCredit = Number(order.seconds) || orderPack.seconds;
+      const amountPaid = Number(order.amount) || orderPack.priceGHS;
 
       const userRef = db.collection("users").doc(order.userId);
       const user = await transaction.get(userRef);
       if (!user.exists) throw new Error("Payment user does not exist");
 
+      // Add credits to wallet
       transaction.update(userRef, {
-        "wallet.balanceSeconds": FieldValue.increment(orderPack.seconds),
-        "wallet.totalPurchased": FieldValue.increment(orderPack.seconds),
+        "wallet.balanceSeconds": FieldValue.increment(secondsToCredit),
+        "wallet.totalPurchased": FieldValue.increment(secondsToCredit),
       });
 
+      // Mark promo as used (if applicable)
+      const promoCode = order.promoCode;
+      if (promoCode) {
+        const userData = user.data()!;
+        const promoUsed = userData.promoUsed || [];
+        if (!promoUsed.includes(promoCode)) {
+          transaction.update(userRef, {
+            promoUsed: [...promoUsed, promoCode],
+          });
+        }
+
+        // Increment promo usage count
+        const promoDocId = order.promoDocId;
+        if (promoDocId) {
+          const promoRef = db.collection("promos").doc(promoDocId);
+          const promoSnap = await transaction.get(promoRef);
+          if (promoSnap.exists) {
+            transaction.update(promoRef, {
+              usedCount: FieldValue.increment(1),
+            });
+          }
+        }
+      }
+
+      // Mark payment as completed
       transaction.update(paymentRef, {
         status: "completed",
         providerTransactionId: verifiedData.transactionid ?? null,
@@ -144,12 +172,17 @@ export async function POST(req: NextRequest) {
         completedAt: FieldValue.serverTimestamp(),
       });
 
+      // Log transaction
       transaction.set(db.collection("transactions").doc(reference), {
         userId: order.userId,
         packId: order.packId,
         type: "purchase",
-        seconds: orderPack.seconds,
-        amount: orderPack.priceGHS,
+        seconds: secondsToCredit,
+        amount: amountPaid,
+        originalPrice: order.originalPrice || orderPack.priceGHS,
+        discountPercent: order.discountPercent || 0,
+        bonusSeconds: order.bonusSeconds || 0,
+        promoCode: promoCode || null,
         paymentRef: reference,
         providerTransactionId: verifiedData.transactionid ?? null,
         createdAt: FieldValue.serverTimestamp(),

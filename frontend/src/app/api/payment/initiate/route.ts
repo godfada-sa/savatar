@@ -31,9 +31,10 @@ export async function POST(req: NextRequest) {
     const body = await readJsonObject(req, 2_048);
     const packId = typeof body.packId === "string" ? body.packId : "";
     const method = typeof body.method === "string" ? body.method : "";
-    const pack = getCreditPack(packId);
     const phone = typeof body.phone === "string" ? body.phone.replace(/\D/g, "") : "";
+    const promoCode = typeof body.promoCode === "string" ? body.promoCode.toUpperCase().trim() : "";
 
+    const pack = getCreditPack(packId);
     if (!pack || !/^0\d{9}$/.test(phone)) {
       throw new RequestError(400, "Choose a valid credit pack and 10-digit Ghana phone number");
     }
@@ -42,6 +43,57 @@ export async function POST(req: NextRequest) {
     await enforceRateLimit(db, "payment-user", user.uid, 5, 10 * 60_000);
     await enforceRateLimit(db, "payment-phone", `${clientIp(req)}:${phone}`, 5, 10 * 60_000);
 
+    // ─── Validate promo code (server-side) ────────────────
+    let discountPercent = 0;
+    let bonusSeconds = 0;
+    let promoDocId = "";
+
+    if (promoCode) {
+      const promoSnap = await db.collection("promos").where("code", "==", promoCode).get();
+      if (promoSnap.empty) {
+        throw new RequestError(400, "Invalid promo code");
+      }
+
+      const promoDoc = promoSnap.docs[0];
+      const promoData = promoDoc.data();
+      promoDocId = promoDoc.id;
+
+      if (!promoData.active) {
+        throw new RequestError(400, "This promo has expired");
+      }
+
+      if (promoData.maxUses && promoData.usedCount >= promoData.maxUses) {
+        throw new RequestError(400, "This promo has reached its usage limit");
+      }
+
+      if (promoData.expiresAt && new Date(promoData.expiresAt) < new Date()) {
+        throw new RequestError(400, "This promo has expired");
+      }
+
+      // Check if user already used this promo
+      const userSnap = await db.collection("users").doc(user.uid).get();
+      const promoUsed = userSnap.data()?.promoUsed || [];
+      if (promoUsed.includes(promoCode)) {
+        throw new RequestError(400, "You have already used this promo code");
+      }
+
+      discountPercent = promoData.discountPercent || 0;
+      bonusSeconds = promoData.bonusSeconds || 0;
+    }
+
+    // ─── Calculate final price ────────────────────────────
+    const originalPrice = pack.priceGHS;
+    let finalPrice: number = originalPrice;
+
+    if (discountPercent > 0) {
+      finalPrice = originalPrice * (1 - discountPercent / 100);
+      finalPrice = Math.max(finalPrice, 1); // Minimum 1 GHS
+    }
+
+    // Total seconds including bonus
+    const totalSeconds = pack.seconds + bonusSeconds;
+
+    // ─── Store payment record ─────────────────────────────
     const apiUser = serverVariable("MOOLRE_API_USER");
     const publicKey = serverVariable("MOOLRE_PUBLIC_KEY");
     const accountNumber = serverVariable("MOOLRE_ACCOUNT_NUMBER");
@@ -52,17 +104,23 @@ export async function POST(req: NextRequest) {
       reference,
       userId: user.uid,
       packId: pack.id,
-      seconds: pack.seconds,
-      amount: pack.priceGHS,
+      seconds: totalSeconds,
+      originalSeconds: pack.seconds,
+      bonusSeconds,
+      originalPrice,
+      discountPercent,
+      amount: finalPrice,
       currency: "GHS",
       accountNumber,
       phoneLast4: phone.slice(-4),
       method,
+      promoCode: promoCode || null,
+      promoDocId: promoDocId || null,
       status: "pending",
       createdAt: FieldValue.serverTimestamp(),
     });
 
-    // Generate Moolre payment link (hosted payment page)
+    // ─── Generate Moolre payment link ─────────────────────
     const response = await fetch(`${MOOLRE_BASE_URL}/embed/link`, {
       method: "POST",
       headers: {
@@ -72,7 +130,7 @@ export async function POST(req: NextRequest) {
       },
       body: JSON.stringify({
         type: 1,
-        amount: pack.priceGHS.toFixed(2),
+        amount: finalPrice.toFixed(2),
         email: user.email,
         externalref: reference,
         callback: `${req.nextUrl.origin}/api/payment/callback`,
@@ -83,7 +141,10 @@ export async function POST(req: NextRequest) {
         metadata: {
           userId: user.uid,
           packId: pack.id,
-          seconds: pack.seconds,
+          seconds: totalSeconds,
+          bonusSeconds,
+          discountPercent,
+          promoCode: promoCode || "",
           phone,
           method,
         },
@@ -121,14 +182,18 @@ export async function POST(req: NextRequest) {
       success: true,
       reference,
       authorizationUrl: result.data.authorization_url,
-      amount: pack.priceGHS,
-      message: "Redirecting to payment page...",
+      originalPrice,
+      discountPercent,
+      bonusSeconds,
+      amount: finalPrice,
+      totalSeconds,
+      message: discountPercent > 0
+        ? `${discountPercent}% discount applied! Redirecting to payment page...`
+        : "Redirecting to payment page...",
     });
   } catch (error) {
     console.error("Payment initiation error:", error instanceof Error ? error.message : "unknown error");
-    if (error instanceof RequestError) {
-      return errorJson(error);
-    }
+    if (error instanceof RequestError) return errorJson(error);
     if (error instanceof Error && error.message.startsWith("Missing server environment variable")) {
       return privateJson({ error: "Payment service is not configured" }, { status: 503 });
     }

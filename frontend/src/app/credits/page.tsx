@@ -13,6 +13,17 @@ function CreditsContent() {
   const [phoneNumber, setPhoneNumber] = useState("");
   const [processing, setProcessing] = useState(false);
 
+  // Promo code state
+  const [promoCode, setPromoCode] = useState("");
+  const [promoLoading, setPromoLoading] = useState(false);
+  const [promoResult, setPromoResult] = useState<{
+    success: boolean;
+    discountPercent: number;
+    bonusSeconds: number;
+    message: string;
+  } | null>(null);
+  const [promoError, setPromoError] = useState("");
+
   const balanceMinutes = ((userData?.wallet?.balanceSeconds || 0) / 60).toFixed(1);
   const searchParams = useSearchParams();
   const paymentStatus = searchParams.get("payment");
@@ -24,12 +35,60 @@ function CreditsContent() {
     }
   }, [paymentStatus, paymentRef]);
 
+  // Reset promo when pack changes
+  useEffect(() => {
+    setPromoResult(null);
+    setPromoError("");
+    setPromoCode("");
+  }, [selectedPack]);
+
+  const validatePromo = async () => {
+    if (!promoCode.trim() || !selectedPack || !user) return;
+    setPromoLoading(true);
+    setPromoError("");
+    setPromoResult(null);
+    try {
+      const idToken = await user.getIdToken();
+      const res = await fetch("/api/promo/validate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({ promoCode: promoCode.trim(), packId: selectedPack }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setPromoResult(data);
+      } else {
+        setPromoError(data.error || "Invalid promo code");
+      }
+    } catch {
+      setPromoError("Failed to validate promo code");
+    }
+    setPromoLoading(false);
+  };
+
+  const getFinalPrice = () => {
+    const pack = CREDIT_PACKS.find((p) => p.id === selectedPack);
+    if (!pack) return 0;
+    if (promoResult?.discountPercent) {
+      const discounted = pack.priceGHS * (1 - promoResult.discountPercent / 100);
+      return Math.max(discounted, 1);
+    }
+    return pack.priceGHS;
+  };
+
+  const getTotalSeconds = () => {
+    const pack = CREDIT_PACKS.find((p) => p.id === selectedPack);
+    if (!pack) return 0;
+    return pack.seconds + (promoResult?.bonusSeconds || 0);
+  };
+
   const handlePurchase = async () => {
     if (!selectedPack || !phoneNumber || !user) return;
     setProcessing(true);
     try {
-      const pack = CREDIT_PACKS.find((p) => p.id === selectedPack);
-      if (!pack) return;
       const idToken = await user.getIdToken();
       const response = await fetch("/api/payment/initiate", {
         method: "POST",
@@ -41,11 +100,11 @@ function CreditsContent() {
           packId: selectedPack,
           phone: phoneNumber,
           method: paymentMethod,
+          promoCode: promoResult ? promoCode.toUpperCase().trim() : "",
         }),
       });
       const data = await response.json();
       if (data.success && data.authorizationUrl) {
-        // Redirect to Moolre payment page
         window.location.href = data.authorizationUrl;
       } else {
         alert(data.error || "Payment failed. Please try again.");
@@ -57,11 +116,13 @@ function CreditsContent() {
     }
   };
 
+  const selectedPackData = CREDIT_PACKS.find((p) => p.id === selectedPack);
+  const finalPrice = getFinalPrice();
+  const totalSeconds = getTotalSeconds();
+
   return (
     <DashboardLayout>
       <div className="p-6">
-
-
         {/* Credits & Billing Header */}
         <div className="p-6 rounded-xl bg-indigo-500/[0.06] border border-indigo-500/15 mb-6 flex items-center justify-between">
           <div>
@@ -73,12 +134,10 @@ function CreditsContent() {
           </div>
           <div className="text-center px-6 py-3 rounded-xl bg-[#111] border border-white/5">
             <div className="text-[10px] text-neutral-500 uppercase tracking-wider">Available Balance</div>
-            <div className="font-display text-2xl font-bold text-indigo-400">{balanceMinutes}</div>
+            <div className="text-2xl font-bold text-indigo-400">{balanceMinutes}</div>
             <div className="text-[10px] text-neutral-500">minutes</div>
           </div>
         </div>
-
-
 
         {/* Credit Packs */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
@@ -93,13 +152,13 @@ function CreditsContent() {
               }`}
             >
               <div className="text-xs text-neutral-400 mb-1">{pack.name}</div>
-              <div className="font-display text-xl font-bold text-white">
+              <div className="text-xl font-bold text-white">
                 {pack.seconds >= 60 ? Math.floor(pack.seconds / 60) : pack.seconds}
                 <span className="text-xs text-neutral-500 font-normal ml-1">
                   {pack.seconds >= 60 ? "min" : "sec"}
                 </span>
               </div>
-              <div className="font-display text-lg font-bold text-white mt-1">
+              <div className="text-lg font-bold text-white mt-1">
                 GH {pack.priceGHS.toLocaleString()}
               </div>
               <ul className="mt-2 space-y-0.5">
@@ -155,7 +214,104 @@ function CreditsContent() {
                 placeholder="024 123 4567"
                 className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-white placeholder-neutral-600 focus:outline-none focus:border-indigo-500 transition"
               />
-              <p className="text-[11px] text-neutral-600 mt-1">You'll be redirected to a secure payment page</p>
+              <p className="text-[11px] text-neutral-600 mt-1">You&apos;ll be redirected to a secure payment page</p>
+            </div>
+
+            {/* Promo Code */}
+            <div>
+              <label className="block text-xs text-neutral-400 mb-1.5">Promo Code (optional)</label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={promoCode}
+                  onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
+                  placeholder="Enter promo code"
+                  disabled={!!promoResult}
+                  className="flex-1 px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-white placeholder-neutral-600 focus:outline-none focus:border-indigo-500 transition font-mono uppercase disabled:opacity-50"
+                />
+                {promoResult ? (
+                  <button
+                    onClick={() => { setPromoResult(null); setPromoCode(""); setPromoError(""); }}
+                    className="px-3 py-2 bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-medium rounded-lg transition hover:bg-red-500/20"
+                  >
+                    Remove
+                  </button>
+                ) : (
+                  <button
+                    onClick={validatePromo}
+                    disabled={!promoCode.trim() || promoLoading}
+                    className="px-3 py-2 bg-white/5 border border-white/10 text-neutral-300 text-xs font-medium rounded-lg transition hover:bg-white/10 disabled:opacity-50"
+                  >
+                    {promoLoading ? "..." : "Apply"}
+                  </button>
+                )}
+              </div>
+
+              {/* Promo result */}
+              {promoResult && (
+                <div className="mt-2 p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+                  <div className="flex items-center gap-2">
+                    <svg className="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    <span className="text-xs text-emerald-400 font-medium">{promoResult.message}</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Promo error */}
+              {promoError && (
+                <div className="mt-2 p-2 rounded-lg bg-red-500/10 border border-red-500/20">
+                  <span className="text-xs text-red-400">{promoError}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Price Summary */}
+            <div className="p-3 rounded-lg bg-white/5 space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-neutral-400">{selectedPackData?.name} Pack ({selectedPackData?.timeLabel})</span>
+                <span className="text-white">GH {selectedPackData?.priceGHS.toLocaleString()}</span>
+              </div>
+
+              {promoResult?.discountPercent ? (
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-emerald-400">{promoResult.discountPercent}% Promo Discount</span>
+                  <span className="text-emerald-400">-GH {(selectedPackData!.priceGHS - finalPrice).toFixed(0)}</span>
+                </div>
+              ) : null}
+
+              {promoResult?.bonusSeconds ? (
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-emerald-400">Bonus Time</span>
+                  <span className="text-emerald-400">+{promoResult.bonusSeconds >= 60 ? `${Math.floor(promoResult.bonusSeconds / 60)}m` : `${promoResult.bonusSeconds}s`}</span>
+                </div>
+              ) : null}
+
+              {(promoResult?.discountPercent || promoResult?.bonusSeconds) && (
+                <div className="border-t border-white/10 pt-2" />
+              )}
+
+              <div className="flex items-center justify-between text-sm font-semibold">
+                <span className="text-white">You Pay</span>
+                <div className="text-right">
+                  {promoResult?.discountPercent ? (
+                    <div className="flex items-center gap-2">
+                      <span className="text-neutral-500 line-through text-xs">GH {selectedPackData?.priceGHS.toLocaleString()}</span>
+                      <span className="text-indigo-400">GH {finalPrice.toFixed(0)}</span>
+                    </div>
+                  ) : (
+                    <span className="text-indigo-400">GH {finalPrice.toFixed(0)}</span>
+                  )}
+                </div>
+              </div>
+
+              {totalSeconds > (selectedPackData?.seconds || 0) && (
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-neutral-400">Total Time</span>
+                  <span className="text-emerald-400">{Math.floor(totalSeconds / 60)}m {totalSeconds % 60}s</span>
+                </div>
+              )}
             </div>
 
             <button
@@ -163,7 +319,7 @@ function CreditsContent() {
               disabled={!selectedPack || !phoneNumber || processing}
               className="w-full py-3 bg-indigo-500 hover:bg-indigo-600 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium rounded-xl transition"
             >
-              {processing ? "Processing..." : selectedPack ? `Pay GH ${(CREDIT_PACKS.find((p) => p.id === selectedPack)?.priceGHS || 0).toFixed(0)} via ${paymentMethod.toUpperCase()}` : "Select a pack"}
+              {processing ? "Processing..." : `Pay GH ${finalPrice.toFixed(0)} via ${paymentMethod.toUpperCase()}`}
             </button>
           </div>
         )}
