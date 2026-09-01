@@ -378,7 +378,7 @@ export default function Dashboard() {
       console.error("SDK connect error:", err);
       setError(err instanceof Error ? err.message : "Failed to start the AI stream.");
     }
-  }, [activeMode, prompt, referenceImage, user, userData?.wallet?.balanceSeconds]);
+  }, [activeMode, prompt, referenceImage, resolution, user, userData?.wallet?.balanceSeconds]);
 
   const stopStream = () => {
     if (clientRef.current) {
