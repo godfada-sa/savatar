@@ -218,7 +218,9 @@ export default function Dashboard() {
       setIsStreaming(true);
 
       // Signaling server for viewers
-      const newRoomId = crypto.randomUUID();
+      // Stable per-creator room lets the OBS browser-source URL attach to the
+      // same live output as viewers.
+      const newRoomId = `creator-${user.uid}`;
       setRoomId(newRoomId);
 
       const socket = io(signalingUrl, {

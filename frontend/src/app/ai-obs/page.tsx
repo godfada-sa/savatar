@@ -56,7 +56,7 @@ export default function AiObsPage() {
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
-      setObsUrl(`${window.location.origin}/watch/obs-${user?.uid || "demo"}`);
+      setObsUrl(`${window.location.origin}/obs/creator-${user?.uid || "demo"}`);
     });
     return () => cancelAnimationFrame(frame);
   }, [user]);
