@@ -34,9 +34,10 @@ export default function AiObsPage() {
   const filteredBgs = backgrounds.filter((bg) => bgCategory === "all" || bg.category === bgCategory);
 
   useEffect(() => {
-    if (typeof window !== "undefined") {
+    const frame = requestAnimationFrame(() => {
       setObsUrl(`${window.location.origin}/watch/obs-${user?.uid || "demo"}`);
-    }
+    });
+    return () => cancelAnimationFrame(frame);
   }, [user]);
 
   const startCamera = async () => {

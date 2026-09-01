@@ -1,78 +1,136 @@
+import { randomUUID } from "node:crypto";
+import { FieldValue } from "firebase-admin/firestore";
 import { NextRequest, NextResponse } from "next/server";
+import { getCreditPack } from "@/lib/credit-packs";
+import { getAdminServices } from "@/lib/firebase-admin";
 
-const MOOLRE_PUBLIC_KEY = process.env.MOOLRE_PUBLIC_KEY;
-const MOOLRE_BASE_URL = "https://api.moolre.com/v1";
+const MOOLRE_BASE_URL = process.env.MOOLRE_BASE_URL ?? "https://api.moolre.com";
+
+const networkMap = {
+  mtn: "13",
+  telecel: "6",
+  airteltigo: "7",
+} as const;
 
 interface PaymentRequest {
-  packId: string;
-  userId: string;
-  email: string;
-  phone: string;
-  method: "mtn" | "telecel" | "airteltigo";
-  amount: number;
-  seconds: number;
+  packId?: string;
+  phone?: string;
+  method?: keyof typeof networkMap;
+}
+
+function serverVariable(name: string): string {
+  const value = process.env[name];
+  if (!value) throw new Error(`Missing server environment variable: ${name}`);
+  return value;
+}
+
+function bearerToken(req: NextRequest) {
+  const authorization = req.headers.get("authorization");
+  return authorization?.startsWith("Bearer ") ? authorization.slice(7) : null;
 }
 
 export async function POST(req: NextRequest) {
   try {
-    const body: PaymentRequest = await req.json();
-    const { packId, userId, email, phone, method, amount, seconds } = body;
-
-    if (!packId || !userId || !phone || !amount || !seconds) {
-      return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+    const token = bearerToken(req);
+    if (!token) {
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
     }
 
-    // Map payment method to Moolre network codes
-    const networkMap: Record<string, string> = {
-      mtn: "MTN",
-      telecel: "TELECEL",
-      airteltigo: "AIRTELTIGO",
-    };
+    const { auth, db } = getAdminServices();
+    let user;
+    try {
+      user = await auth.verifyIdToken(token);
+    } catch {
+      return NextResponse.json({ error: "Invalid or expired session" }, { status: 401 });
+    }
+    const body = (await req.json()) as PaymentRequest;
+    const pack = body.packId ? getCreditPack(body.packId) : undefined;
+    const channel = body.method ? networkMap[body.method] : undefined;
+    const phone = body.phone?.replace(/\D/g, "") ?? "";
 
-    const reference = `savatar-${userId}-${packId}-${Date.now()}`;
-
-    // Initiate payment with Moolre
-    const moolreResponse = await fetch(`${MOOLRE_BASE_URL}/payment/initiate`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${MOOLRE_PUBLIC_KEY}`,
-      },
-      body: JSON.stringify({
-        amount: amount,
-        currency: "GHS",
-        phone: phone.replace(/\s/g, ""),
-        network: networkMap[method] || "MTN",
-        reference,
-        description: `Savatar ${packId} credit pack - ${seconds} seconds`,
-        callback_url: `${req.nextUrl.origin}/api/payment/callback`,
-        metadata: {
-          userId,
-          packId,
-          seconds: seconds.toString(),
-          email,
-        },
-      }),
-    });
-
-    const moolreData = await moolreResponse.json();
-
-    if (!moolreResponse.ok) {
-      console.error("Moolre payment initiation failed:", moolreData);
+    if (!pack || !channel || !/^0\d{9}$/.test(phone)) {
       return NextResponse.json(
-        { error: "Payment initiation failed", details: moolreData },
-        { status: 500 }
+        { error: "Choose a valid credit pack, network, and 10-digit Ghana phone number" },
+        { status: 400 }
       );
     }
 
+    const apiUser = serverVariable("MOOLRE_API_USER");
+    const publicKey = serverVariable("MOOLRE_PUBLIC_KEY");
+    const accountNumber = serverVariable("MOOLRE_ACCOUNT_NUMBER");
+    const reference = `savatar-${randomUUID()}`;
+    const paymentRef = db.collection("payments").doc(reference);
+
+    await paymentRef.set({
+      reference,
+      userId: user.uid,
+      packId: pack.id,
+      seconds: pack.seconds,
+      amount: pack.priceGHS,
+      currency: "GHS",
+      accountNumber,
+      phone,
+      channel,
+      status: "pending",
+      createdAt: FieldValue.serverTimestamp(),
+    });
+
+    const response = await fetch(`${MOOLRE_BASE_URL}/open/transact/payment`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-API-USER": apiUser,
+        "X-API-PUBKEY": publicKey,
+      },
+      body: JSON.stringify({
+        type: 1,
+        channel,
+        currency: "GHS",
+        payer: phone,
+        amount: pack.priceGHS.toFixed(2),
+        externalref: reference,
+        accountnumber: accountNumber,
+      }),
+    });
+
+    const result = (await response.json()) as {
+      status?: number | string;
+      code?: string;
+      message?: string | null;
+      data?: unknown;
+    };
+
+    if (!response.ok || Number(result.status) !== 1) {
+      await paymentRef.update({
+        status: "initiation_failed",
+        providerCode: result.code ?? null,
+        providerMessage: result.message ?? null,
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+      return NextResponse.json(
+        { error: result.message || "Payment initiation failed" },
+        { status: 502 }
+      );
+    }
+
+    await paymentRef.update({
+      providerPaymentId: result.data ?? null,
+      providerCode: result.code ?? null,
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+
     return NextResponse.json({
       success: true,
-      paymentId: moolreData.payment_id || moolreData.id || reference,
-      status: moolreData.status,
-      message: "Payment initiated. Check your phone for the payment prompt.",
+      reference,
+      paymentId: result.data ?? reference,
+      amount: pack.priceGHS,
+      message: result.message || "Payment initiated. Approve the prompt on your phone.",
     });
   } catch (error) {
-    console.error("Payment API error:", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    console.error("Payment initiation error:", error);
+    const message = error instanceof Error && error.message.startsWith("Missing server environment variable")
+      ? "Payment service is not configured"
+      : "Unable to initiate payment";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

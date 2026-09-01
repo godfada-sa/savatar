@@ -91,7 +91,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   // Close sidebar on route change (mobile)
   useEffect(() => {
-    setSidebarOpen(false);
+    const frame = requestAnimationFrame(() => setSidebarOpen(false));
+    return () => cancelAnimationFrame(frame);
   }, [pathname]);
 
   if (authLoading || !user) {

@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams } from "next/navigation";
 import { io, Socket } from "socket.io-client";
+import { iceServers, signalingUrl } from "@/lib/client-config";
 
 export default function WatchPage() {
   const params = useParams();
@@ -19,9 +20,10 @@ export default function WatchPage() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const socketRef = useRef<Socket | null>(null);
   const pcRef = useRef<RTCPeerConnection | null>(null);
+  const pendingCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
 
   useEffect(() => {
-    const socket = io("http://localhost:4000", {
+    const socket = io(signalingUrl, {
       transports: ["websocket", "polling"],
     });
     socketRef.current = socket;
@@ -29,6 +31,11 @@ export default function WatchPage() {
     socket.on("connect", () => {
       console.log("Connected to signaling server");
       socket.emit("join-room", { roomId: streamId, role: "viewer" });
+    });
+
+    socket.on("connect_error", () => {
+      setIsConnected(false);
+      setStatus("Live-stream service is unavailable");
     });
 
     socket.on("room-joined", (data: { streamActive: boolean; viewerCount: number }) => {
@@ -54,6 +61,7 @@ export default function WatchPage() {
         pcRef.current.close();
         pcRef.current = null;
       }
+      pendingCandidatesRef.current = [];
     });
 
     socket.on("broadcaster-left", () => {
@@ -63,6 +71,7 @@ export default function WatchPage() {
         pcRef.current.close();
         pcRef.current = null;
       }
+      pendingCandidatesRef.current = [];
     });
 
     socket.on("viewer-count", (count: number) => {
@@ -73,9 +82,9 @@ export default function WatchPage() {
     socket.on("offer", async ({ offer, broadcasterId }: { offer: RTCSessionDescriptionInit; broadcasterId: string }) => {
       console.log("Received offer from broadcaster");
 
-      const pc = new RTCPeerConnection({
-        iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
-      });
+      pcRef.current?.close();
+      pendingCandidatesRef.current = [];
+      const pc = new RTCPeerConnection({ iceServers });
       pcRef.current = pc;
 
       pc.ontrack = (event) => {
@@ -106,6 +115,10 @@ export default function WatchPage() {
       };
 
       await pc.setRemoteDescription(new RTCSessionDescription(offer));
+      for (const candidate of pendingCandidatesRef.current) {
+        await pc.addIceCandidate(candidate);
+      }
+      pendingCandidatesRef.current = [];
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
 
@@ -117,8 +130,10 @@ export default function WatchPage() {
     });
 
     socket.on("ice-candidate", async ({ candidate }: { candidate: RTCIceCandidateInit }) => {
-      if (pcRef.current) {
+      if (pcRef.current?.remoteDescription) {
         await pcRef.current.addIceCandidate(new RTCIceCandidate(candidate));
+      } else {
+        pendingCandidatesRef.current.push(candidate);
       }
     });
 
@@ -132,6 +147,7 @@ export default function WatchPage() {
       if (pcRef.current) {
         pcRef.current.close();
       }
+      pendingCandidatesRef.current = [];
       socket.disconnect();
     };
   }, [streamId]);

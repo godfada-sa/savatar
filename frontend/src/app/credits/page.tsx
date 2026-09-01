@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useAuth } from "@/lib/auth-context";
-import { CREDIT_PACKS } from "@/lib/wallet";
+import { CREDIT_PACKS } from "@/lib/credit-packs";
 import DashboardLayout from "@/components/DashboardLayout";
 
 export default function CreditsPage() {
@@ -11,9 +11,6 @@ export default function CreditsPage() {
   const [paymentMethod, setPaymentMethod] = useState<"mtn" | "telecel" | "airteltigo">("mtn");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [processing, setProcessing] = useState(false);
-  const [promoCode, setPromoCode] = useState("");
-  const [promoApplied, setPromoApplied] = useState(false);
-  const [discount, setDiscount] = useState(0);
 
   const balanceMinutes = ((userData?.wallet?.balanceSeconds || 0) / 60).toFixed(1);
 
@@ -23,23 +20,22 @@ export default function CreditsPage() {
     try {
       const pack = CREDIT_PACKS.find((p) => p.id === selectedPack);
       if (!pack) return;
-      const finalPrice = discount > 0 ? pack.priceGHS * (1 - discount / 100) : pack.priceGHS;
+      const idToken = await user.getIdToken();
       const response = await fetch("/api/payment/initiate", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${idToken}`,
+        },
         body: JSON.stringify({
           packId: selectedPack,
-          userId: user.uid,
-          email: user.email,
           phone: phoneNumber,
           method: paymentMethod,
-          amount: finalPrice,
-          seconds: pack.seconds,
         }),
       });
       const data = await response.json();
       if (data.success) {
-        alert(`Payment initiated! GH ${finalPrice.toFixed(0)} via ${paymentMethod.toUpperCase()}. Check your phone for the payment prompt.`);
+        alert(`Payment initiated! GH ${Number(data.amount).toFixed(0)} via ${paymentMethod.toUpperCase()}. Check your phone for the payment prompt.`);
         setSelectedPack(null);
         setPhoneNumber("");
       } else {
@@ -127,42 +123,6 @@ export default function CreditsPage() {
           <div className="max-w-md mx-auto p-5 rounded-xl bg-[#111] border border-white/5 space-y-4">
             <h3 className="text-sm font-semibold">Payment</h3>
 
-            {/* Promo Code */}
-            <div>
-              <label className="block text-xs text-neutral-400 mb-1.5">Promo Code</label>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={promoCode}
-                  onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
-                  placeholder="Enter promo code"
-                  disabled={promoApplied}
-                  className="flex-1 px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-white placeholder-neutral-600 focus:outline-none focus:border-indigo-500 transition disabled:opacity-50"
-                />
-                {!promoApplied ? (
-                  <button
-                    onClick={() => {
-                      if (promoCode.length > 3) {
-                        setPromoApplied(true);
-                        setDiscount(10);
-                      }
-                    }}
-                    className="px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-xs text-white font-medium transition"
-                  >
-                    Apply
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => { setPromoApplied(false); setPromoCode(""); setDiscount(0); }}
-                    className="px-4 py-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 rounded-lg text-xs text-red-400 font-medium transition"
-                  >
-                    Remove
-                  </button>
-                )}
-              </div>
-              {promoApplied && <p className="text-xs text-emerald-400 mt-2">Promo applied! {discount}% discount</p>}
-            </div>
-
             {/* Payment Method */}
             <div>
               <label className="block text-xs text-neutral-400 mb-2">Payment Method</label>
@@ -203,7 +163,7 @@ export default function CreditsPage() {
               disabled={!selectedPack || !phoneNumber || processing}
               className="w-full py-3 bg-indigo-500 hover:bg-indigo-600 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium rounded-xl transition"
             >
-              {processing ? "Processing..." : selectedPack ? `Pay GH ${((CREDIT_PACKS.find((p) => p.id === selectedPack)?.priceGHS || 0) * (1 - discount / 100)).toFixed(0)} via ${paymentMethod.toUpperCase()}` : "Select a pack"}
+              {processing ? "Processing..." : selectedPack ? `Pay GH ${(CREDIT_PACKS.find((p) => p.id === selectedPack)?.priceGHS || 0).toFixed(0)} via ${paymentMethod.toUpperCase()}` : "Select a pack"}
             </button>
           </div>
         )}

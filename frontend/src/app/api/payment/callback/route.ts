@@ -1,108 +1,139 @@
+import { FieldValue } from "firebase-admin/firestore";
 import { NextRequest, NextResponse } from "next/server";
-import { initializeApp, getApps, cert } from "firebase-admin/app";
-import { getFirestore } from "firebase-admin/firestore";
+import { getCreditPack } from "@/lib/credit-packs";
+import { getAdminServices } from "@/lib/firebase-admin";
 
-// Initialize Firebase Admin with service account
-const firebaseConfig = {
-  projectId: "savatar-a7e75",
-  // For production, use a service account key file
-  // For now, use the project ID for basic Firestore access
-};
+const MOOLRE_BASE_URL = process.env.MOOLRE_BASE_URL ?? "https://api.moolre.com";
 
-const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
-const db = getFirestore(app);
+function serverVariable(name: string): string {
+  const value = process.env[name];
+  if (!value) throw new Error(`Missing server environment variable: ${name}`);
+  return value;
+}
 
-const CREDIT_PACKS: Record<string, { seconds: number; priceGHS: number }> = {
-  starter: { seconds: 300, priceGHS: 250 },
-  basic: { seconds: 900, priceGHS: 650 },
-  pro: { seconds: 1800, priceGHS: 1100 },
-  creator: { seconds: 3600, priceGHS: 1800 },
-  unlimited: { seconds: 18000, priceGHS: 7500 },
-};
+function record(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+}
+
+function text(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
-    console.log("Moolre callback received:", JSON.stringify(body, null, 2));
+    const payload = record(await req.json());
+    const callbackData = record(payload.data);
+    const reference =
+      text(callbackData.externalref) ??
+      text(callbackData.externalRef) ??
+      text(payload.externalref) ??
+      text(payload.reference);
 
-    const { status, reference, payment_id, amount, metadata } = body;
-
-    // Only process successful payments
-    if (status !== "successful" && status !== "completed") {
-      console.log("Payment not successful, status:", status);
-      return NextResponse.json({ received: true });
+    if (!reference) {
+      return NextResponse.json({ error: "Missing payment reference" }, { status: 400 });
     }
 
-    // Extract metadata
-    const userId = metadata?.userId || reference?.split("-")[1];
-    const packId = metadata?.packId || reference?.split("-")[2];
-    const seconds = parseInt(metadata?.seconds) || CREDIT_PACKS[packId]?.seconds || 0;
+    const apiUser = serverVariable("MOOLRE_API_USER");
+    const publicKey = serverVariable("MOOLRE_PUBLIC_KEY");
+    const accountNumber = serverVariable("MOOLRE_ACCOUNT_NUMBER");
+    const { db } = getAdminServices();
+    const paymentRef = db.collection("payments").doc(reference);
+    const paymentSnapshot = await paymentRef.get();
 
-    if (!userId || !packId || !seconds) {
-      console.error("Missing metadata in callback:", { userId, packId, seconds });
-      return NextResponse.json({ error: "Missing metadata" }, { status: 400 });
+    if (!paymentSnapshot.exists) {
+      return NextResponse.json({ error: "Unknown payment reference" }, { status: 404 });
     }
 
-    // Idempotency check
-    const paymentRef = db.collection("payments").doc(payment_id || reference);
-    const paymentDoc = await paymentRef.get();
-
-    if (paymentDoc.exists) {
-      console.log("Payment already processed:", payment_id);
+    if (paymentSnapshot.data()?.status === "completed") {
       return NextResponse.json({ received: true, message: "Already processed" });
     }
 
-    // Get user
-    const userRef = db.collection("users").doc(userId);
-    const userDoc = await userRef.get();
+    // Treat callbacks as notifications; verify the final state directly with Moolre.
+    const verificationResponse = await fetch(`${MOOLRE_BASE_URL}/open/transact/status`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-API-USER": apiUser,
+        "X-API-PUBKEY": publicKey,
+      },
+      body: JSON.stringify({
+        type: 1,
+        idtype: 1,
+        id: reference,
+        accountnumber: accountNumber,
+      }),
+    });
 
-    if (!userDoc.exists) {
-      console.error("User not found:", userId);
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    const verification = record(await verificationResponse.json());
+    const verifiedData = record(verification.data);
+    const payment = paymentSnapshot.data()!;
+    const pack = getCreditPack(String(payment.packId ?? ""));
+    const verifiedAmount = Number(verifiedData.amount);
+    const isVerified =
+      Boolean(pack) &&
+      verificationResponse.ok &&
+      Number(verification.status) === 1 &&
+      Number(verifiedData.txstatus) === 1 &&
+      text(verifiedData.externalref) === reference &&
+      text(verifiedData.accountnumber) === accountNumber &&
+      Number.isFinite(verifiedAmount) &&
+      Math.abs(verifiedAmount - Number(pack?.priceGHS)) < 0.01;
+
+    if (!isVerified) {
+      await paymentRef.update({
+        status: "verification_pending",
+        callbackReceivedAt: FieldValue.serverTimestamp(),
+        providerStatusCode: verification.code ?? null,
+      });
+      return NextResponse.json({ received: true, verified: false });
     }
 
-    // Atomic batch update
-    const batch = db.batch();
+    await db.runTransaction(async (transaction) => {
+      const freshPayment = await transaction.get(paymentRef);
+      const order = freshPayment.data();
+      if (!order || order.status === "completed") return;
 
-    const currentBalance = userDoc.data()?.wallet?.balanceSeconds || 0;
-    const currentPurchased = userDoc.data()?.wallet?.totalPurchased || 0;
+      const orderPack = getCreditPack(String(order.packId ?? ""));
+      if (
+        !orderPack ||
+        Number(order.amount) !== orderPack.priceGHS ||
+        Number(order.seconds) !== orderPack.seconds ||
+        order.accountNumber !== accountNumber
+      ) {
+        throw new Error("Stored payment order does not match the server catalog");
+      }
 
-    batch.update(userRef, {
-      "wallet.balanceSeconds": currentBalance + seconds,
-      "wallet.totalPurchased": currentPurchased + seconds,
+      const userRef = db.collection("users").doc(order.userId);
+      const user = await transaction.get(userRef);
+      if (!user.exists) throw new Error("Payment user does not exist");
+
+      transaction.update(userRef, {
+        "wallet.balanceSeconds": FieldValue.increment(orderPack.seconds),
+        "wallet.totalPurchased": FieldValue.increment(orderPack.seconds),
+      });
+
+      transaction.update(paymentRef, {
+        status: "completed",
+        providerTransactionId: verifiedData.transactionid ?? null,
+        callbackPayload: payload,
+        completedAt: FieldValue.serverTimestamp(),
+      });
+
+      transaction.set(db.collection("transactions").doc(reference), {
+        userId: order.userId,
+        packId: order.packId,
+        type: "purchase",
+        seconds: orderPack.seconds,
+        amount: orderPack.priceGHS,
+        paymentRef: reference,
+        providerTransactionId: verifiedData.transactionid ?? null,
+        createdAt: FieldValue.serverTimestamp(),
+      });
     });
 
-    batch.set(paymentRef, {
-      userId,
-      packId,
-      seconds,
-      amount,
-      paymentId: payment_id,
-      reference,
-      status: "completed",
-      createdAt: new Date().toISOString(),
-    });
-
-    const transactionRef = db.collection("transactions").doc();
-    batch.set(transactionRef, {
-      userId,
-      type: "purchase",
-      seconds,
-      amount,
-      paymentRef: payment_id || reference,
-      createdAt: new Date().toISOString(),
-    });
-
-    await batch.commit();
-
-    console.log(`Payment confirmed: ${seconds} seconds added to user ${userId}`);
-
-    return NextResponse.json({
-      success: true,
-      message: `Added ${seconds} seconds to user ${userId}`,
-    });
+    return NextResponse.json({ received: true, verified: true });
   } catch (error) {
     console.error("Payment callback error:", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to process payment callback" }, { status: 500 });
   }
 }

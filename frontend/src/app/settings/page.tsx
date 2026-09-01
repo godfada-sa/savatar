@@ -3,16 +3,12 @@
 export const dynamic = "force-dynamic";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
-import { updateDoc, doc } from "firebase/firestore";
-import { db } from "@/lib/firebase";
 import { updatePassword, reauthenticateWithCredential, EmailAuthProvider } from "firebase/auth";
 import DashboardLayout from "@/components/DashboardLayout";
 
 export default function SettingsPage() {
-  const { user, userData, loading: authLoading, logout } = useAuth();
-  const router = useRouter();
+  const { user, userData } = useAuth();
 
   const [resolution, setResolution] = useState("1080p");
   const [frameRate, setFrameRate] = useState("30");
@@ -23,13 +19,16 @@ export default function SettingsPage() {
   const [saveMsg, setSaveMsg] = useState("");
 
   useEffect(() => {
-    const saved = localStorage.getItem("streamSettings");
-    if (saved) {
-      const settings = JSON.parse(saved);
-      setResolution(settings.resolution || "1080p");
-      setFrameRate(settings.frameRate || "30");
-      setBitrate(settings.bitrate || "4500");
-    }
+    const frame = requestAnimationFrame(() => {
+      const saved = localStorage.getItem("streamSettings");
+      if (saved) {
+        const settings = JSON.parse(saved);
+        setResolution(settings.resolution || "1080p");
+        setFrameRate(settings.frameRate || "30");
+        setBitrate(settings.bitrate || "4500");
+      }
+    });
+    return () => cancelAnimationFrame(frame);
   }, []);
 
   const handleSaveStreamSettings = () => {

@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { io, Socket } from "socket.io-client";
 import { useAuth } from "@/lib/auth-context";
+import { decartApiKey, iceServers, signalingUrl } from "@/lib/client-config";
 import DashboardLayout from "@/components/DashboardLayout";
 
 type Mode = "character" | "style" | "background" | "vton" | "vfx";
@@ -19,7 +20,7 @@ type DecartModelId = "lucy-latest" | "lucy-restyle-latest" | "lucy-vton-latest";
 
 export default function Dashboard() {
   const { user, userData, deductCredit } = useAuth();
-  const [apiKey, setApiKey] = useState("");
+  const [apiKey] = useState(decartApiKey);
   const [isConnected, setIsConnected] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const [activeMode, setActiveMode] = useState<Mode>("character");
@@ -40,18 +41,9 @@ export default function Dashboard() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const clientRef = useRef<any>(null);
   const socketRef = useRef<Socket | null>(null);
-
-  // Load API key
-  useEffect(() => {
-    const envKey = process.env.NEXT_PUBLIC_DECART_API_KEY;
-    if (envKey) {
-      setApiKey(envKey);
-      localStorage.setItem("decart_api_key", envKey);
-    } else {
-      const saved = localStorage.getItem("decart_api_key");
-      if (saved) setApiKey(saved);
-    }
-  }, []);
+  const transformedStreamRef = useRef<MediaStream | null>(null);
+  const peerConnectionsRef = useRef(new Map<string, RTCPeerConnection>());
+  const pendingPeerCandidatesRef = useRef(new Map<string, RTCIceCandidateInit[]>());
 
   // List cameras
   useEffect(() => {
@@ -75,6 +67,19 @@ export default function Dashboard() {
       if (durationRef.current) clearInterval(durationRef.current);
     };
   }, [isStreaming]);
+
+  useEffect(() => {
+    const peers = peerConnectionsRef.current;
+    const pendingCandidates = pendingPeerCandidatesRef.current;
+    return () => {
+      clientRef.current?.disconnect();
+      socketRef.current?.disconnect();
+      for (const connection of peers.values()) connection.close();
+      peers.clear();
+      pendingCandidates.clear();
+      streamRef.current?.getTracks().forEach((track) => track.stop());
+    };
+  }, []);
 
   const formatTime = (s: number) => {
     const m = Math.floor(s / 60);
@@ -105,6 +110,19 @@ export default function Dashboard() {
   };
 
   const stopCamera = () => {
+    if (clientRef.current) {
+      clientRef.current.disconnect();
+      clientRef.current = null;
+    }
+    for (const connection of peerConnectionsRef.current.values()) connection.close();
+    peerConnectionsRef.current.clear();
+    pendingPeerCandidatesRef.current.clear();
+    transformedStreamRef.current = null;
+    if (socketRef.current) {
+      socketRef.current.emit("broadcaster-stopped", { roomId });
+      socketRef.current.disconnect();
+      socketRef.current = null;
+    }
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
@@ -133,7 +151,19 @@ export default function Dashboard() {
 
       const realtimeClient = await client.realtime.connect(streamRef.current, {
         model,
-        onRemoteStream: () => {},
+        onRemoteStream: (transformedStream: MediaStream) => {
+          transformedStreamRef.current = transformedStream;
+          if (localVideoRef.current) localVideoRef.current.srcObject = transformedStream;
+          const transformedVideoTrack = transformedStream.getVideoTracks()[0];
+          if (transformedVideoTrack) {
+            for (const pc of peerConnectionsRef.current.values()) {
+              const videoSender = pc.getSenders().find((sender) => sender.track?.kind === "video");
+              void videoSender?.replaceTrack(transformedVideoTrack).catch((error) => {
+                console.error("Unable to switch viewer to the transformed stream:", error);
+              });
+            }
+          }
+        },
         initialState: {
           prompt: {
             text: prompt || "Substitute the character in the video with the person in the reference image.",
@@ -154,7 +184,7 @@ export default function Dashboard() {
       const newRoomId = Math.random().toString(36).substring(2, 10);
       setRoomId(newRoomId);
 
-      const socket = io("http://localhost:4000", {
+      const socket = io(signalingUrl, {
         transports: ["websocket", "polling"],
       });
       socketRef.current = socket;
@@ -163,17 +193,22 @@ export default function Dashboard() {
         socket.emit("join-room", { roomId: newRoomId, role: "broadcaster" });
       });
 
+      socket.on("connect_error", () => {
+        setError("Could not reach the live-stream signaling service.");
+      });
+
       socket.on("viewer-count", (count: number) => {
         setViewerCount(count);
       });
 
       socket.on("viewer-joined", async ({ viewerId }: { viewerId: string }) => {
-        const aiStream = localVideoRef.current?.srcObject as MediaStream;
+        const aiStream = transformedStreamRef.current ?? streamRef.current;
         if (!aiStream) return;
 
-        const pc = new RTCPeerConnection({
-          iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
-        });
+        peerConnectionsRef.current.get(viewerId)?.close();
+        pendingPeerCandidatesRef.current.set(viewerId, []);
+        const pc = new RTCPeerConnection({ iceServers });
+        peerConnectionsRef.current.set(viewerId, pc);
         aiStream.getTracks().forEach((track) => pc.addTrack(track, aiStream));
 
         pc.onicecandidate = (event) => {
@@ -186,9 +221,51 @@ export default function Dashboard() {
           }
         };
 
+        pc.onconnectionstatechange = () => {
+          if (["closed", "failed", "disconnected"].includes(pc.connectionState)) {
+            pc.close();
+            peerConnectionsRef.current.delete(viewerId);
+            pendingPeerCandidatesRef.current.delete(viewerId);
+          }
+        };
+
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
-        socket.emit("offer", { roomId: newRoomId, offer: pc.localDescription });
+        socket.emit("offer", { roomId: newRoomId, offer: pc.localDescription, viewerId });
+      });
+
+      socket.on(
+        "answer",
+        async ({ answer, viewerId }: { answer: RTCSessionDescriptionInit; viewerId: string }) => {
+          const pc = peerConnectionsRef.current.get(viewerId);
+          if (pc) {
+            await pc.setRemoteDescription(answer);
+            for (const candidate of pendingPeerCandidatesRef.current.get(viewerId) ?? []) {
+              await pc.addIceCandidate(candidate);
+            }
+            pendingPeerCandidatesRef.current.delete(viewerId);
+          }
+        }
+      );
+
+      socket.on(
+        "ice-candidate",
+        async ({ candidate, fromId }: { candidate: RTCIceCandidateInit; fromId: string }) => {
+          const pc = peerConnectionsRef.current.get(fromId);
+          if (pc?.remoteDescription) {
+            await pc.addIceCandidate(candidate);
+          } else if (pc) {
+            const pending = pendingPeerCandidatesRef.current.get(fromId) ?? [];
+            pending.push(candidate);
+            pendingPeerCandidatesRef.current.set(fromId, pending);
+          }
+        }
+      );
+
+      socket.on("viewer-left", ({ viewerId }: { viewerId: string }) => {
+        peerConnectionsRef.current.get(viewerId)?.close();
+        peerConnectionsRef.current.delete(viewerId);
+        pendingPeerCandidatesRef.current.delete(viewerId);
       });
     } catch (err) {
       console.error("SDK connect error:", err);
@@ -205,6 +282,13 @@ export default function Dashboard() {
       socketRef.current.emit("broadcaster-stopped", { roomId });
       socketRef.current.disconnect();
       socketRef.current = null;
+    }
+    for (const connection of peerConnectionsRef.current.values()) connection.close();
+    peerConnectionsRef.current.clear();
+    pendingPeerCandidatesRef.current.clear();
+    transformedStreamRef.current = null;
+    if (localVideoRef.current && streamRef.current) {
+      localVideoRef.current.srcObject = streamRef.current;
     }
     setIsStreaming(false);
     setIsConnected(false);
