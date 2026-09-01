@@ -33,6 +33,9 @@ export default function Dashboard() {
   const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>([]);
   const [error, setError] = useState("");
   const [showLiveChat, setShowLiveChat] = useState(false);
+  const [lookModalOpen, setLookModalOpen] = useState(false);
+  const [referenceImage, setReferenceImage] = useState<string | null>(null);
+  const lookInputRef = useRef<HTMLInputElement>(null);
 
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -51,6 +54,15 @@ export default function Dashboard() {
       });
     }
   }, [cameraActive]);
+
+  useEffect(() => { setReferenceImage(localStorage.getItem("savatar-reference-image")); }, []);
+
+  const saveReferenceImage = (file?: File) => {
+    if (!file || !file.type.startsWith("image/") || file.size > 2_000_000) { setError("Choose an image under 2 MB."); return; }
+    const reader = new FileReader();
+    reader.onload = () => { const result = String(reader.result); localStorage.setItem("savatar-reference-image", result); setReferenceImage(result); setLookModalOpen(false); };
+    reader.readAsDataURL(file);
+  };
 
   // Display time only. Credits are reserved by the server before the realtime
   // token is issued, so a browser cannot run an unpaid session.
@@ -384,7 +396,7 @@ export default function Dashboard() {
                   Preview
                 </span>
               </div>
-              <div className="relative aspect-video bg-[#0a0a0a]">
+              <div className="relative aspect-[3/4] sm:aspect-video bg-[#0a0a0a]">
                 <video
                   ref={localVideoRef}
                   autoPlay
@@ -407,7 +419,7 @@ export default function Dashboard() {
             </div>
 
             {/* Camera Controls Bar */}
-            <div className="flex items-center gap-2 flex-wrap">
+            <div className="grid grid-cols-2 sm:flex sm:items-center gap-2">
               <button
                 onClick={isStreaming ? stopStream : cameraActive ? goLive : startCamera}
                 className={`px-4 py-2 rounded-lg text-xs font-medium transition ${
@@ -418,10 +430,10 @@ export default function Dashboard() {
               >
                 {isStreaming ? "Stop" : "Go Live"}
               </button>
-              <button className="px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-xs text-neutral-300 hover:bg-white/10 transition">
+              <button onClick={cameraActive ? stopCamera : startCamera} className="px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-xs text-neutral-300 hover:bg-white/10 transition">
                 Camera
               </button>
-              <button className="px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-xs text-neutral-300 hover:bg-white/10 transition">
+              <button onClick={() => streamRef.current?.getAudioTracks().forEach((track) => { track.enabled = !track.enabled; })} className="px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-xs text-neutral-300 hover:bg-white/10 transition">
                 Mic
               </button>
               {availableCameras.length > 0 && (
@@ -446,7 +458,7 @@ export default function Dashboard() {
                 <option value="720p">720p</option>
                 <option value="1080p">1080p</option>
               </select>
-              <button className="px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-xs text-neutral-300 hover:bg-white/10 transition">
+              <button onClick={() => setLookModalOpen(true)} className="col-span-2 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-xs text-neutral-300 hover:bg-white/10 transition">
                 Switch look →
               </button>
             </div>
@@ -585,6 +597,7 @@ export default function Dashboard() {
             </a>
           </div>
         </div>
+        {lookModalOpen && <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4 backdrop-blur-sm"><div className="w-full max-w-md rounded-2xl border border-indigo-400/30 bg-[#111827] p-5"><div className="flex justify-between"><h2 className="font-semibold">Your saved looks</h2><button onClick={() => setLookModalOpen(false)}>×</button></div><p className="mt-1 text-xs text-neutral-400">Saved only in this browser.</p>{referenceImage && <img src={referenceImage} alt="Saved look" className="mt-4 h-28 w-28 rounded-lg object-cover" />}<input ref={lookInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => saveReferenceImage(e.target.files?.[0])}/><button onClick={() => lookInputRef.current?.click()} className="mt-4 rounded-lg bg-indigo-500 px-4 py-2 text-sm">Upload another image</button></div></div>}
       </div>
     </DashboardLayout>
   );

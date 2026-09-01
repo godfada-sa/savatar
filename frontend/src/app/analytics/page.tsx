@@ -1,44 +1,31 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import { collection, getDocs, limit, orderBy, query, where } from "firebase/firestore";
 import { useAuth } from "@/lib/auth-context";
+import { getDb } from "@/lib/firebase";
 import DashboardLayout from "@/components/DashboardLayout";
 
 export default function AnalyticsPage() {
-  const { userData } = useAuth();
+  const { user, userData } = useAuth();
+  const [usage, setUsage] = useState<number[]>([]);
+  useEffect(() => { if (!user) return; getDocs(query(collection(getDb(), "transactions"), where("userId", "==", user.uid), orderBy("createdAt", "desc"), limit(12))).then((snapshot) => setUsage(snapshot.docs.map((doc) => Number(doc.data().type === "usage" ? doc.data().seconds : 0)).filter(Boolean))).catch(() => setUsage([])); }, [user]);
 
   const totalPurchased = ((userData?.wallet?.totalPurchased || 0) / 60).toFixed(1);
   const totalUsed = ((userData?.wallet?.totalUsed || 0) / 60).toFixed(1);
   const balanceMinutes = ((userData?.wallet?.balanceSeconds || 0) / 60).toFixed(1);
 
-  const weeklyData = [
-    { day: "Mon", minutes: 2.5 },
-    { day: "Tue", minutes: 4.2 },
-    { day: "Wed", minutes: 1.8 },
-    { day: "Thu", minutes: 6.1 },
-    { day: "Fri", minutes: 3.5 },
-    { day: "Sat", minutes: 8.2 },
-    { day: "Sun", minutes: 5.0 },
-  ];
-
-  const maxMinutes = Math.max(...weeklyData.map((d) => d.minutes), 1);
+  const maxUsage = Math.max(...usage, 1);
 
   return (
     <DashboardLayout>
       <div className="p-6">
-        {/* Error banner */}
-        <div className="mb-4 p-4 rounded-xl bg-red-950/30 border border-red-500/20">
-          <div className="text-sm font-semibold text-red-400">Session error</div>
-          <div className="text-xs text-red-300/70 mt-0.5">No camera was found. Connect a camera, then reload this page.</div>
-        </div>
-
         {/* Stats Cards */}
         <div className="grid grid-cols-2 md:grid-cols-6 gap-3 mb-6">
           {[
-            { label: "Live Viewers", value: "0", sub: "Offline", color: "text-white" },
-            { label: "Stream Time (Today)", value: "0:00", sub: "This session", color: "text-white" },
-            { label: "Followers", value: "0", sub: "+0 this week", color: "text-emerald-400" },
-            { label: "AI Usage", value: "0%", sub: "of stream time", color: "text-white" },
-            { label: "Engagement", value: "0%", sub: "Above average", color: "text-indigo-400" },
+            { label: "Credits purchased", value: totalPurchased + "m", sub: "All time", color: "text-white" },
+            { label: "AI usage", value: totalUsed + "m", sub: "All time", color: "text-white" },
+            { label: "Sessions", value: String(usage.length), sub: "Recorded", color: "text-emerald-400" },
             { label: "Credits Left", value: balanceMinutes + "m", sub: "Available", color: "text-white" },
           ].map((stat) => (
             <div key={stat.label} className="p-4 rounded-xl bg-[#111] border border-white/5">
@@ -54,15 +41,14 @@ export default function AnalyticsPage() {
           {/* Viewers over time */}
           <div className="p-5 rounded-xl bg-[#111] border border-white/5">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-semibold">Viewers over time</h3>
-              <span className="text-[10px] px-2 py-0.5 rounded bg-white/5 text-neutral-500">Sample</span>
+              <h3 className="text-sm font-semibold">Recent AI usage</h3>
             </div>
             <div className="flex items-end gap-1.5 h-40">
-              {[12, 8, 15, 10, 18, 14, 20, 16, 22, 19, 24, 21, 25].map((v, i) => (
+              {(usage.length ? usage : [0]).map((v, i) => (
                 <div
                   key={i}
                   className="flex-1 bg-indigo-500/40 rounded-t"
-                  style={{ height: `${(v / 25) * 100}%`, minHeight: "4px" }}
+                  style={{ height: `${(v / maxUsage) * 100}%`, minHeight: "4px" }}
                 />
               ))}
             </div>
@@ -71,23 +57,14 @@ export default function AnalyticsPage() {
           {/* AI usage (last 12 streams) */}
           <div className="p-5 rounded-xl bg-[#111] border border-white/5">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-semibold">AI usage (last 12 streams)</h3>
-              <span className="text-[10px] px-2 py-0.5 rounded bg-white/5 text-neutral-500">Sample</span>
+              <h3 className="text-sm font-semibold">Wallet summary</h3>
             </div>
-            <div className="flex items-end gap-1.5 h-40">
-              {[65, 72, 58, 80, 68, 75, 82, 70, 85, 78, 88, 82].map((v, i) => (
-                <div
-                  key={i}
-                  className="flex-1 bg-indigo-500/40 rounded-t"
-                  style={{ height: `${v}%`, minHeight: "4px" }}
-                />
-              ))}
-            </div>
+            <div className="grid grid-cols-2 gap-3 text-sm text-neutral-300"><div>Purchased <strong className="block text-xl text-white">{totalPurchased}m</strong></div><div>Used <strong className="block text-xl text-white">{totalUsed}m</strong></div><div>Available <strong className="block text-xl text-indigo-400">{balanceMinutes}m</strong></div></div>
           </div>
         </div>
 
         <p className="text-[11px] text-neutral-600 mt-4">
-          Analytics show sample data. Live metrics will populate once audience tracking is connected.
+          Analytics are based on your wallet and recorded AI sessions. Audience metrics appear when viewer tracking is available.
         </p>
       </div>
     </DashboardLayout>
