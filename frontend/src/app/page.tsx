@@ -1,231 +1,261 @@
 "use client";
 
-import { useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
+import { useState } from "react";
 
-// ─── Navbar ──────────────────────────────────────────────
+const features = [
+  {
+    title: "Character replacement",
+    description: "Transform your camera into a character, brand mascot, or custom identity from a single reference.",
+    icon: (
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.6} d="M15.75 6.75a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.5 20.25a7.5 7.5 0 0115 0" />
+    ),
+  },
+  {
+    title: "Live style control",
+    description: "Move between realistic, illustrated, cinematic, and branded looks without stopping your session.",
+    icon: (
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.6} d="M9.53 16.122a3 3 0 00-5.78 1.128 2.25 2.25 0 01-2.4 2.245 4.5 4.5 0 008.4-2.245c0-.399-.078-.78-.22-1.128zm0 0a15.998 15.998 0 003.388-1.62m-3.421-3.419a15.996 15.996 0 014.648-4.763l5.814-3.876a1.151 1.151 0 011.597 1.597L17.68 9.855a15.995 15.995 0 01-4.763 4.648" />
+    ),
+  },
+  {
+    title: "Background control",
+    description: "Place your stream in a polished environment without a green screen or a complicated studio setup.",
+    icon: (
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.6} d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 19.5h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5z" />
+    ),
+  },
+  {
+    title: "Shareable live rooms",
+    description: "Create a watch link for viewers, track attendance, and keep the conversation beside your broadcast.",
+    icon: (
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.6} d="M15.75 8.25l4.72-4.72a.75.75 0 011.28.53v15.88a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z" />
+    ),
+  },
+];
+
+const steps = [
+  {
+    number: "01",
+    title: "Connect your camera",
+    description: "Open the studio and allow camera access. Nothing needs to be installed.",
+  },
+  {
+    number: "02",
+    title: "Choose a direction",
+    description: "Select a mode, add a prompt, and review the transformed output before going live.",
+  },
+  {
+    number: "03",
+    title: "Start your room",
+    description: "Go live, share your watch link, and manage the session from one workspace.",
+  },
+];
+
+const plans = [
+  {
+    name: "Starter",
+    price: "GH 250",
+    duration: "5 minutes",
+    description: "For trying a focused creative idea.",
+    features: ["All transformation modes", "Live room access", "Viewer chat"],
+  },
+  {
+    name: "Basic",
+    price: "GH 650",
+    duration: "15 minutes",
+    description: "For short shows and product demos.",
+    features: ["All transformation modes", "Live room access", "Viewer chat"],
+    featured: true,
+  },
+  {
+    name: "Pro",
+    price: "GH 1,100",
+    duration: "30 minutes",
+    description: "For regular live sessions and events.",
+    features: ["All transformation modes", "Live room access", "Viewer chat"],
+  },
+  {
+    name: "Creator",
+    price: "GH 1,800",
+    duration: "1 hour",
+    description: "For longer broadcasts and campaigns.",
+    features: ["All transformation modes", "Live room access", "Viewer chat"],
+  },
+];
+
 function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
-    <nav className="fixed top-0 left-0 right-0 z-50 bg-[#0a0a0a]/90 backdrop-blur-md border-b border-white/5">
-      <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
-        <Link href="/" className="flex items-center gap-2.5">
-          <img src="/logo.svg" alt="Savatar" className="w-7 h-7" />
-          <span className="text-white font-semibold text-base tracking-tight font-[Space_Grotesk]">Savatar</span>
+    <nav className="fixed inset-x-0 top-0 z-50 border-b border-white/8 bg-[#090909]/95 backdrop-blur-xl">
+      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5 sm:px-6">
+        <Link href="/" className="flex items-center gap-2.5" aria-label="Savatar home">
+          <Image src="/logo.svg" alt="" width={30} height={30} priority />
+          <span className="font-display text-[15px] font-bold tracking-[-0.02em] text-white">Savatar</span>
         </Link>
 
-        <div className="hidden md:flex items-center gap-7 text-[13px] text-neutral-400 font-medium">
-          <a href="#features" className="hover:text-white transition">Features</a>
-          <a href="#how-it-works" className="hover:text-white transition">How It Works</a>
-          <a href="#pricing" className="hover:text-white transition">Pricing</a>
+        <div className="hidden items-center gap-8 text-[13px] font-medium text-neutral-400 md:flex">
+          <a href="#features" className="transition-colors hover:text-white">Features</a>
+          <a href="#how-it-works" className="transition-colors hover:text-white">How it works</a>
+          <a href="#pricing" className="transition-colors hover:text-white">Pricing</a>
         </div>
 
-        <div className="flex items-center gap-3">
-          <Link href="/login" className="hidden sm:inline-flex text-[13px] text-neutral-400 hover:text-white transition font-medium">
-            Sign In
+        <div className="flex items-center gap-2.5">
+          <Link href="/login" className="hidden px-3 py-2 text-[13px] font-medium text-neutral-300 transition-colors hover:text-white sm:inline-flex">
+            Sign in
           </Link>
-          <Link
-            href="/signup"
-            className="hidden sm:inline-flex px-4 py-2 bg-indigo-500 hover:bg-indigo-600 text-white text-[13px] font-medium rounded-md transition"
-          >
-            Get Started
+          <Link href="/signup" className="hidden rounded-lg bg-indigo-500 px-4 py-2.5 text-[13px] font-semibold text-white transition-colors hover:bg-indigo-400 sm:inline-flex">
+            Get started
           </Link>
-
           <button
-            onClick={() => setMobileOpen(!mobileOpen)}
-            className="md:hidden text-neutral-400 hover:text-white p-1"
+            type="button"
+            aria-label="Toggle navigation"
+            aria-expanded={mobileOpen}
+            onClick={() => setMobileOpen((open) => !open)}
+            className="rounded-lg border border-white/10 p-2 text-neutral-300 md:hidden"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              {mobileOpen ? (
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              ) : (
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-              )}
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d={mobileOpen ? "M6 18L18 6M6 6l12 12" : "M4 7h16M4 12h16M4 17h16"} />
             </svg>
           </button>
         </div>
       </div>
 
       {mobileOpen && (
-        <div className="md:hidden bg-[#0a0a0a] border-t border-white/5 px-6 py-4 space-y-3">
-          <a href="#features" className="block text-neutral-400 hover:text-white text-sm">Features</a>
-          <a href="#how-it-works" className="block text-neutral-400 hover:text-white text-sm">How It Works</a>
-          <a href="#pricing" className="block text-neutral-400 hover:text-white text-sm">Pricing</a>
-          <Link href="/login" className="block text-neutral-400 hover:text-white text-sm">Sign In</Link>
-          <Link href="/signup" className="block text-indigo-400 font-medium text-sm">Get Started Free</Link>
+        <div className="border-t border-white/8 bg-[#090909] px-5 py-5 md:hidden">
+          <div className="flex flex-col gap-4 text-sm font-medium text-neutral-300">
+            <a href="#features" onClick={() => setMobileOpen(false)}>Features</a>
+            <a href="#how-it-works" onClick={() => setMobileOpen(false)}>How it works</a>
+            <a href="#pricing" onClick={() => setMobileOpen(false)}>Pricing</a>
+            <Link href="/login">Sign in</Link>
+            <Link href="/signup" className="rounded-lg bg-indigo-500 px-4 py-3 text-center font-semibold text-white">Get started</Link>
+          </div>
         </div>
       )}
     </nav>
   );
 }
 
-// ─── Hero ────────────────────────────────────────────────
+function StudioPreview() {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-[#101010] p-2.5 shadow-[0_30px_90px_rgba(0,0,0,0.45)]">
+      <div className="overflow-hidden rounded-xl border border-white/8 bg-[#080808]">
+        <div className="flex h-11 items-center justify-between border-b border-white/8 px-4">
+          <div className="flex items-center gap-2">
+            <span className="h-2 w-2 rounded-full bg-neutral-600" />
+            <span className="h-2 w-2 rounded-full bg-neutral-700" />
+            <span className="h-2 w-2 rounded-full bg-neutral-800" />
+          </div>
+          <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-neutral-500">Creator studio</span>
+          <span className="h-2 w-2 rounded-full bg-emerald-400" />
+        </div>
+
+        <div className="grid gap-3 p-3 sm:grid-cols-[1fr_148px]">
+          <div className="relative flex aspect-video items-center justify-center overflow-hidden rounded-lg border border-white/8 bg-[#0d0d0d]">
+            <div className="absolute left-3 top-3 flex items-center gap-1.5 rounded-md border border-red-400/20 bg-[#171010] px-2 py-1 text-[9px] font-bold uppercase tracking-[0.14em] text-red-300">
+              <span className="h-1.5 w-1.5 rounded-full bg-red-400" />
+              Live preview
+            </div>
+            <div className="relative flex h-36 w-28 items-center justify-center rounded-[48%_48%_42%_42%] border border-indigo-400/35 bg-indigo-400/8">
+              <div className="absolute top-7 h-12 w-12 rounded-full border border-indigo-300/40" />
+              <div className="absolute bottom-5 h-12 w-20 rounded-t-[50%] border border-indigo-300/30 border-b-0" />
+            </div>
+            <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between rounded-md border border-white/8 bg-black/60 px-3 py-2">
+              <span className="text-[10px] font-medium text-neutral-300">Character transformation</span>
+              <span className="text-[9px] text-emerald-300">Connected</span>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <div className="rounded-lg border border-white/8 bg-[#111] p-3">
+              <p className="text-[9px] font-semibold uppercase tracking-[0.16em] text-neutral-600">Session</p>
+              <p className="mt-1.5 font-display text-lg font-bold text-white">12:48</p>
+              <p className="mt-0.5 text-[10px] text-neutral-500">Elapsed time</p>
+            </div>
+            <div className="rounded-lg border border-white/8 bg-[#111] p-3">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-neutral-500">Viewers</span>
+                <span className="font-display text-sm font-bold text-white">28</span>
+              </div>
+              <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/5">
+                <div className="h-full w-3/5 rounded-full bg-indigo-400" />
+              </div>
+            </div>
+            <button type="button" className="w-full rounded-lg bg-indigo-500 px-3 py-2.5 text-[11px] font-semibold text-white">
+              Manage stream
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Hero() {
   return (
-    <section className="relative min-h-screen flex items-center justify-center overflow-hidden pt-14">
-      <div className="relative z-10 text-center px-6 max-w-4xl mx-auto">
-
-
-        <h1 className="text-[3.5rem] md:text-[5rem] lg:text-[6rem] font-bold tracking-[-0.03em] leading-[0.95] mb-6 font-[Space_Grotesk]">
-          <span className="text-white">Go Live.</span>
-          <br />
-          <span className="text-indigo-400">Transform Instantly.</span>
-        </h1>
-
-        <p className="text-base md:text-lg text-neutral-400 max-w-xl mx-auto mb-10 leading-relaxed">
-          The browser-based AI live streaming platform for desktop creators.
-          Switch between your real camera and AI-powered avatars instantly.
-        </p>
-
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-          <Link
-            href="/signup"
-            className="px-6 py-3.5 bg-indigo-500 hover:bg-indigo-600 text-white font-medium rounded-lg text-sm transition"
-          >
-            Start Streaming
-          </Link>
-          <a
-            href="#how-it-works"
-            className="px-6 py-3.5 bg-white/5 hover:bg-white/10 text-neutral-300 font-medium rounded-lg text-sm border border-white/10 transition"
-          >
-            See How It Works
-          </a>
-        </div>
-
-        <div className="flex items-center justify-center gap-6 mt-12 text-xs text-neutral-500">
-          <div className="flex items-center gap-1.5">
-            <svg className="w-3.5 h-3.5 text-emerald-500" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-            </svg>
-            Pay with MoMo
+    <section className="border-b border-white/8 px-5 pb-20 pt-32 sm:px-6 sm:pb-24 sm:pt-40">
+      <div className="mx-auto grid max-w-6xl items-center gap-14 lg:grid-cols-[0.88fr_1.12fr] lg:gap-16">
+        <div>
+          <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-indigo-400/25 bg-indigo-400/8 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-indigo-300">
+            <span className="h-1.5 w-1.5 rounded-full bg-indigo-300" />
+            AI live production in your browser
           </div>
-          <div className="flex items-center gap-1.5">
-            <svg className="w-3.5 h-3.5 text-emerald-500" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-            </svg>
-            Instant credits
+          <h1 className="font-display max-w-2xl text-5xl font-bold leading-[1.04] tracking-[-0.045em] text-white sm:text-6xl lg:text-[4.25rem]">
+            Transform your camera. Go live as anyone.
+          </h1>
+          <p className="mt-6 max-w-xl text-base leading-7 text-neutral-400 sm:text-lg">
+            Create a polished AI-powered live presence, switch looks in real time, and invite viewers into a shareable room from one browser workspace.
+          </p>
+          <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+            <Link href="/signup" className="inline-flex items-center justify-center rounded-lg bg-indigo-500 px-5 py-3.5 text-sm font-semibold text-white transition-colors hover:bg-indigo-400">
+              Start creating
+            </Link>
+            <a href="#how-it-works" className="inline-flex items-center justify-center rounded-lg border border-white/12 bg-white/[0.03] px-5 py-3.5 text-sm font-semibold text-neutral-200 transition-colors hover:bg-white/[0.06]">
+              See how it works
+            </a>
           </div>
-          <div className="hidden sm:flex items-center gap-1.5">
-            <svg className="w-3.5 h-3.5 text-emerald-500" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-            </svg>
-            1080p at 30fps
+          <div className="mt-8 flex flex-wrap gap-x-5 gap-y-2 text-xs text-neutral-500">
+            {["No software install", "Mobile money payments", "Shareable watch rooms"].map((item) => (
+              <span key={item} className="flex items-center gap-2">
+                <svg className="h-3.5 w-3.5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.5 12.75l6 6 9-13.5" />
+                </svg>
+                {item}
+              </span>
+            ))}
           </div>
         </div>
+        <StudioPreview />
       </div>
     </section>
   );
 }
 
-// ─── Features ────────────────────────────────────────────
 function Features() {
-  const features = [
-    {
-      icon: (
-        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15.182 15.182a4.5 4.5 0 01-6.364 0M21 12a9 9 0 11-18 0 9 9 0 0118 0zM9.75 9.75c0 .414-.168.75-.375.75S9 10.164 9 9.75 9.168 9 9.375 9s.375.336.375.75zm-.375 0h.008v.015h-.008V9.75zm5.625 0c0 .414-.168.75-.375.75s-.375-.336-.375-.75.168-.75.375-.75.375.336.375.75zm-.375 0h.008v.015h-.008V9.75z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 21a8.966 8.966 0 01-5.982-2.275M12 21c1.5 0 2.5-.5 3-1.5M12 21a9 9 0 009-9c0-5-3.5-8-9-9S3 6 3 11a9 9 0 009 9z" /></svg>
-      ),
-      title: "Character Replacement",
-      desc: "Turn yourself into any character with a single photo. VTuber avatars, brand mascots, or custom characters.",
-    },
-    {
-      icon: (
-        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z" /></svg>
-      ),
-      title: "Virtual Try-On",
-      desc: "Change your clothes live on camera. Perfect for fashion streams, live commerce, and interactive shopping.",
-    },
-    {
-      icon: (
-        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21M3 3h12m-.75 4.5H21m-3.75 3H21m-3.75 3H21" /></svg>
-      ),
-      title: "Background Replacement",
-      desc: "Swap backgrounds in real-time. No green screen needed. Beach, office, space — anywhere you want.",
-    },
-    {
-      icon: (
-        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.53 16.122a3 3 0 00-5.78 1.128 2.25 2.25 0 01-2.4 2.245 4.5 4.5 0 008.4-2.245c0-.399-.078-.78-.22-1.128zm0 0a15.998 15.998 0 003.388-1.62m-5.043-.025a15.994 15.994 0 011.622-3.395m3.42 3.42a15.995 15.995 0 004.764-4.648l3.876-5.814a1.151 1.151 0 00-1.597-1.597L14.146 6.32a15.996 15.996 0 00-4.649 4.763m3.42 3.42a6.776 6.776 0 00-3.42-3.42" /></svg>
-      ),
-      title: "Style Transfer",
-      desc: "Transform your entire scene into anime, cyberpunk, oil painting, or any style you can describe.",
-    },
-    {
-      icon: (
-        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" /></svg>
-      ),
-      title: "Instant Switching",
-      desc: "Two synchronized feeds: your real camera and AI output. Switch instantly without interrupting your broadcast.",
-    },
-    {
-      icon: (
-        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0z" /></svg>
-      ),
-      title: "Stream Anywhere",
-      desc: "RTMP output to Twitch, YouTube, TikTok, or any platform. Your audience sees the AI-transformed version.",
-    },
-  ];
-
   return (
-    <section id="features" className="py-24 px-6 border-t border-white/5">
-      <div className="max-w-6xl mx-auto">
-        <div className="text-center mb-16">
-          <h2 className="text-3xl md:text-4xl font-bold text-white mb-3 font-[Space_Grotesk] tracking-tight">
-            Everything You Need to Go Live
-          </h2>
-          <p className="text-neutral-400 text-sm max-w-lg mx-auto">
-            Powerful AI transformation tools that work right in your browser.
-            No downloads. No setup.
+    <section id="features" className="scroll-mt-16 px-5 py-20 sm:px-6 sm:py-24">
+      <div className="mx-auto max-w-6xl">
+        <div className="grid gap-8 border-b border-white/8 pb-12 md:grid-cols-[0.8fr_1.2fr] md:items-end">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-indigo-300">Built for live creation</p>
+            <h2 className="font-display mt-3 text-3xl font-bold tracking-[-0.035em] text-white sm:text-4xl">A simpler production workflow</h2>
+          </div>
+          <p className="max-w-2xl text-sm leading-6 text-neutral-400 md:justify-self-end md:text-base">
+            Camera, transformation, streaming controls, audience status, and chat stay together so you can focus on the session instead of the setup.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-          {features.map((f, i) => (
-            <div
-              key={i}
-              className="p-5 rounded-xl bg-[#111] border border-white/5 hover:border-white/10 transition"
-            >
-              <div className="w-10 h-10 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 mb-3">{f.icon}</div>
-              <h3 className="text-sm font-semibold text-white mb-1.5 tracking-tight">
-                {f.title}
-              </h3>
-              <p className="text-neutral-500 text-[13px] leading-relaxed">{f.desc}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-// ─── How It Works ────────────────────────────────────────
-function HowItWorks() {
-  const steps = [
-    { step: "1", title: "Open Your Camera", desc: "Click Start Streaming and allow camera access. Works in Chrome, Edge, and Firefox." },
-    { step: "2", title: "Choose Your Transformation", desc: "Upload a reference image or pick a style. Type a prompt like 'anime warrior' or 'cyberpunk robot'." },
-    { step: "3", title: "Go Live", desc: "See yourself transformed in real-time. Share the watch link or stream to Twitch/YouTube via RTMP." },
-  ];
-
-  return (
-    <section id="how-it-works" className="py-24 px-6 bg-[#070707]">
-      <div className="max-w-5xl mx-auto">
-        <div className="text-center mb-14">
-          <h2 className="text-3xl md:text-4xl font-bold text-white mb-3 font-[Space_Grotesk] tracking-tight">
-            Live in 3 Steps
-          </h2>
-          <p className="text-neutral-400 text-sm">
-            No downloads. No installation. Just your browser.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
-          {steps.map((s, i) => (
-            <div key={i} className="text-center">
-              <div className="w-10 h-10 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 font-semibold text-sm mx-auto mb-4 font-[Space_Grotesk]">
-                {s.step}
+        <div className="grid gap-px overflow-hidden rounded-2xl border border-white/8 bg-white/8 sm:grid-cols-2 lg:grid-cols-4">
+          {features.map((feature) => (
+            <article key={feature.title} className="bg-[#0d0d0d] p-6 sm:min-h-64">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-indigo-400/20 bg-indigo-400/8 text-indigo-300">
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">{feature.icon}</svg>
               </div>
-              <h3 className="text-sm font-semibold text-white mb-2 tracking-tight">{s.title}</h3>
-              <p className="text-neutral-500 text-[13px] leading-relaxed max-w-xs mx-auto">{s.desc}</p>
-            </div>
+              <h3 className="font-display mt-8 text-lg font-bold tracking-[-0.02em] text-white">{feature.title}</h3>
+              <p className="mt-3 text-sm leading-6 text-neutral-500">{feature.description}</p>
+            </article>
           ))}
         </div>
       </div>
@@ -233,91 +263,122 @@ function HowItWorks() {
   );
 }
 
-// ─── Pricing ─────────────────────────────────────────────
+function HowItWorks() {
+  return (
+    <section id="how-it-works" className="scroll-mt-16 border-y border-white/8 bg-[#0c0c0c] px-5 py-20 sm:px-6 sm:py-24">
+      <div className="mx-auto max-w-6xl">
+        <div className="max-w-xl">
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-indigo-300">How it works</p>
+          <h2 className="font-display mt-3 text-3xl font-bold tracking-[-0.035em] text-white sm:text-4xl">From camera to live room in three steps</h2>
+        </div>
+        <div className="mt-12 grid gap-5 md:grid-cols-3">
+          {steps.map((step) => (
+            <article key={step.number} className="rounded-xl border border-white/8 bg-[#101010] p-6">
+              <span className="font-display text-sm font-bold text-indigo-300">{step.number}</span>
+              <h3 className="font-display mt-12 text-xl font-bold tracking-[-0.025em] text-white">{step.title}</h3>
+              <p className="mt-3 text-sm leading-6 text-neutral-500">{step.description}</p>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function Pricing() {
   return (
-    <section id="pricing" className="py-24 px-6 border-t border-white/5">
-      <div className="max-w-5xl mx-auto">
-        <div className="text-center mb-14">
-          <h2 className="text-3xl md:text-4xl font-bold text-white mb-3 font-[Space_Grotesk] tracking-tight">
-            Simple, Transparent Pricing
-          </h2>
-          <p className="text-neutral-400 text-sm">
-            Pay only for what you use. No subscriptions. No hidden fees.
-          </p>
+    <section id="pricing" className="scroll-mt-16 px-5 py-20 sm:px-6 sm:py-24">
+      <div className="mx-auto max-w-6xl">
+        <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
+          <div className="max-w-xl">
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-indigo-300">Pricing</p>
+            <h2 className="font-display mt-3 text-3xl font-bold tracking-[-0.035em] text-white sm:text-4xl">Buy the time you need</h2>
+          </div>
+          <p className="max-w-md text-sm leading-6 text-neutral-500 sm:text-right">No subscription and no automatic renewal. Credits stay in your wallet until you use them.</p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          {/* Starter */}
-          <div className="p-5 rounded-xl bg-[#111] border border-white/5">
-            <h3 className="text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-1">Starter</h3>
-            <div className="text-2xl font-bold text-white mb-0.5 font-[Space_Grotesk]">GH 250</div>
-            <p className="text-neutral-600 text-[11px] mb-4">5 minutes</p>
-            <Link href="/signup" className="block text-center py-2 rounded-lg bg-white/5 hover:bg-white/10 text-white text-xs font-medium transition border border-white/10">Get Started</Link>
-          </div>
-
-          {/* Basic */}
-          <div className="p-5 rounded-xl bg-[#111] border border-indigo-500/30 relative">
-            <div className="absolute -top-2 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-indigo-500 text-white text-[9px] font-semibold rounded uppercase tracking-wider">Popular</div>
-            <h3 className="text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-1">Basic</h3>
-            <div className="text-2xl font-bold text-white mb-0.5 font-[Space_Grotesk]">GH 650</div>
-            <p className="text-neutral-600 text-[11px] mb-4">15 minutes</p>
-            <Link href="/signup" className="block text-center py-2 rounded-lg bg-indigo-500 hover:bg-indigo-600 text-white text-xs font-medium transition">Buy Now</Link>
-          </div>
-
-          {/* Pro */}
-          <div className="p-5 rounded-xl bg-[#111] border border-white/5">
-            <h3 className="text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-1">Pro</h3>
-            <div className="text-2xl font-bold text-white mb-0.5 font-[Space_Grotesk]">GH 1,100</div>
-            <p className="text-neutral-600 text-[11px] mb-4">30 minutes</p>
-            <Link href="/signup" className="block text-center py-2 rounded-lg bg-white/5 hover:bg-white/10 text-white text-xs font-medium transition border border-white/10">Buy Now</Link>
-          </div>
-
-          {/* Creator */}
-          <div className="p-5 rounded-xl bg-[#111] border border-white/5">
-            <h3 className="text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-1">Creator</h3>
-            <div className="text-2xl font-bold text-white mb-0.5 font-[Space_Grotesk]">GH 1,800</div>
-            <p className="text-neutral-600 text-[11px] mb-4">1 hour</p>
-            <Link href="/signup" className="block text-center py-2 rounded-lg bg-white/5 hover:bg-white/10 text-white text-xs font-medium transition border border-white/10">Buy Now</Link>
-          </div>
+        <div className="mt-12 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {plans.map((plan) => (
+            <article
+              key={plan.name}
+              className={`flex min-h-[350px] flex-col rounded-2xl border bg-[#101010] p-6 ${plan.featured ? "border-indigo-400/50" : "border-white/10"}`}
+            >
+              <div className="flex min-h-7 items-start justify-between gap-3">
+                <h3 className="font-display text-base font-bold text-white">{plan.name}</h3>
+                {plan.featured && <span className="rounded-full border border-indigo-300/30 bg-indigo-400/10 px-2 py-1 text-[9px] font-bold uppercase tracking-[0.14em] text-indigo-200">Popular</span>}
+              </div>
+              <p className="mt-5 text-sm leading-6 text-neutral-500">{plan.description}</p>
+              <div className="mt-7">
+                <p className="font-display text-3xl font-bold tracking-[-0.035em] text-white">{plan.price}</p>
+                <p className="mt-1 text-xs font-medium text-neutral-500">{plan.duration} of AI streaming</p>
+              </div>
+              <ul className="mt-7 space-y-3 text-xs text-neutral-400">
+                {plan.features.map((feature) => (
+                  <li key={feature} className="flex items-center gap-2.5">
+                    <svg className="h-3.5 w-3.5 shrink-0 text-indigo-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.5 12.75l6 6 9-13.5" />
+                    </svg>
+                    {feature}
+                  </li>
+                ))}
+              </ul>
+              <Link
+                href="/signup"
+                className={`mt-auto flex items-center justify-center rounded-lg px-4 py-3 text-sm font-semibold transition-colors ${plan.featured ? "bg-indigo-500 text-white hover:bg-indigo-400" : "border border-white/12 bg-white/[0.03] text-neutral-200 hover:bg-white/[0.06]"}`}
+              >
+                Choose {plan.name}
+              </Link>
+            </article>
+          ))}
         </div>
       </div>
     </section>
   );
 }
 
-// ─── Footer ──────────────────────────────────────────────
+function FinalCta() {
+  return (
+    <section className="px-5 pb-20 sm:px-6 sm:pb-24">
+      <div className="mx-auto flex max-w-6xl flex-col items-start justify-between gap-8 rounded-2xl border border-indigo-300/20 bg-indigo-400/8 p-8 sm:p-10 md:flex-row md:items-center">
+        <div className="max-w-2xl">
+          <h2 className="font-display text-3xl font-bold tracking-[-0.035em] text-white">Build your first live look today</h2>
+          <p className="mt-3 text-sm leading-6 text-neutral-400">Create your account, connect a camera, and see the transformed preview before you spend any streaming credits.</p>
+        </div>
+        <Link href="/signup" className="shrink-0 rounded-lg bg-white px-5 py-3.5 text-sm font-bold text-black transition-colors hover:bg-neutral-200">Create an account</Link>
+      </div>
+    </section>
+  );
+}
+
 function Footer() {
   return (
-    <footer className="border-t border-white/5 py-10 px-6">
-      <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-5">
-        <div className="flex items-center gap-2">
-          <img src="/logo.svg" alt="Savatar" className="w-6 h-6" />
-          <span className="text-white font-semibold text-sm font-[Space_Grotesk]">Savatar</span>
+    <footer className="border-t border-white/8 px-5 py-10 sm:px-6">
+      <div className="mx-auto flex max-w-6xl flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
+        <Link href="/" className="flex items-center gap-2.5">
+          <Image src="/logo.svg" alt="" width={26} height={26} />
+          <span className="font-display text-sm font-bold text-white">Savatar</span>
+        </Link>
+        <div className="flex flex-wrap gap-x-6 gap-y-3 text-xs font-medium text-neutral-500">
+          <a href="#features" className="transition-colors hover:text-white">Features</a>
+          <a href="#pricing" className="transition-colors hover:text-white">Pricing</a>
+          <Link href="/terms" className="transition-colors hover:text-white">Terms</Link>
+          <Link href="/privacy" className="transition-colors hover:text-white">Privacy</Link>
         </div>
-
-        <div className="flex items-center gap-5 text-xs text-neutral-500">
-          <a href="#features" className="hover:text-white transition">Features</a>
-          <a href="#pricing" className="hover:text-white transition">Pricing</a>
-          <a href="/terms" className="hover:text-white transition">Terms</a>
-          <a href="/privacy" className="hover:text-white transition">Privacy</a>
-        </div>
-
-
+        <p className="text-xs text-neutral-600">AI live creation for modern creators.</p>
       </div>
     </footer>
   );
 }
 
-// ─── Page ────────────────────────────────────────────────
 export default function Home() {
   return (
-    <main className="min-h-screen">
+    <main className="min-h-screen bg-[#090909]">
       <Navbar />
       <Hero />
       <Features />
       <HowItWorks />
       <Pricing />
+      <FinalCta />
       <Footer />
     </main>
   );

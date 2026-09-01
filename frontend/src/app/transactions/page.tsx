@@ -71,7 +71,7 @@ export default function TransactionsPage() {
         </div>
 
         {/* Header */}
-        <div className="p-6 rounded-xl bg-gradient-to-r from-indigo-500/10 to-transparent border border-white/5 mb-6 flex items-center justify-between">
+        <div className="p-6 rounded-xl bg-indigo-500/[0.06] border border-indigo-500/15 mb-6 flex items-center justify-between">
           <div>
             <div className="text-[10px] text-indigo-400 font-semibold uppercase tracking-wider mb-1">Wallet & Activity</div>
             <h1 className="text-xl font-bold">Transactions</h1>
@@ -88,7 +88,7 @@ export default function TransactionsPage() {
             ].map((s) => (
               <div key={s.label} className="text-center px-3 py-2 rounded-lg bg-[#111] border border-white/5">
                 <div className="text-[9px] text-neutral-500 uppercase tracking-wider">{s.label}</div>
-                <div className={`text-sm font-bold font-[Space_Grotesk] ${s.color || "text-white"}`}>{s.value}</div>
+                <div className={`font-display text-sm font-bold ${s.color || "text-white"}`}>{s.value}</div>
               </div>
             ))}
           </div>
@@ -163,7 +163,7 @@ export default function TransactionsPage() {
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className={`text-sm font-medium font-[Space_Grotesk] ${t.type === "purchase" || t.type === "promo" || t.type === "admin" ? "text-emerald-400" : "text-red-400"}`}>
+                  <div className={`font-display text-sm font-medium ${t.type === "purchase" || t.type === "promo" || t.type === "admin" ? "text-emerald-400" : "text-red-400"}`}>
                     {t.type === "purchase" || t.type === "promo" || t.type === "admin" ? "+" : "-"}{formatTime(t.seconds)}
                   </div>
                   <div className="text-[11px] text-neutral-600">

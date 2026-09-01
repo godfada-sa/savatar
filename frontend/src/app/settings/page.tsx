@@ -65,7 +65,7 @@ export default function SettingsPage() {
         </div>
 
         {/* Preferences Header */}
-        <div className="p-6 rounded-xl bg-gradient-to-r from-indigo-500/10 to-transparent border border-white/5 mb-6 flex items-center justify-between">
+        <div className="p-6 rounded-xl bg-indigo-500/[0.06] border border-indigo-500/15 mb-6 flex items-center justify-between">
           <div>
             <div className="text-[10px] text-indigo-400 font-semibold uppercase tracking-wider mb-1">Preferences</div>
             <h1 className="text-xl font-bold">Settings</h1>
@@ -180,7 +180,7 @@ export default function SettingsPage() {
               </div>
               <div className="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/10">
                 <span className="text-xs text-neutral-400">Credits remaining</span>
-                <span className="text-sm font-bold text-indigo-400 font-[Space_Grotesk]">{balanceMinutes}m</span>
+                <span className="font-display text-sm font-bold text-indigo-400">{balanceMinutes}m</span>
               </div>
               <div className="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/10">
                 <span className="text-xs text-neutral-400">Payment gateway</span>

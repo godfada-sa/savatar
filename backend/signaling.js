@@ -12,7 +12,17 @@
 const { Server } = require("socket.io");
 const http = require("http");
 
-const PORT = process.env.SIGNALING_PORT || 4000;
+const PORT = Number(process.env.PORT || process.env.SIGNALING_PORT || 4000);
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || "http://localhost:3000,http://127.0.0.1:3000")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+function allowOrigin(origin, callback) {
+  // Health checks and other non-browser clients do not send an Origin header.
+  if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+  return callback(new Error("Origin is not allowed"));
+}
 
 const server = http.createServer((req, res) => {
   // CORS headers for health checks
@@ -30,7 +40,7 @@ const server = http.createServer((req, res) => {
 
 const io = new Server(server, {
   cors: {
-    origin: ["http://localhost:3000", "http://127.0.0.1:3000"],
+    origin: allowOrigin,
     methods: ["GET", "POST"],
   },
 });
@@ -43,6 +53,8 @@ io.on("connection", (socket) => {
 
   // ─── Join Room ──────────────────────────────────────
   socket.on("join-room", ({ roomId, role }) => {
+    if (typeof roomId !== "string" || !/^[a-z0-9-]{1,64}$/i.test(roomId)) return;
+    if (role !== "broadcaster" && role !== "viewer") return;
     console.log(`[join-room] ${socket.id} -> ${roomId} (${role})`);
 
     // Leave any previous rooms
@@ -96,7 +108,8 @@ io.on("connection", (socket) => {
   // Broadcaster sends offer to specific viewer
   socket.on("offer", ({ roomId, offer, viewerId }) => {
     console.log(`[offer] from ${socket.id} to ${viewerId}`);
-    if (viewerId) {
+    const room = rooms[roomId];
+    if (room?.broadcaster === socket.id && room.viewers.has(viewerId)) {
       io.to(viewerId).emit("offer", { offer, broadcasterId: socket.id });
     }
   });
@@ -104,14 +117,18 @@ io.on("connection", (socket) => {
   // Viewer sends answer back to broadcaster
   socket.on("answer", ({ roomId, answer, broadcasterId }) => {
     console.log(`[answer] from ${socket.id} to ${broadcasterId}`);
-    if (broadcasterId) {
+    const room = rooms[roomId];
+    if (room?.broadcaster === broadcasterId && room.viewers.has(socket.id)) {
       io.to(broadcasterId).emit("answer", { answer, viewerId: socket.id });
     }
   });
 
   // ICE candidate exchange
   socket.on("ice-candidate", ({ roomId, candidate, targetId }) => {
-    if (targetId) {
+    const room = rooms[roomId];
+    const isBroadcasterToViewer = room?.broadcaster === socket.id && room.viewers.has(targetId);
+    const isViewerToBroadcaster = room?.broadcaster === targetId && room.viewers.has(socket.id);
+    if (isBroadcasterToViewer || isViewerToBroadcaster) {
       io.to(targetId).emit("ice-candidate", { candidate, fromId: socket.id });
     }
   });
@@ -161,6 +178,9 @@ io.on("connection", (socket) => {
       console.log(`[broadcaster-left] ${roomId}`);
     } else {
       room.viewers.delete(sock.id);
+      if (room.broadcaster) {
+        io.to(room.broadcaster).emit("viewer-left", { viewerId: sock.id });
+      }
     }
 
     sock.leave(roomId);

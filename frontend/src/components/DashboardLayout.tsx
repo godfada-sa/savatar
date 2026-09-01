@@ -128,17 +128,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <div className="flex-1 grid grid-cols-2 lg:grid-cols-4 gap-2">
           <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-[#111] border border-white/5 min-w-0">
             <span className="text-[9px] sm:text-[10px] text-neutral-500 uppercase tracking-wider leading-none whitespace-nowrap">Credits</span>
-            <span className="text-sm sm:text-lg font-bold font-[Space_Grotesk] leading-none truncate">{balanceMinutes}m</span>
+            <span className="font-display text-sm sm:text-lg font-bold leading-none truncate">{balanceMinutes}m</span>
           </div>
           <div className="hidden sm:flex items-center gap-2 px-3 py-2 rounded-xl bg-[#111] border border-white/5 min-w-0">
             <span className="text-[9px] sm:text-[10px] text-neutral-500 uppercase tracking-wider leading-none whitespace-nowrap">Plan</span>
-            <span className="text-sm sm:text-lg font-bold font-[Space_Grotesk] leading-none truncate">{plan}</span>
+            <span className="font-display text-sm sm:text-lg font-bold leading-none truncate">{plan}</span>
           </div>
           <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-[#111] border border-white/5 min-w-0">
             <span className="text-[9px] sm:text-[10px] text-neutral-500 uppercase tracking-wider leading-none whitespace-nowrap">Status</span>
             <div className="flex items-center gap-1">
               <span className="w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0" />
-              <span className="text-sm sm:text-lg font-bold font-[Space_Grotesk] leading-none">Live</span>
+              <span className="font-display text-sm sm:text-lg font-bold leading-none">Live</span>
             </div>
           </div>
           <div className="hidden md:flex items-center gap-2 px-3 py-2 rounded-xl bg-[#111] border border-white/5 min-w-0">

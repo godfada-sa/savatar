@@ -310,7 +310,7 @@ export default function AdminPage() {
                 ].map((s) => (
                   <div key={s.label} className="p-4 rounded-xl bg-[#111] border border-white/5">
                     <div className="text-[10px] text-neutral-500 uppercase tracking-wider">{s.label}</div>
-                    <div className={`text-xl font-bold font-[Space_Grotesk] mt-1 ${s.color}`}>{s.value}</div>
+                    <div className={`font-display text-xl font-bold mt-1 ${s.color}`}>{s.value}</div>
                   </div>
                 ))}
               </div>
@@ -550,9 +550,9 @@ export default function AdminPage() {
             <div className="space-y-4">
               <h2 className="text-lg font-bold">Pricing Overview</h2>
 
-              <div className="p-5 rounded-xl bg-gradient-to-r from-emerald-500/10 to-transparent border border-white/5">
+              <div className="p-5 rounded-xl bg-emerald-500/[0.06] border border-emerald-500/15">
                 <div className="text-[10px] text-neutral-500 uppercase tracking-wider mb-1">Decart API Cost</div>
-                <div className="text-2xl font-bold text-emerald-400 font-[Space_Grotesk]">${DECART_COST_PER_SEC}/sec</div>
+                <div className="font-display text-2xl font-bold text-emerald-400">${DECART_COST_PER_SEC}/sec</div>
                 <div className="text-xs text-neutral-500 mt-1">
                   = ${DECART_COST_PER_SEC * 60}/min = GH {(DECART_COST_PER_SEC * 60 * GHS_PER_USD).toFixed(0)}/min (at $1=GH{GHS_PER_USD})
                 </div>

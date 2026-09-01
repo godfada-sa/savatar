@@ -58,7 +58,7 @@ export default function CreditsPage() {
         </div>
 
         {/* Credits & Billing Header */}
-        <div className="p-6 rounded-xl bg-gradient-to-r from-indigo-500/10 to-transparent border border-white/5 mb-6 flex items-center justify-between">
+        <div className="p-6 rounded-xl bg-indigo-500/[0.06] border border-indigo-500/15 mb-6 flex items-center justify-between">
           <div>
             <div className="text-[10px] text-indigo-400 font-semibold uppercase tracking-wider mb-1">Credits & Billing</div>
             <h1 className="text-xl font-bold">Buy Credits, Unlock Possibilities</h1>
@@ -68,7 +68,7 @@ export default function CreditsPage() {
           </div>
           <div className="text-center px-6 py-3 rounded-xl bg-[#111] border border-white/5">
             <div className="text-[10px] text-neutral-500 uppercase tracking-wider">Available Balance</div>
-            <div className="text-2xl font-bold text-indigo-400 font-[Space_Grotesk]">{balanceMinutes}</div>
+            <div className="font-display text-2xl font-bold text-indigo-400">{balanceMinutes}</div>
             <div className="text-[10px] text-neutral-500">minutes</div>
           </div>
         </div>
@@ -93,13 +93,13 @@ export default function CreditsPage() {
               }`}
             >
               <div className="text-xs text-neutral-400 mb-1">{pack.name}</div>
-              <div className="text-xl font-bold font-[Space_Grotesk] text-white">
+              <div className="font-display text-xl font-bold text-white">
                 {pack.seconds >= 60 ? Math.floor(pack.seconds / 60) : pack.seconds}
                 <span className="text-xs text-neutral-500 font-normal ml-1">
                   {pack.seconds >= 60 ? "min" : "sec"}
                 </span>
               </div>
-              <div className="text-lg font-bold text-white mt-1 font-[Space_Grotesk]">
+              <div className="font-display text-lg font-bold text-white mt-1">
                 GH {pack.priceGHS.toLocaleString()}
               </div>
               <ul className="mt-2 space-y-0.5">

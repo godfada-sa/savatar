@@ -43,7 +43,7 @@ export default function AnalyticsPage() {
           ].map((stat) => (
             <div key={stat.label} className="p-4 rounded-xl bg-[#111] border border-white/5">
               <div className="text-[10px] text-neutral-500 uppercase tracking-wider leading-none mb-2">{stat.label}</div>
-              <div className={`text-xl font-bold font-[Space_Grotesk] ${stat.color}`}>{stat.value}</div>
+              <div className={`font-display text-xl font-bold ${stat.color}`}>{stat.value}</div>
               <div className="text-[11px] text-neutral-500 mt-0.5">{stat.sub}</div>
             </div>
           ))}

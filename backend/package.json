@@ -4,7 +4,11 @@
   "description": "",
   "main": "signaling.js",
   "scripts": {
+    "start": "node signaling.js",
     "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "engines": {
+    "node": ">=20"
   },
   "keywords": [],
   "author": "",
