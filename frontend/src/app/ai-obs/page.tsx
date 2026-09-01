@@ -15,7 +15,6 @@ export default function AiObsPage() {
   const { user } = useAuth();
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [streaming, setStreaming] = useState(false);
   const [cameraActive, setCameraActive] = useState(false);
   const [selectedBg, setSelectedBg] = useState("original");
   const [selectedLook, setSelectedLook] = useState("default");
@@ -36,7 +35,7 @@ export default function AiObsPage() {
     { id: "meeting-room", name: "Corporate Meeting Room", category: "professional", position: "50% 100%" },
     { id: "workspace", name: "Modern Creative Workspace", category: "professional", position: "100% 100%" },
     // Luxury
-    { id: "luxury-suite", name: "Luxury Suite", category: "luxury" },
+    { id: "luxury-suite-alt", name: "Luxury Suite", category: "luxury" },
     { id: "penthouse", name: "Penthouse View", category: "luxury" },
     { id: "yacht", name: "Yacht Interior", category: "luxury" },
     // Nature
@@ -91,6 +90,23 @@ export default function AiObsPage() {
     reader.readAsDataURL(file);
   };
 
+  const selectBackground = (background: Background) => {
+    setSelectedBg(background.id);
+    const prompt = background.id === "original"
+      ? "Preserve the original camera background."
+      : `Place the subject naturally in a ${background.name.toLowerCase()} background while preserving their motion.`;
+    localStorage.setItem("savatar-ai-prompt", prompt);
+  };
+
+  const selectLook = (look: string) => {
+    setSelectedLook(look);
+    if (look === "default") {
+      localStorage.removeItem("savatar-ai-prompt");
+      return;
+    }
+    localStorage.setItem("savatar-ai-prompt", `Apply a ${look} visual style while preserving the subject's identity and camera motion.`);
+  };
+
   const stopCamera = () => {
     if (videoRef.current?.srcObject) {
       const stream = videoRef.current.srcObject as MediaStream;
@@ -98,7 +114,6 @@ export default function AiObsPage() {
       videoRef.current.srcObject = null;
     }
     setCameraActive(false);
-    setStreaming(false);
   };
 
   return (
@@ -149,23 +164,21 @@ export default function AiObsPage() {
               <div className="rounded-xl bg-[#111] border border-white/5 overflow-hidden">
                 <div className="p-3 border-b border-white/5 flex items-center justify-between">
                   <span className="text-xs font-semibold">AI program output</span>
-                  <span className={`text-[10px] px-2 py-0.5 rounded ${streaming ? "text-emerald-400 bg-emerald-500/10" : "text-neutral-500 bg-white/5"}`}>
-                    {streaming ? "Live" : "Offline"}
+                  <span className="text-[10px] px-2 py-0.5 rounded text-neutral-500 bg-white/5">
+                    Studio required
                   </span>
                 </div>
                 <div className="relative aspect-[4/3] sm:aspect-video bg-[#07111a]">
                   <div className="absolute inset-0 flex items-center justify-center text-neutral-600">
-                    <span className="text-xs">{streaming ? "AI output streaming" : "Start streaming to see output"}</span>
+                    <span className="text-xs">Start your AI stream in Studio to see output</span>
                   </div>
                 </div>
                 <div className="grid grid-cols-[1fr_auto] gap-2 p-2 border-t border-white/5">
                   <button
-                    onClick={cameraActive ? () => setStreaming(!streaming) : startCamera}
-                    className={`px-4 py-1.5 rounded-lg text-xs font-medium transition ${
-                      streaming ? "bg-red-500 hover:bg-red-600 text-white" : "bg-indigo-500 hover:bg-indigo-600 text-white"
-                    }`}
+                    onClick={() => { window.location.href = "/dashboard"; }}
+                    className="px-4 py-1.5 rounded-lg text-xs font-medium transition bg-indigo-500 hover:bg-indigo-600 text-white"
                   >
-                    {streaming ? "Stop Streaming" : cameraActive ? "Start Streaming" : "Start Camera"}
+                    Open Studio
                   </button>
                   <select
                     value={resolution}
@@ -195,7 +208,7 @@ export default function AiObsPage() {
             <div className="p-4 rounded-xl bg-[#111] border border-white/5">
               <h3 className="text-sm font-semibold mb-1">Backgrounds</h3>
               <p className="text-[11px] text-neutral-500 mb-3">
-                Switch scenes instantly — no reconnect. AI applies your pick in real time.
+                Choose a scene here, then open Studio to begin the real AI stream.
               </p>
               <div className="flex gap-2 mb-4">
                 {["all", "professional", "luxury", "nature", "creative"].map((cat) => (
@@ -214,7 +227,7 @@ export default function AiObsPage() {
                 {filteredBgs.map((bg) => (
                   <button
                     key={bg.id}
-                    onClick={() => setSelectedBg(bg.id)}
+                    onClick={() => selectBackground(bg)}
                     className={`min-h-28 sm:aspect-square rounded-lg border text-center p-2 flex flex-col items-center justify-center gap-1 transition ${
                       selectedBg === bg.id
                         ? "border-indigo-500 bg-indigo-500/10"
@@ -238,7 +251,7 @@ export default function AiObsPage() {
                   {["default", "anime", "cyberpunk", "ghibli"].map((look) => (
                     <button
                       key={look}
-                      onClick={() => setSelectedLook(look)}
+                      onClick={() => selectLook(look)}
                       className={`w-16 h-16 rounded-lg border text-center flex flex-col items-center justify-center gap-1 transition ${
                         selectedLook === look
                           ? "border-indigo-500 bg-indigo-500/10"
@@ -266,7 +279,7 @@ export default function AiObsPage() {
             <div className="p-4 rounded-xl bg-[#111] border border-white/5">
               <h3 className="text-sm font-semibold mb-2">OBS Browser Source</h3>
               <p className="text-[11px] text-neutral-500 mb-3">
-                Add this private URL as a Browser Source in OBS (1280x720). When you Start Streaming, OBS switches to the AI program output.
+                Add this URL as a Browser Source in OBS (1280×720). Start your real stream in Studio and OBS receives it automatically.
               </p>
               <div className="p-3 rounded-lg bg-black border border-white/10 mb-3">
                 <code className="text-[10px] text-indigo-400 break-all">{obsUrl}</code>
@@ -290,8 +303,8 @@ export default function AiObsPage() {
               <div className="grid grid-cols-3 gap-2">
                 <div className="text-center p-2 rounded-lg bg-white/5">
                   <div className="text-[10px] text-neutral-500">Status</div>
-                  <div className={`text-xs font-medium mt-0.5 ${streaming ? "text-emerald-400" : "text-neutral-400"}`}>
-                    {streaming ? "Live" : "Offline"}
+                  <div className="text-xs font-medium mt-0.5 text-neutral-400">
+                    Studio controls this
                   </div>
                 </div>
                 <div className="text-center p-2 rounded-lg bg-white/5">

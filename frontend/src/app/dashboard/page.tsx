@@ -55,7 +55,10 @@ export default function Dashboard() {
     }
   }, [cameraActive]);
 
-  useEffect(() => { setReferenceImage(localStorage.getItem("savatar-reference-image")); }, []);
+  useEffect(() => {
+    setReferenceImage(localStorage.getItem("savatar-reference-image"));
+    setPrompt(localStorage.getItem("savatar-ai-prompt") || "");
+  }, []);
 
   const saveReferenceImage = (file?: File) => {
     if (!file || !file.type.startsWith("image/") || file.size > 2_000_000) { setError("Choose an image under 2 MB."); return; }
@@ -115,8 +118,8 @@ export default function Dashboard() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
-          width: resolution === "1080p" ? 1280 : 640,
-          height: resolution === "1080p" ? 720 : 480,
+          width: resolution === "1080p" ? 1920 : 1280,
+          height: resolution === "1080p" ? 1080 : 720,
           frameRate: { ideal: 30 },
           deviceId: cameraDevice !== "default" ? { exact: cameraDevice } : undefined,
         },
@@ -208,7 +211,9 @@ export default function Dashboard() {
         },
         initialState: {
           prompt: {
-            text: prompt || "Substitute the character in the video with the person in the reference image.",
+            text: prompt || (referenceImage
+              ? "Substitute the character in the video with the person in the reference image."
+              : "Preserve the subject and their original camera scene."),
             enhance: true,
           },
         },
@@ -597,7 +602,7 @@ export default function Dashboard() {
         <div className="rounded-xl bg-[#111] border border-white/5 overflow-hidden">
           <div className="p-3 border-b border-white/5 flex items-center justify-between">
             <span className="text-xs font-semibold">Live now</span>
-            <button className="text-[11px] text-indigo-400 hover:text-indigo-300">Refresh</button>
+            <a href="/feed" className="text-[11px] text-indigo-400 hover:text-indigo-300">View feed</a>
           </div>
           <div className="p-6">
             <p className="text-xs text-neutral-500 mb-2">
