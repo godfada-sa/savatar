@@ -103,7 +103,7 @@ export default function AiObsPage() {
     setSelectedBg(background.id);
     const prompt = background.id === "original"
       ? "Preserve the original camera background."
-      : `Place the subject naturally in a ${background.name.toLowerCase()} background while preserving their motion.`;
+      : `Replace the background with a ${background.name.toLowerCase()} scene while preserving the subject, lighting, and motion.`;
     localStorage.setItem("savatar-ai-prompt", prompt);
   };
 

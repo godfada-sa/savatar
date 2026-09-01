@@ -15,7 +15,7 @@ import {
 
 export const runtime = "nodejs";
 
-const ALLOWED_MODELS = new Set(["lucy-latest", "lucy-restyle-latest", "lucy-vton-latest"]);
+const ALLOWED_MODELS = new Set(["lucy-2.5", "lucy-restyle-2", "lucy-vton-3.5"]);
 const MAX_PREPAID_SESSION_SECONDS = 300;
 const MINIMUM_STREAM_SECONDS = 60;
 

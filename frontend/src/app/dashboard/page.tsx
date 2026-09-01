@@ -9,14 +9,14 @@ import DashboardLayout from "@/components/DashboardLayout";
 type Mode = "character" | "style" | "background" | "vton" | "vfx";
 
 const MODES: { id: Mode; label: string; model: string }[] = [
-  { id: "character", label: "Character", model: "lucy-latest" },
-  { id: "style", label: "Style Transfer", model: "lucy-restyle-latest" },
-  { id: "background", label: "Background", model: "lucy-latest" },
-  { id: "vton", label: "Virtual Try-On", model: "lucy-vton-latest" },
-  { id: "vfx", label: "VFX Effects", model: "lucy-latest" },
+  { id: "character", label: "Character", model: "lucy-2.5" },
+  { id: "style", label: "Style Transfer", model: "lucy-restyle-2" },
+  { id: "background", label: "Background", model: "lucy-2.5" },
+  { id: "vton", label: "Virtual Try-On", model: "lucy-vton-3.5" },
+  { id: "vfx", label: "VFX Effects", model: "lucy-2.5" },
 ];
 
-type DecartModelId = "lucy-latest" | "lucy-restyle-latest" | "lucy-vton-latest";
+type DecartModelId = "lucy-2.5" | "lucy-restyle-2" | "lucy-vton-3.5";
 
 export default function Dashboard() {
   const { user, userData } = useAuth();
@@ -42,8 +42,6 @@ export default function Dashboard() {
   const streamRef = useRef<MediaStream | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const clientRef = useRef<any>(null);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const decartClientRef = useRef<any>(null);
   const socketRef = useRef<Socket | null>(null);
   const transformedStreamRef = useRef<MediaStream | null>(null);
   const peerConnectionsRef = useRef(new Map<string, RTCPeerConnection>());
@@ -69,10 +67,9 @@ export default function Dashboard() {
   }, []);
 
   const applyReferenceImage = useCallback(async (dataUrl: string) => {
-    if (!clientRef.current || !decartClientRef.current) return;
+    if (!clientRef.current) return;
     const blob = await (await fetch(dataUrl)).blob();
-    const reference = await decartClientRef.current.files.upload(blob);
-    await clientRef.current.set({ image: reference.id, prompt: prompt || "Match the reference image while preserving camera motion and facial expression." });
+    await clientRef.current.set({ image: blob, prompt: prompt || "Substitute the character in the video with the person in the reference image.", enhance: true });
   }, [prompt]);
 
   useEffect(() => {
@@ -80,6 +77,16 @@ export default function Dashboard() {
       void applyReferenceImage(referenceImage).catch(() => setError("The new reference image could not be applied."));
     }
   }, [applyReferenceImage, isStreaming, referenceImage]);
+
+  useEffect(() => {
+    if (!referenceImage && isStreaming && clientRef.current) {
+      void clientRef.current.set({
+        image: null,
+        prompt: prompt || "Preserve the subject and original camera scene.",
+        enhance: true,
+      }).catch(() => setError("The selected background could not be applied."));
+    }
+  }, [isStreaming, prompt, referenceImage]);
 
   const saveReferenceImage = (file?: File) => {
     if (!file || !file.type.startsWith("image/") || file.size > 2_000_000) { setError("Choose an image under 2 MB."); return; }
@@ -177,7 +184,6 @@ export default function Dashboard() {
       clientRef.current.disconnect();
       clientRef.current = null;
     }
-    decartClientRef.current = null;
     for (const connection of peerConnectionsRef.current.values()) connection.close();
     peerConnectionsRef.current.clear();
     pendingPeerCandidatesRef.current.clear();
@@ -214,7 +220,7 @@ export default function Dashboard() {
 
     try {
       const { createDecartClient, models } = await import("@decartai/sdk");
-      const modelId = (MODES.find((m) => m.id === activeMode)?.model || "lucy-latest") as DecartModelId;
+      const modelId = (MODES.find((m) => m.id === activeMode)?.model || "lucy-2.5") as DecartModelId;
       const idToken = await user.getIdToken();
       const tokenResponse = await fetch("/api/realtime-token", {
         method: "POST",
@@ -231,7 +237,6 @@ export default function Dashboard() {
 
       const model = models.realtime(modelId as Parameters<typeof models.realtime>[0]);
       const client = createDecartClient({ apiKey: tokenResult.apiKey });
-      decartClientRef.current = client;
 
       const realtimeClient = await client.realtime.connect(streamRef.current, {
         model,
@@ -257,6 +262,7 @@ export default function Dashboard() {
             enhance: true,
           },
         },
+        resolution: resolution as "720p" | "1080p",
       });
 
       realtimeClient.on("error", (err: { message: string }) => {
@@ -379,7 +385,6 @@ export default function Dashboard() {
       clientRef.current.disconnect();
       clientRef.current = null;
     }
-    decartClientRef.current = null;
     if (socketRef.current) {
       socketRef.current.emit("broadcaster-stopped", { roomId });
       socketRef.current.disconnect();
