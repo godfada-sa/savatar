@@ -60,17 +60,27 @@ export default function AiObsPage() {
     setReferenceImage(localStorage.getItem("savatar-reference-image"));
   }, []);
 
-  const startCamera = async () => {
+  const openCamera = async (targetResolution: string) => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: resolution === "1080p" ? 1920 : 1280, height: resolution === "1080p" ? 1080 : 720, frameRate: { ideal: 30 } },
+        video: { width: targetResolution === "1080p" ? 1920 : 1280, height: targetResolution === "1080p" ? 1080 : 720, frameRate: { ideal: 30 } },
         audio: true,
       });
+      const previousStream = videoRef.current?.srcObject as MediaStream | null;
       if (videoRef.current) videoRef.current.srcObject = stream;
+      previousStream?.getTracks().forEach((track) => track.stop());
       setCameraActive(true);
+      setError("");
     } catch {
       setError("Camera or microphone permission was denied.");
     }
+  };
+
+  const startCamera = () => openCamera(resolution);
+
+  const changeResolution = (nextResolution: string) => {
+    setResolution(nextResolution);
+    if (cameraActive) void openCamera(nextResolution);
   };
 
   const toggleMic = () => {
@@ -131,9 +141,9 @@ export default function AiObsPage() {
           </div>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 sm:gap-6">
           {/* Main Area */}
-          <div className="lg:col-span-2 space-y-4">
+          <div className="xl:col-span-2 space-y-4">
             {/* Video Feeds */}
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
               {/* Camera Input */}
@@ -186,7 +196,7 @@ export default function AiObsPage() {
                   </button>
                   <select
                     value={resolution}
-                    onChange={(e) => setResolution(e.target.value)}
+                    onChange={(e) => changeResolution(e.target.value)}
                     className="px-3 py-1.5 bg-white/5 border border-white/10 rounded-lg text-xs text-white focus:outline-none"
                   >
                     <option value="720p">720p</option>

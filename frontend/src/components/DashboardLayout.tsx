@@ -108,7 +108,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         {/* Mobile hamburger */}
         <button
           onClick={() => setSidebarOpen(!sidebarOpen)}
-          className="md:hidden flex items-center justify-center w-10 h-10 rounded-xl bg-[#111] border border-white/5 text-neutral-400 hover:text-white transition flex-shrink-0"
+          className="lg:hidden flex items-center justify-center w-10 h-10 rounded-xl bg-[#111] border border-white/5 text-neutral-400 hover:text-white transition flex-shrink-0"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             {sidebarOpen ? (
@@ -130,10 +130,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <span className="font-display text-sm sm:text-lg font-bold leading-none truncate">{plan}</span>
           </div>
           <div className="hidden sm:flex items-center gap-2 px-3 py-2 rounded-xl bg-[#111] border border-white/5 min-w-0">
-            <span className="text-[9px] sm:text-[10px] text-neutral-500 uppercase tracking-wider leading-none whitespace-nowrap">Status</span>
+            <span className="text-[9px] sm:text-[10px] text-neutral-500 uppercase tracking-wider leading-none whitespace-nowrap">System</span>
             <div className="flex items-center gap-1">
               <span className="w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0" />
-              <span className="font-display text-sm sm:text-lg font-bold leading-none">Live</span>
+              <span className="font-display text-sm sm:text-lg font-bold leading-none">Ready</span>
             </div>
           </div>
           <div className="hidden md:flex items-center gap-2 px-3 py-2 rounded-xl bg-[#111] border border-white/5 min-w-0">
@@ -148,15 +148,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         {/* Mobile overlay */}
         {sidebarOpen && (
           <div
-            className="fixed inset-0 bg-black/50 z-30 md:hidden"
+            className="fixed inset-0 bg-black/50 z-30 lg:hidden"
             onClick={() => setSidebarOpen(false)}
           />
         )}
 
         {/* Left Sidebar */}
         <aside
-          className={`fixed md:static inset-y-0 left-0 z-40 w-56 flex-shrink-0 border-r border-white/5 bg-[#0a0a0a] flex flex-col transition-transform duration-200 ${
-            sidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
+          className={`fixed lg:static inset-y-0 left-0 z-40 w-56 flex-shrink-0 border-r border-white/5 bg-[#0a0a0a] flex flex-col transition-transform duration-200 ${
+            sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
           }`}
         >
           {/* Logo */}
@@ -167,7 +167,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </Link>
             <button
               onClick={() => setSidebarOpen(false)}
-              className="md:hidden p-1 rounded text-neutral-400 hover:text-white"
+              className="lg:hidden p-1 rounded text-neutral-400 hover:text-white"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />

@@ -140,7 +140,7 @@ function CreditsContent() {
         </div>
 
         {/* Credit Packs */}
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-3 mb-6">
+        <div className="grid grid-cols-1 gap-3 mb-6 md:grid-cols-2 xl:grid-cols-5">
           {CREDIT_PACKS.map((pack) => (
             <button
               key={pack.id}

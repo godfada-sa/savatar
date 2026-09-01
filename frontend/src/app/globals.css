@@ -25,6 +25,15 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+select {
+  color-scheme: dark;
+}
+
+select option {
+  background: #111;
+  color: #fff;
+}
+
 .font-display {
   font-family: var(--font-display), var(--font-body), -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }

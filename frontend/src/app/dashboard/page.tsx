@@ -119,26 +119,40 @@ export default function Dashboard() {
     return `${m.toString().padStart(2, "0")}:${sec.toString().padStart(2, "0")}`;
   };
 
-  const startCamera = async () => {
+  const openCamera = async (targetResolution: string, targetDevice: string) => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
-          width: resolution === "1080p" ? 1920 : 1280,
-          height: resolution === "1080p" ? 1080 : 720,
+          width: targetResolution === "1080p" ? 1920 : 1280,
+          height: targetResolution === "1080p" ? 1080 : 720,
           frameRate: { ideal: 30 },
-          deviceId: cameraDevice !== "default" ? { exact: cameraDevice } : undefined,
+          deviceId: targetDevice !== "default" ? { exact: targetDevice } : undefined,
         },
         audio: true,
       });
+      const previousStream = streamRef.current;
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = stream;
       }
       streamRef.current = stream;
+      previousStream?.getTracks().forEach((track) => track.stop());
       setCameraActive(true);
       setError("");
     } catch {
       setError("No camera was found. Connect a camera, then reload this page.");
     }
+  };
+
+  const startCamera = () => openCamera(resolution, cameraDevice);
+
+  const changeResolution = (nextResolution: string) => {
+    setResolution(nextResolution);
+    if (cameraActive && !isStreaming) void openCamera(nextResolution, cameraDevice);
+  };
+
+  const changeCameraDevice = (nextDevice: string) => {
+    setCameraDevice(nextDevice);
+    if (cameraActive && !isStreaming) void openCamera(resolution, nextDevice);
   };
 
   const stopCamera = () => {
@@ -411,9 +425,9 @@ export default function Dashboard() {
         </div>
 
         {/* Main Layout: Camera + Right Panel */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
           {/* Left: Camera Preview */}
-          <div className="lg:col-span-2 space-y-3">
+          <div className="xl:col-span-2 space-y-3">
             <div className="rounded-xl bg-[#111] border border-white/5 overflow-hidden">
               <div className="p-3 border-b border-white/5 flex items-center justify-between">
                 <span className="text-xs font-semibold">Camera preview</span>
@@ -464,8 +478,9 @@ export default function Dashboard() {
               {availableCameras.length > 0 && (
                 <select
                   value={cameraDevice}
-                  onChange={(e) => setCameraDevice(e.target.value)}
-                  className="px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-xs text-white focus:outline-none"
+                  onChange={(e) => changeCameraDevice(e.target.value)}
+                  disabled={isStreaming}
+                  className="min-w-0 max-w-52 px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-xs text-white focus:outline-none disabled:opacity-50"
                 >
                   <option value="default">No camera detected</option>
                   {availableCameras.map((cam, i) => (
@@ -477,8 +492,9 @@ export default function Dashboard() {
               )}
               <select
                 value={resolution}
-                onChange={(e) => setResolution(e.target.value)}
-                className="px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-xs text-white focus:outline-none"
+                onChange={(e) => changeResolution(e.target.value)}
+                disabled={isStreaming}
+                className="px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-xs text-white focus:outline-none disabled:opacity-50"
               >
                 <option value="720p">720p</option>
                 <option value="1080p">1080p</option>
