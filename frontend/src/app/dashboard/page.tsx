@@ -64,6 +64,11 @@ export default function Dashboard() {
     reader.readAsDataURL(file);
   };
 
+  const referenceImageBlob = async () => {
+    if (!referenceImage) return null;
+    return (await fetch(referenceImage)).blob();
+  };
+
   // Display time only. Credits are reserved by the server before the realtime
   // token is issued, so a browser cannot run an unpaid session.
   useEffect(() => {
@@ -209,6 +214,14 @@ export default function Dashboard() {
         },
       });
 
+      // The saved reference is uploaded to Decart and applied to this live
+      // Lucy session; it is not merely a local thumbnail.
+      const referenceBlob = await referenceImageBlob();
+      if (referenceBlob) {
+        const reference = await client.files.upload(referenceBlob);
+        await realtimeClient.set({ image: reference.id, prompt: prompt || "Match the reference image while preserving the camera motion." });
+      }
+
       realtimeClient.on("error", (err: { message: string }) => {
         console.error("Decart error:", err);
       });
@@ -322,7 +335,7 @@ export default function Dashboard() {
       console.error("SDK connect error:", err);
       setError(err instanceof Error ? err.message : "Failed to start the AI stream.");
     }
-  }, [activeMode, prompt, user, userData?.wallet?.balanceSeconds]);
+  }, [activeMode, prompt, referenceImage, user, userData?.wallet?.balanceSeconds]);
 
   const stopStream = () => {
     if (clientRef.current) {
