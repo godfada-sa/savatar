@@ -25,7 +25,7 @@ export default function SignupPage() {
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Signup failed";
       if (msg.includes("email-already-in-use")) setError("An account with this email already exists");
-      else if (msg.includes("weak-password")) setError("Password must be at least 6 characters");
+      else if (msg.includes("weak-password")) setError("Use a stronger password with at least 10 characters");
       else setError("Signup failed. Try again.");
     } finally {
       setLoading(false);
@@ -129,9 +129,9 @@ export default function SignupPage() {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="Min 6 characters"
+              placeholder="At least 10 characters"
               required
-              minLength={6}
+              minLength={10}
               className="w-full px-3 py-2.5 bg-white/5 border border-white/10 rounded-lg text-sm text-white placeholder-neutral-600 focus:outline-none focus:border-indigo-500 transition"
             />
           </div>

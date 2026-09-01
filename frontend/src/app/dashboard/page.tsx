@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { io, Socket } from "socket.io-client";
 import { useAuth } from "@/lib/auth-context";
-import { decartApiKey, iceServers, signalingUrl } from "@/lib/client-config";
+import { iceServers, signalingUrl } from "@/lib/client-config";
 import DashboardLayout from "@/components/DashboardLayout";
 
 type Mode = "character" | "style" | "background" | "vton" | "vfx";
@@ -19,8 +19,7 @@ const MODES: { id: Mode; label: string; model: string }[] = [
 type DecartModelId = "lucy-latest" | "lucy-restyle-latest" | "lucy-vton-latest";
 
 export default function Dashboard() {
-  const { user, userData, deductCredit } = useAuth();
-  const [apiKey] = useState(decartApiKey);
+  const { user, userData } = useAuth();
   const [isConnected, setIsConnected] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const [activeMode, setActiveMode] = useState<Mode>("character");
@@ -134,8 +133,12 @@ export default function Dashboard() {
   };
 
   const goLive = useCallback(async () => {
-    if (!apiKey) {
-      setError("Please enter your Decart API key in Settings.");
+    if (!user) {
+      setError("Sign in before starting an AI stream.");
+      return;
+    }
+    if ((userData?.wallet?.balanceSeconds ?? 0) <= 0) {
+      setError("Streaming credits are required to start an AI stream.");
       return;
     }
     if (!streamRef.current) {
@@ -146,8 +149,22 @@ export default function Dashboard() {
     try {
       const { createDecartClient, models } = await import("@decartai/sdk");
       const modelId = (MODES.find((m) => m.id === activeMode)?.model || "lucy-latest") as DecartModelId;
+      const idToken = await user.getIdToken();
+      const tokenResponse = await fetch("/api/realtime-token", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({ model: modelId }),
+      });
+      const tokenResult = await tokenResponse.json() as { apiKey?: string; error?: string };
+      if (!tokenResponse.ok || !tokenResult.apiKey) {
+        throw new Error(tokenResult.error || "Unable to authorize this AI session");
+      }
+
       const model = models.realtime(modelId as Parameters<typeof models.realtime>[0]);
-      const client = createDecartClient({ apiKey });
+      const client = createDecartClient({ apiKey: tokenResult.apiKey });
 
       const realtimeClient = await client.realtime.connect(streamRef.current, {
         model,
@@ -181,11 +198,12 @@ export default function Dashboard() {
       setIsStreaming(true);
 
       // Signaling server for viewers
-      const newRoomId = Math.random().toString(36).substring(2, 10);
+      const newRoomId = crypto.randomUUID();
       setRoomId(newRoomId);
 
       const socket = io(signalingUrl, {
         transports: ["websocket", "polling"],
+        auth: { token: idToken },
       });
       socketRef.current = socket;
 
@@ -269,9 +287,9 @@ export default function Dashboard() {
       });
     } catch (err) {
       console.error("SDK connect error:", err);
-      setError("Failed to connect. Check your API key and try again.");
+      setError(err instanceof Error ? err.message : "Failed to start the AI stream.");
     }
-  }, [apiKey, activeMode, prompt]);
+  }, [activeMode, prompt, user, userData?.wallet?.balanceSeconds]);
 
   const stopStream = () => {
     if (clientRef.current) {

@@ -1,0 +1,83 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function owns(userId) {
+      return signedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return signedIn()
+        && request.auth.token.email == "safful652@gmail.com"
+        && request.auth.token.email_verified == true;
+    }
+
+    function validNewUser(userId) {
+      return request.resource.data.keys().hasOnly([
+          "uid", "email", "displayName", "photoURL", "createdAt", "plan", "wallet", "promoUsed"
+        ])
+        && request.resource.data.uid == userId
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.displayName is string
+        && request.resource.data.displayName.size() >= 1
+        && request.resource.data.displayName.size() <= 80
+        && request.resource.data.photoURL is string
+        && request.resource.data.photoURL.size() <= 2048
+        && request.resource.data.createdAt is string
+        && request.resource.data.plan == "starter"
+        && request.resource.data.wallet is map
+        && request.resource.data.wallet.keys().hasOnly(["balanceSeconds", "totalPurchased", "totalUsed"])
+        && request.resource.data.wallet.balanceSeconds == 0
+        && request.resource.data.wallet.totalPurchased == 0
+        && request.resource.data.wallet.totalUsed == 0
+        && request.resource.data.promoUsed is list
+        && request.resource.data.promoUsed.size() == 0;
+    }
+
+    match /users/{userId} {
+      allow create: if owns(userId) && validNewUser(userId);
+      allow read: if owns(userId) || isAdmin();
+      allow update: if isAdmin() || (
+        owns(userId)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["displayName", "photoURL"])
+        && request.resource.data.displayName is string
+        && request.resource.data.displayName.size() >= 1
+        && request.resource.data.displayName.size() <= 80
+        && request.resource.data.photoURL is string
+        && request.resource.data.photoURL.size() <= 2048
+      );
+      allow delete: if false;
+    }
+
+    match /payments/{paymentId} {
+      allow read: if isAdmin() || (signedIn() && resource.data.userId == request.auth.uid);
+      allow write: if false;
+    }
+
+    match /transactions/{transactionId} {
+      allow read: if isAdmin() || (signedIn() && resource.data.userId == request.auth.uid);
+      allow write: if false;
+    }
+
+    match /promos/{promoId} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+
+    match /adminLogs/{logId} {
+      allow read, write: if isAdmin();
+    }
+
+    match /_securityRateLimits/{limitId} {
+      allow read, write: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

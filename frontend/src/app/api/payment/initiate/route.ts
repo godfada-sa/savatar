@@ -1,8 +1,20 @@
 import { randomUUID } from "node:crypto";
 import { FieldValue } from "firebase-admin/firestore";
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { getCreditPack } from "@/lib/credit-packs";
 import { getAdminServices } from "@/lib/firebase-admin";
+import {
+  assertSameOrigin,
+  clientIp,
+  enforceRateLimit,
+  errorJson,
+  privateJson,
+  readJsonObject,
+  requireAuthenticatedUser,
+  RequestError,
+} from "@/lib/server-security";
+
+export const runtime = "nodejs";
 
 const MOOLRE_BASE_URL = process.env.MOOLRE_BASE_URL ?? "https://api.moolre.com";
 
@@ -12,48 +24,30 @@ const networkMap = {
   airteltigo: "7",
 } as const;
 
-interface PaymentRequest {
-  packId?: string;
-  phone?: string;
-  method?: keyof typeof networkMap;
-}
-
 function serverVariable(name: string): string {
   const value = process.env[name];
   if (!value) throw new Error(`Missing server environment variable: ${name}`);
   return value;
 }
 
-function bearerToken(req: NextRequest) {
-  const authorization = req.headers.get("authorization");
-  return authorization?.startsWith("Bearer ") ? authorization.slice(7) : null;
-}
-
 export async function POST(req: NextRequest) {
   try {
-    const token = bearerToken(req);
-    if (!token) {
-      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
-    }
-
-    const { auth, db } = getAdminServices();
-    let user;
-    try {
-      user = await auth.verifyIdToken(token);
-    } catch {
-      return NextResponse.json({ error: "Invalid or expired session" }, { status: 401 });
-    }
-    const body = (await req.json()) as PaymentRequest;
-    const pack = body.packId ? getCreditPack(body.packId) : undefined;
-    const channel = body.method ? networkMap[body.method] : undefined;
-    const phone = body.phone?.replace(/\D/g, "") ?? "";
+    assertSameOrigin(req);
+    const user = await requireAuthenticatedUser(req, { requireVerifiedEmail: true });
+    const body = await readJsonObject(req, 2_048);
+    const packId = typeof body.packId === "string" ? body.packId : "";
+    const method = typeof body.method === "string" ? body.method as keyof typeof networkMap : undefined;
+    const pack = getCreditPack(packId);
+    const channel = method ? networkMap[method] : undefined;
+    const phone = typeof body.phone === "string" ? body.phone.replace(/\D/g, "") : "";
 
     if (!pack || !channel || !/^0\d{9}$/.test(phone)) {
-      return NextResponse.json(
-        { error: "Choose a valid credit pack, network, and 10-digit Ghana phone number" },
-        { status: 400 }
-      );
+      throw new RequestError(400, "Choose a valid credit pack, network, and 10-digit Ghana phone number");
     }
+
+    const { db } = getAdminServices();
+    await enforceRateLimit(db, "payment-user", user.uid, 5, 10 * 60_000);
+    await enforceRateLimit(db, "payment-phone", `${clientIp(req)}:${phone}`, 5, 10 * 60_000);
 
     const apiUser = serverVariable("MOOLRE_API_USER");
     const publicKey = serverVariable("MOOLRE_PUBLIC_KEY");
@@ -69,7 +63,7 @@ export async function POST(req: NextRequest) {
       amount: pack.priceGHS,
       currency: "GHS",
       accountNumber,
-      phone,
+      phoneLast4: phone.slice(-4),
       channel,
       status: "pending",
       createdAt: FieldValue.serverTimestamp(),
@@ -91,6 +85,8 @@ export async function POST(req: NextRequest) {
         externalref: reference,
         accountnumber: accountNumber,
       }),
+      cache: "no-store",
+      signal: AbortSignal.timeout(15_000),
     });
 
     const result = (await response.json()) as {
@@ -100,37 +96,39 @@ export async function POST(req: NextRequest) {
       data?: unknown;
     };
 
+    const providerMessage = typeof result.message === "string" ? result.message.slice(0, 300) : null;
+    const providerPaymentId = typeof result.data === "string" || typeof result.data === "number"
+      ? String(result.data).slice(0, 200)
+      : null;
+
     if (!response.ok || Number(result.status) !== 1) {
       await paymentRef.update({
         status: "initiation_failed",
-        providerCode: result.code ?? null,
-        providerMessage: result.message ?? null,
+        providerCode: typeof result.code === "string" ? result.code.slice(0, 50) : null,
+        providerMessage,
         updatedAt: FieldValue.serverTimestamp(),
       });
-      return NextResponse.json(
-        { error: result.message || "Payment initiation failed" },
-        { status: 502 }
-      );
+      throw new RequestError(502, "Payment initiation failed. Please try again.");
     }
 
     await paymentRef.update({
-      providerPaymentId: result.data ?? null,
-      providerCode: result.code ?? null,
+      providerPaymentId,
+      providerCode: typeof result.code === "string" ? result.code.slice(0, 50) : null,
       updatedAt: FieldValue.serverTimestamp(),
     });
 
-    return NextResponse.json({
+    return privateJson({
       success: true,
       reference,
-      paymentId: result.data ?? reference,
+      paymentId: providerPaymentId ?? reference,
       amount: pack.priceGHS,
-      message: result.message || "Payment initiated. Approve the prompt on your phone.",
+      message: "Payment initiated. Approve the prompt on your phone.",
     });
   } catch (error) {
-    console.error("Payment initiation error:", error);
-    const message = error instanceof Error && error.message.startsWith("Missing server environment variable")
-      ? "Payment service is not configured"
-      : "Unable to initiate payment";
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error("Payment initiation error:", error instanceof Error ? error.message : "unknown error");
+    if (error instanceof Error && error.message.startsWith("Missing server environment variable")) {
+      return privateJson({ error: "Payment service is not configured" }, { status: 503 });
+    }
+    return errorJson(error);
   }
 }

@@ -36,7 +36,6 @@ export const firebaseConfig = firebaseVariables as {
   appId: string;
 };
 
-export const decartApiKey = process.env.NEXT_PUBLIC_DECART_API_KEY ?? "";
 export const signalingUrl = process.env.NEXT_PUBLIC_SIGNALING_URL ?? "http://localhost:4000";
 
 const turnUrl = process.env.NEXT_PUBLIC_TURN_URL;

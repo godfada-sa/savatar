@@ -8,9 +8,10 @@ import {
   signInWithPopup,
   signOut,
   sendPasswordResetEmail,
+  sendEmailVerification,
   User,
 } from "firebase/auth";
-import { doc, getDoc, setDoc, onSnapshot, updateDoc, increment } from "firebase/firestore";
+import { doc, getDoc, setDoc, onSnapshot } from "firebase/firestore";
 import { getAuthInstance, getDb, googleProvider, appleProvider } from "./firebase";
 
 interface Wallet {
@@ -40,8 +41,6 @@ interface AuthContextType {
   loginWithApple: () => Promise<void>;
   logout: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
-  addCredits: (seconds: number) => Promise<void>;
-  deductCredit: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({} as AuthContextType);
@@ -122,6 +121,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         },
         promoUsed: [],
       });
+      await sendEmailVerification(result.user);
     }
   };
 
@@ -142,26 +142,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await sendPasswordResetEmail(getAuthInstance(), email);
   };
 
-  const addCredits = async (seconds: number) => {
-    if (!user) return;
-    const userRef = doc(getDb(), "users", user.uid);
-    await updateDoc(userRef, {
-      "wallet.balanceSeconds": increment(seconds),
-      "wallet.totalPurchased": increment(seconds),
-    });
-  };
-
-  const deductCredit = async () => {
-    if (!user || !userData) return;
-    if (userData.wallet.balanceSeconds <= 0) return;
-
-    const userRef = doc(getDb(), "users", user.uid);
-    await updateDoc(userRef, {
-      "wallet.balanceSeconds": increment(-1),
-      "wallet.totalUsed": increment(1),
-    });
-  };
-
   const value = {
     user,
     userData,
@@ -172,8 +152,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     loginWithApple,
     logout,
     resetPassword,
-    addCredits,
-    deductCredit,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
