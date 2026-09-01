@@ -13,11 +13,6 @@ import {
   orderBy,
   limit,
   where,
-  updateDoc,
-  doc,
-  increment,
-  serverTimestamp,
-  setDoc,
 } from "firebase/firestore";
 import { getDb } from "@/lib/firebase";
 
@@ -152,6 +147,17 @@ export default function AdminPage() {
     setLoading(false);
   }
 
+  async function adminRequest(payload: Record<string, unknown>) {
+    if (!user) throw new Error("Sign in again to continue");
+    const response = await fetch("/api/admin", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${await user.getIdToken()}` },
+      body: JSON.stringify(payload),
+    });
+    const result = await response.json() as { error?: string };
+    if (!response.ok) throw new Error(result.error || "Admin action failed");
+  }
+
   // ─── Credit User (manual seconds) ─────────────────
   const handleCreditUser = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -173,18 +179,7 @@ export default function AdminPage() {
         setCreditLoading(false);
         return;
       }
-      await updateDoc(doc(db, "users", targetDoc.id), {
-        "wallet.balanceSeconds": increment(seconds),
-        "wallet.totalPurchased": increment(seconds),
-      });
-      await setDoc(doc(collection(db, "adminLogs")), {
-        action: "credit_user",
-        adminEmail: user?.email,
-        targetUser: creditEmail,
-        seconds,
-        reason: creditReason,
-        createdAt: new Date().toISOString(),
-      });
+      await adminRequest({ action: "credit", userId: targetDoc.id, seconds, reason: creditReason });
       setCreditMsg(`Added ${formatTime(seconds)} to ${creditEmail}`);
       setCreditEmail("");
       setCreditSeconds("");
@@ -223,32 +218,7 @@ export default function AdminPage() {
       const targetDoc = snap.docs[0];
 
       // Add credits to user wallet
-      await updateDoc(doc(db, "users", targetDoc.id), {
-        "wallet.balanceSeconds": increment(pack.seconds),
-        "wallet.totalPurchased": increment(pack.seconds),
-      });
-
-      // Log the transaction
-      await setDoc(doc(collection(db, "transactions")), {
-        userId: targetDoc.id,
-        type: "admin_purchase",
-        seconds: pack.seconds,
-        amount: pack.costGHS,
-        currency: "GHS",
-        paymentRef: `admin:${user?.email}`,
-        createdAt: new Date().toISOString(),
-      });
-
-      // Log admin action
-      await setDoc(doc(collection(db, "adminLogs")), {
-        action: "buy_for_user",
-        adminEmail: user?.email,
-        targetUser: buyEmail,
-        seconds: pack.seconds,
-        amount: pack.costGHS,
-        reason: `Admin purchased ${pack.name} pack at Decart cost (GH ${pack.costGHS})`,
-        createdAt: new Date().toISOString(),
-      });
+      await adminRequest({ action: "credit", userId: targetDoc.id, seconds: pack.seconds, purchase: true, amount: pack.costGHS, reason: `Admin purchased ${pack.name} pack` });
 
       setBuyMsg(`Added ${pack.timeLabel} (${pack.seconds}s) to ${buyEmail} at Decart cost GH ${pack.costGHS}`);
       setBuyEmail("");
@@ -274,21 +244,7 @@ export default function AdminPage() {
         setPromoLoading(false);
         return;
       }
-      await setDoc(doc(collection(db, "promos")), {
-        code,
-        bonusSeconds: parseInt(promoBonus) || 0,
-        discountPercent: parseInt(promoDiscount) || 0,
-        maxUses: parseInt(promoMaxUses) || null,
-        usedCount: 0,
-        active: true,
-        createdAt: new Date().toISOString(),
-      });
-      await setDoc(doc(collection(db, "adminLogs")), {
-        action: "create_promo",
-        adminEmail: user?.email,
-        details: `Created promo "${code}" — bonus: ${promoBonus}s, discount: ${promoDiscount}%, max uses: ${promoMaxUses || "unlimited"}`,
-        createdAt: new Date().toISOString(),
-      });
+      await adminRequest({ action: "promo", code, bonusSeconds: parseInt(promoBonus) || 0, discountPercent: parseInt(promoDiscount) || 0, maxUses: parseInt(promoMaxUses) || null });
       setPromoMsg(`Promo "${code}" created successfully`);
       setPromoCode("");
       setPromoBonus("");
@@ -304,14 +260,7 @@ export default function AdminPage() {
 
   const togglePromo = async (promoId: string, currentActive: boolean) => {
     try {
-      const db = getDb();
-      await updateDoc(doc(db, "promos", promoId), { active: !currentActive });
-      await setDoc(doc(collection(db, "adminLogs")), {
-        action: currentActive ? "deactivate_promo" : "activate_promo",
-        adminEmail: user?.email,
-        details: `Toggled promo ${promoId}`,
-        createdAt: new Date().toISOString(),
-      });
+      await adminRequest({ action: "togglePromo", promoId, active: !currentActive });
       loadData();
     } catch (err) {
       console.error("Toggle promo error:", err);

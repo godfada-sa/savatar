@@ -20,6 +20,17 @@ export async function POST(req: NextRequest) {
         const userRef = db.collection("users").doc(userId);
         if (!(await tx.get(userRef)).exists) throw new RequestError(404, "User not found");
         tx.update(userRef, { "wallet.balanceSeconds": FieldValue.increment(seconds), "wallet.totalPurchased": FieldValue.increment(seconds) });
+        if (body.purchase === true) {
+          tx.set(db.collection("transactions").doc(), {
+            userId,
+            type: "admin_purchase",
+            seconds,
+            amount: Number.isFinite(Number(body.amount)) ? Number(body.amount) : null,
+            currency: "GHS",
+            paymentRef: `admin:${admin.uid}`,
+            createdAt: FieldValue.serverTimestamp(),
+          });
+        }
         tx.set(db.collection("adminLogs").doc(), { action: "credit_user", adminEmail: admin.email ?? null, targetUser: userId, seconds, reason: typeof body.reason === "string" ? body.reason.slice(0, 300) : "", createdAt: FieldValue.serverTimestamp() });
       });
     } else if (action === "promo") {

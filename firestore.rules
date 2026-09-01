@@ -40,7 +40,7 @@ service cloud.firestore {
     match /users/{userId} {
       allow create: if owns(userId) && validNewUser(userId);
       allow read: if owns(userId) || isAdmin();
-      allow update: if isAdmin() || (
+      allow update: if (
         owns(userId)
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["displayName", "photoURL"])
       );
@@ -59,11 +59,12 @@ service cloud.firestore {
 
     match /promos/{promoId} {
       allow read: if signedIn();
-      allow write: if isAdmin();
+      allow write: if false;
     }
 
     match /adminLogs/{logId} {
-      allow read, write: if isAdmin();
+      allow read: if isAdmin();
+      allow write: if false;
     }
 
     match /_securityRateLimits/{limitId} {
