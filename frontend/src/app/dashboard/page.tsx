@@ -36,7 +36,6 @@ export default function Dashboard() {
 
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const durationRef = useRef<NodeJS.Timeout | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const clientRef = useRef<any>(null);
   const socketRef = useRef<Socket | null>(null);
@@ -53,39 +52,13 @@ export default function Dashboard() {
     }
   }, [cameraActive]);
 
-  // Duration timer + server-side credit debit
+  // Display time only. Credits are reserved by the server before the realtime
+  // token is issued, so a browser cannot run an unpaid session.
   useEffect(() => {
     if (isStreaming && user) {
-      durationRef.current = setInterval(async () => {
-        setStreamDuration((d) => d + 1);
-        // Debit 1 second from wallet via server
-        try {
-          const idToken = await user.getIdToken();
-          const res = await fetch("/api/streaming/debit", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${idToken}`,
-            },
-          });
-          const data = await res.json();
-          if (!data.success || data.balance <= 0) {
-            // Out of credits — stop streaming
-            setIsStreaming(false);
-            setError("Out of credits. Purchase more to continue streaming.");
-          }
-        } catch (err) {
-          console.error("Debit failed:", err);
-          setIsStreaming(false);
-          setError("Unable to verify credit usage. Streaming was stopped to protect your balance.");
-        }
-      }, 1000);
-    } else {
-      if (durationRef.current) clearInterval(durationRef.current);
+      const timer = setInterval(() => setStreamDuration((d) => d + 1), 1000);
+      return () => clearInterval(timer);
     }
-    return () => {
-      if (durationRef.current) clearInterval(durationRef.current);
-    };
   }, [isStreaming, user]);
 
   useEffect(() => {

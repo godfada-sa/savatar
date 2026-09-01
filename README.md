@@ -15,7 +15,7 @@ A browser-based AI live streaming platform where creators can:
 | Layer | Technology |
 |-------|-----------|
 | Frontend | Next.js 16, TypeScript, Tailwind CSS |
-| Backend | Python FastAPI |
+| Backend | Next.js API routes + Node.js signaling |
 | AI Engine | Decart AI (Lucy 2.5) |
 | Streaming | WebRTC + RTMP |
 
@@ -28,22 +28,7 @@ A browser-based AI live streaming platform where creators can:
 3. Go to Dashboard → API Keys → Create New Key
 4. Copy your key
 
-### 2. Install & Run Backend
-
-```bash
-cd backend
-
-# Copy and fill in your API key
-cp .env.example .env
-# Edit .env and add your DECART_API_KEY
-
-# Run the server
-python main.py
-```
-
-Backend runs at http://localhost:8000
-
-### 3. Install & Run Frontend
+### 2. Install & Run Frontend
 
 ```bash
 cd frontend
@@ -57,7 +42,7 @@ npm run dev
 
 Frontend runs at http://localhost:3000
 
-### 4. Open and Test
+### 3. Open and Test
 
 1. Go to http://localhost:3000
 2. Click "Start Streaming"
@@ -94,9 +79,8 @@ avatar/
 │       ├── globals.css        # Dark theme styles
 │       └── dashboard/
 │           └── page.tsx       # Streaming dashboard
-├── backend/           # Python FastAPI
-│   ├── main.py                # API server
-│   └── .env.example           # Config template
+├── backend/           # Authenticated Node.js signaling service
+│   └── signaling.js
 └── README.md
 ```
 

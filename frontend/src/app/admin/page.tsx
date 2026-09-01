@@ -343,7 +343,7 @@ export default function AdminPage() {
       <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
         <div className="text-center">
           <div className="text-red-400 text-sm font-semibold mb-2">Access Denied</div>
-          <div className="text-neutral-500 text-xs">You don't have admin access.</div>
+          <div className="text-neutral-500 text-xs">You don&apos;t have admin access.</div>
           <Link href="/dashboard" className="inline-block mt-4 px-4 py-2 bg-indigo-500 text-white text-xs rounded-lg">
             Go to Dashboard
           </Link>

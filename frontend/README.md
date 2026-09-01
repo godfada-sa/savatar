@@ -27,7 +27,7 @@ https://savatar.example.com,https://your-project.vercel.app
 Set the Vercel Root Directory to `frontend`. Copy every applicable variable from `.env.example` into Vercel Project Settings > Environment Variables. At minimum, configure:
 
 - All six `NEXT_PUBLIC_FIREBASE_*` variables
-- `NEXT_PUBLIC_DECART_API_KEY`
+- `DECART_API_KEY` (server-only)
 - `NEXT_PUBLIC_SIGNALING_URL` using the signaling service's HTTPS URL
 - `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, and `FIREBASE_PRIVATE_KEY`
 - `MOOLRE_API_USER`, `MOOLRE_PUBLIC_KEY`, and `MOOLRE_ACCOUNT_NUMBER`

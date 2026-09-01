@@ -35,12 +35,12 @@ function CreditsContent() {
     }
   }, [paymentStatus, paymentRef]);
 
-  // Reset promo when pack changes
-  useEffect(() => {
+  const selectPack = (packId: string) => {
+    setSelectedPack(packId);
     setPromoResult(null);
     setPromoError("");
     setPromoCode("");
-  }, [selectedPack]);
+  };
 
   const validatePromo = async () => {
     if (!promoCode.trim() || !selectedPack || !user) return;
@@ -144,7 +144,7 @@ function CreditsContent() {
           {CREDIT_PACKS.map((pack) => (
             <button
               key={pack.id}
-              onClick={() => setSelectedPack(pack.id)}
+              onClick={() => selectPack(pack.id)}
               className={`p-4 rounded-xl border text-left transition ${
                 selectedPack === pack.id
                   ? "bg-indigo-500/10 border-indigo-500/40"

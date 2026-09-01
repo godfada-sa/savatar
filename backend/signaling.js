@@ -71,6 +71,8 @@ const io = new Server(server, {
 
 // Room state: { roomId: { broadcaster: socketId, viewers: Set<socketId> } }
 const rooms = {};
+const CHAT_WINDOW_MS = 60_000;
+const CHAT_MESSAGES_PER_WINDOW = 12;
 
 io.on("connection", (socket) => {
   console.log(`[connect] ${socket.id}`);
@@ -195,6 +197,18 @@ io.on("connection", (socket) => {
     const safeUsername = username.trim().slice(0, 40);
     const safeMessage = message.trim().slice(0, 500);
     if (!safeUsername || !safeMessage) return;
+    const now = Date.now();
+    const chatRate = socket.chatRate ?? { startedAt: now, count: 0 };
+    if (now - chatRate.startedAt >= CHAT_WINDOW_MS) {
+      chatRate.startedAt = now;
+      chatRate.count = 0;
+    }
+    if (chatRate.count >= CHAT_MESSAGES_PER_WINDOW) {
+      socket.emit("chat-error", "You are sending messages too quickly.");
+      return;
+    }
+    chatRate.count += 1;
+    socket.chatRate = chatRate;
     io.to(roomId).emit("chat-message", {
       username: safeUsername,
       message: safeMessage,
