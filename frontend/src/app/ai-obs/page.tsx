@@ -52,13 +52,10 @@ export default function AiObsPage() {
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
       setObsUrl(`${window.location.origin}/obs/creator-${user?.uid || "demo"}`);
+      setReferenceImage(localStorage.getItem("savatar-reference-image"));
     });
     return () => cancelAnimationFrame(frame);
   }, [user]);
-
-  useEffect(() => {
-    setReferenceImage(localStorage.getItem("savatar-reference-image"));
-  }, []);
 
   const openCamera = async (targetResolution: string) => {
     try {
@@ -141,11 +138,11 @@ export default function AiObsPage() {
           </div>
         )}
 
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 sm:gap-6">
+        <div className="space-y-4 sm:space-y-6">
           {/* Main Area */}
-          <div className="xl:col-span-2 space-y-4">
+          <div className="space-y-4">
             {/* Video Feeds */}
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 items-center gap-4 xl:grid-cols-[minmax(260px,0.65fr)_44px_minmax(0,1.65fr)]">
               {/* Camera Input */}
               <div className="rounded-xl bg-[#111] border border-white/5 overflow-hidden">
                 <div className="p-3 border-b border-white/5 flex items-center justify-between">
@@ -172,23 +169,34 @@ export default function AiObsPage() {
                 </div>
               </div>
 
+              <div className="flex items-center justify-center text-indigo-400">
+                <div className="flex items-center gap-2 xl:flex-col xl:gap-1">
+                  <div className="h-px w-12 bg-indigo-400/30 xl:hidden" />
+                  <svg className="h-6 w-6 drop-shadow-[0_0_8px_rgba(96,165,250,0.45)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                  </svg>
+                  <span className="text-[9px] uppercase tracking-wider text-blue-300/70">Stream</span>
+                  <div className="h-px w-12 bg-indigo-400/30 xl:hidden" />
+                </div>
+              </div>
+
               {/* AI Output */}
-              <div className="rounded-xl bg-[#111] border border-white/5 overflow-hidden">
+              <div className="overflow-hidden rounded-xl border border-blue-400/20 bg-[#111] shadow-[0_0_38px_rgba(37,99,235,0.10)]">
                 <div className="p-3 border-b border-white/5 flex items-center justify-between">
                   <span className="text-xs font-semibold">AI program output</span>
                   <span className="text-[10px] px-2 py-0.5 rounded text-neutral-500 bg-white/5">
-                    Studio required
+                    OBS monitor
                   </span>
                 </div>
-                <div className="relative aspect-[4/3] sm:aspect-video bg-[#07111a]">
-                  <div className="absolute inset-0 flex items-center justify-center text-neutral-600">
-                    <span className="text-xs">Start your AI stream in Studio to see output</span>
-                  </div>
+                <div className="relative aspect-[4/3] min-h-[280px] bg-gradient-to-br from-[#0c1d3b] via-[#08213b] to-[#030811] sm:aspect-video xl:min-h-[440px]">
+                  {obsUrl && <iframe title="AI program output monitor" src={`${obsUrl}?muted=1`} className="absolute inset-0 h-full w-full border-0" allow="autoplay" />}
                 </div>
                 <div className="grid grid-cols-[1fr_auto] gap-2 p-2 border-t border-white/5">
                   <button
                     onClick={() => {
-                      window.location.href = (userData?.wallet?.balanceSeconds ?? 0) < 60 ? "/credits" : "/dashboard";
+                      if ((userData?.wallet?.balanceSeconds ?? 0) < 60) { window.location.href = "/credits"; return; }
+                      stopCamera();
+                      window.open("/dashboard", "savatar-studio");
                     }}
                     className="px-4 py-1.5 rounded-lg text-xs font-medium transition bg-indigo-500 hover:bg-indigo-600 text-white"
                   >
@@ -203,18 +211,6 @@ export default function AiObsPage() {
                     <option value="1080p">1080p</option>
                   </select>
                 </div>
-              </div>
-            </div>
-
-            {/* STREAM arrow */}
-            <div className="flex items-center justify-center">
-              <div className="flex items-center gap-2 text-neutral-600">
-                <div className="h-px w-16 bg-white/10" />
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                </svg>
-                <span className="text-[10px] uppercase tracking-wider">Stream</span>
-                <div className="h-px w-16 bg-white/10" />
               </div>
             </div>
 
@@ -294,7 +290,7 @@ export default function AiObsPage() {
           </div>
 
           {/* Sidebar */}
-          <div className="space-y-4">
+          <div className="grid gap-4 lg:grid-cols-2">
             {/* OBS Browser Source */}
             <div className="p-4 rounded-xl bg-[#111] border border-white/5">
               <h3 className="text-sm font-semibold mb-2">OBS Browser Source</h3>

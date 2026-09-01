@@ -26,6 +26,7 @@ export default function Dashboard() {
   const [prompt, setPrompt] = useState("");
   const [streamDuration, setStreamDuration] = useState(0);
   const [cameraActive, setCameraActive] = useState(false);
+  const [micEnabled, setMicEnabled] = useState(true);
   const [roomId, setRoomId] = useState("");
   const [viewerCount, setViewerCount] = useState(0);
   const [cameraDevice, setCameraDevice] = useState("default");
@@ -41,6 +42,8 @@ export default function Dashboard() {
   const streamRef = useRef<MediaStream | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const clientRef = useRef<any>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const decartClientRef = useRef<any>(null);
   const socketRef = useRef<Socket | null>(null);
   const transformedStreamRef = useRef<MediaStream | null>(null);
   const peerConnectionsRef = useRef(new Map<string, RTCPeerConnection>());
@@ -56,9 +59,27 @@ export default function Dashboard() {
   }, [cameraActive]);
 
   useEffect(() => {
-    setReferenceImage(localStorage.getItem("savatar-reference-image"));
-    setPrompt(localStorage.getItem("savatar-ai-prompt") || "");
+    const syncSavedLook = () => {
+      setReferenceImage(localStorage.getItem("savatar-reference-image"));
+      setPrompt(localStorage.getItem("savatar-ai-prompt") || "");
+    };
+    syncSavedLook();
+    window.addEventListener("storage", syncSavedLook);
+    return () => window.removeEventListener("storage", syncSavedLook);
   }, []);
+
+  const applyReferenceImage = useCallback(async (dataUrl: string) => {
+    if (!clientRef.current || !decartClientRef.current) return;
+    const blob = await (await fetch(dataUrl)).blob();
+    const reference = await decartClientRef.current.files.upload(blob);
+    await clientRef.current.set({ image: reference.id, prompt: prompt || "Match the reference image while preserving camera motion and facial expression." });
+  }, [prompt]);
+
+  useEffect(() => {
+    if (referenceImage && isStreaming) {
+      void applyReferenceImage(referenceImage).catch(() => setError("The new reference image could not be applied."));
+    }
+  }, [applyReferenceImage, isStreaming, referenceImage]);
 
   const saveReferenceImage = (file?: File) => {
     if (!file || !file.type.startsWith("image/") || file.size > 2_000_000) { setError("Choose an image under 2 MB."); return; }
@@ -70,11 +91,6 @@ export default function Dashboard() {
   const removeReferenceImage = () => {
     localStorage.removeItem("savatar-reference-image");
     setReferenceImage(null);
-  };
-
-  const referenceImageBlob = async () => {
-    if (!referenceImage) return null;
-    return (await fetch(referenceImage)).blob();
   };
 
   // Display time only. Credits are reserved by the server before the realtime
@@ -137,6 +153,7 @@ export default function Dashboard() {
       streamRef.current = stream;
       previousStream?.getTracks().forEach((track) => track.stop());
       setCameraActive(true);
+      setMicEnabled(true);
       setError("");
     } catch {
       setError("No camera was found. Connect a camera, then reload this page.");
@@ -160,6 +177,7 @@ export default function Dashboard() {
       clientRef.current.disconnect();
       clientRef.current = null;
     }
+    decartClientRef.current = null;
     for (const connection of peerConnectionsRef.current.values()) connection.close();
     peerConnectionsRef.current.clear();
     pendingPeerCandidatesRef.current.clear();
@@ -175,6 +193,7 @@ export default function Dashboard() {
     }
     if (localVideoRef.current) localVideoRef.current.srcObject = null;
     setCameraActive(false);
+    setMicEnabled(false);
     setIsConnected(false);
     setIsStreaming(false);
   };
@@ -212,12 +231,14 @@ export default function Dashboard() {
 
       const model = models.realtime(modelId as Parameters<typeof models.realtime>[0]);
       const client = createDecartClient({ apiKey: tokenResult.apiKey });
+      decartClientRef.current = client;
 
       const realtimeClient = await client.realtime.connect(streamRef.current, {
         model,
         onRemoteStream: (transformedStream: MediaStream) => {
-          transformedStreamRef.current = transformedStream;
-          if (localVideoRef.current) localVideoRef.current.srcObject = transformedStream;
+          const outputStream = new MediaStream([...transformedStream.getVideoTracks(), ...(streamRef.current?.getAudioTracks() ?? [])]);
+          transformedStreamRef.current = outputStream;
+          if (localVideoRef.current) localVideoRef.current.srcObject = outputStream;
           const transformedVideoTrack = transformedStream.getVideoTracks()[0];
           if (transformedVideoTrack) {
             for (const pc of peerConnectionsRef.current.values()) {
@@ -237,14 +258,6 @@ export default function Dashboard() {
           },
         },
       });
-
-      // The saved reference is uploaded to Decart and applied to this live
-      // Lucy session; it is not merely a local thumbnail.
-      const referenceBlob = await referenceImageBlob();
-      if (referenceBlob) {
-        const reference = await client.files.upload(referenceBlob);
-        await realtimeClient.set({ image: reference.id, prompt: prompt || "Match the reference image while preserving the camera motion." });
-      }
 
       realtimeClient.on("error", (err: { message: string }) => {
         console.error("Decart error:", err);
@@ -366,6 +379,7 @@ export default function Dashboard() {
       clientRef.current.disconnect();
       clientRef.current = null;
     }
+    decartClientRef.current = null;
     if (socketRef.current) {
       socketRef.current.emit("broadcaster-stopped", { roomId });
       socketRef.current.disconnect();
@@ -385,8 +399,6 @@ export default function Dashboard() {
   };
 
   const balanceMinutes = ((userData?.wallet?.balanceSeconds || 0) / 60).toFixed(1);
-  const hasCredits = (userData?.wallet?.balanceSeconds || 0) > 0;
-
   return (
     <DashboardLayout>
       <div className="p-3 sm:p-6 space-y-4">
@@ -413,7 +425,7 @@ export default function Dashboard() {
             <h1 className="text-xl font-bold">Go live. Get watched. Chat in real time.</h1>
             <p className="text-xs text-neutral-500 mt-1 max-w-lg">
               Broadcast with your camera — other creators find you in Feed, open your watch page,
-              and interact live. You can browse Feed, AI & OBS, and other pages without ending your stream.
+              and interact live. Keep Studio open while broadcasting; OBS receives the same AI output and microphone audio.
             </p>
           </div>
           <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-[11px]">
@@ -467,13 +479,13 @@ export default function Dashboard() {
                     : "bg-indigo-500 hover:bg-indigo-600 text-white"
                 }`}
               >
-                {isStreaming ? "Stop" : "Go Live"}
+                {isStreaming ? "Stop" : cameraActive ? "Go Live" : "Start camera"}
               </button>
               <button onClick={cameraActive ? stopCamera : startCamera} className="px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-xs text-neutral-300 hover:bg-white/10 transition">
                 Camera
               </button>
-              <button onClick={() => streamRef.current?.getAudioTracks().forEach((track) => { track.enabled = !track.enabled; })} className="px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-xs text-neutral-300 hover:bg-white/10 transition">
-                Mic
+              <button onClick={() => { const next = !micEnabled; streamRef.current?.getAudioTracks().forEach((track) => { track.enabled = next; }); setMicEnabled(next); }} disabled={!cameraActive} className="px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-xs text-neutral-300 hover:bg-white/10 transition disabled:opacity-40">
+                {micEnabled ? "Mic on" : "Mic off"}
               </button>
               {availableCameras.length > 0 && (
                 <select
@@ -571,7 +583,7 @@ export default function Dashboard() {
                     : "bg-indigo-500 hover:bg-indigo-600 text-white"
                 }`}
               >
-                {isStreaming ? "Stop" : "Go Live"}
+                {isStreaming ? "Stop" : cameraActive ? "Go Live" : "Start camera"}
               </button>
             </div>
 
@@ -591,11 +603,12 @@ export default function Dashboard() {
                   <button
                     key={m.id}
                     onClick={() => setActiveMode(m.id)}
+                    disabled={isStreaming}
                     className={`w-full text-left px-3 py-1.5 rounded text-xs transition ${
                       activeMode === m.id
                         ? "bg-indigo-500/15 text-indigo-400"
                         : "text-neutral-400 hover:text-white hover:bg-white/5"
-                    }`}
+                    } disabled:cursor-not-allowed disabled:opacity-50`}
                   >
                     {m.label}
                   </button>

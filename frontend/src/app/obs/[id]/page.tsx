@@ -11,6 +11,12 @@ export default function ObsSourcePage() {
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const pendingRef = useRef<RTCIceCandidateInit[]>([]);
   const [status, setStatus] = useState("Waiting for stream");
+  const [muted, setMuted] = useState(false);
+
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => setMuted(new URLSearchParams(window.location.search).get("muted") === "1"));
+    return () => cancelAnimationFrame(frame);
+  }, []);
 
   useEffect(() => {
     const socket: Socket = io(signalingUrl, { transports: ["websocket", "polling"] });
@@ -41,5 +47,5 @@ export default function ObsSourcePage() {
     return () => { pcRef.current?.close(); socket.disconnect(); };
   }, [id]);
 
-  return <main className="grid min-h-screen place-items-center bg-black"><video ref={videoRef} autoPlay playsInline className="h-screen w-screen object-contain" />{status && <span className="absolute rounded bg-black/70 px-4 py-2 text-sm text-white">{status}</span>}</main>;
+  return <main className="grid min-h-screen place-items-center bg-black"><video ref={videoRef} autoPlay playsInline muted={muted} className="h-screen w-screen object-contain" />{status && <span className="absolute rounded bg-black/70 px-4 py-2 text-sm text-white">{status}</span>}</main>;
 }
