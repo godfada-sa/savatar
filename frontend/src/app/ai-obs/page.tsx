@@ -23,12 +23,27 @@ export default function AiObsPage() {
 
   const backgrounds: Background[] = [
     { id: "original", name: "Original", category: "all" },
-    { id: "luxury-suite", name: "Luxury Modern Suite", category: "hotels" },
-    { id: "presidential", name: "Presidential Suite", category: "hotels" },
-    { id: "hotel-room", name: "Premium Business Hotel", category: "hotels" },
-    { id: "ceo-office", name: "Executive CEO Office", category: "offices" },
-    { id: "meeting-room", name: "Corporate Meeting Room", category: "offices" },
-    { id: "workspace", name: "Modern Creative Workspace", category: "offices" },
+    // Professional
+    { id: "studio", name: "News Studio", category: "professional" },
+    { id: "podcast", name: "Podcast Setup", category: "professional" },
+    { id: "ceo-office", name: "CEO Office", category: "professional" },
+    { id: "meeting-room", name: "Boardroom", category: "professional" },
+    { id: "workspace", name: "Creative Studio", category: "professional" },
+    // Luxury
+    { id: "luxury-suite", name: "Luxury Suite", category: "luxury" },
+    { id: "penthouse", name: "Penthouse View", category: "luxury" },
+    { id: "yacht", name: "Yacht Interior", category: "luxury" },
+    // Nature
+    { id: "beach", name: "Tropical Beach", category: "nature" },
+    { id: "forest", name: "Mystical Forest", category: "nature" },
+    { id: "mountain", name: "Mountain Peak", category: "nature" },
+    { id: "sunset", name: "Golden Sunset", category: "nature" },
+    // Creative
+    { id: "cyberpunk", name: "Cyberpunk City", category: "creative" },
+    { id: "anime", name: "Anime World", category: "creative" },
+    { id: "space", name: "Space Station", category: "creative" },
+    { id: "underwater", name: "Underwater Ocean", category: "creative" },
+    { id: "gaming", name: "Gaming Room", category: "creative" },
   ];
 
   const filteredBgs = backgrounds.filter((bg) => bgCategory === "all" || bg.category === bgCategory);
@@ -160,7 +175,7 @@ export default function AiObsPage() {
                 Switch scenes instantly — no reconnect. AI applies your pick in real time.
               </p>
               <div className="flex gap-2 mb-4">
-                {["all", "hotels", "offices"].map((cat) => (
+                {["all", "professional", "luxury", "nature", "creative"].map((cat) => (
                   <button
                     key={cat}
                     onClick={() => setBgCategory(cat)}

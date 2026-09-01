@@ -50,12 +50,50 @@ interface LogRecord {
   createdAt: string;
 }
 
-const ADMIN_EMAILS = ["safful652@gmail.com"]; // Add your admin emails here
+const ADMIN_EMAILS = ["safful652@gmail.com"];
+
+const DECART_COST_PER_SEC = 0.02;
+const GHS_PER_USD = 15;
+
+const DECART_PACKS = [
+  { id: "starter", name: "Starter", seconds: 300, costGHS: +(300 * DECART_COST_PER_SEC * GHS_PER_USD).toFixed(0), timeLabel: "5 min" },
+  { id: "basic", name: "Basic", seconds: 900, costGHS: +(900 * DECART_COST_PER_SEC * GHS_PER_USD).toFixed(0), timeLabel: "15 min" },
+  { id: "pro", name: "Pro", seconds: 1800, costGHS: +(1800 * DECART_COST_PER_SEC * GHS_PER_USD).toFixed(0), timeLabel: "30 min" },
+  { id: "creator", name: "Creator", seconds: 3600, costGHS: +(3600 * DECART_COST_PER_SEC * GHS_PER_USD).toFixed(0), timeLabel: "1 hour" },
+  { id: "unlimited", name: "Unlimited", seconds: 18000, costGHS: +(18000 * DECART_COST_PER_SEC * GHS_PER_USD).toFixed(0), timeLabel: "5 hours" },
+];
+
+const USER_PACKS = [
+  { id: "starter", name: "Starter", seconds: 300, priceGHS: 250, timeLabel: "5 min" },
+  { id: "basic", name: "Basic", seconds: 900, priceGHS: 650, timeLabel: "15 min" },
+  { id: "pro", name: "Pro", seconds: 1800, priceGHS: 1100, timeLabel: "30 min" },
+  { id: "creator", name: "Creator", seconds: 3600, priceGHS: 1800, timeLabel: "1 hour" },
+  { id: "unlimited", name: "Unlimited", seconds: 18000, priceGHS: 7500, timeLabel: "5 hours" },
+];
+
+type Tab = "overview" | "users" | "promos" | "buy" | "pricing" | "logs";
+
+const NAV_ITEMS: { id: Tab; label: string; icon: string }[] = [
+  { id: "overview", label: "Overview", icon: "O" },
+  { id: "users", label: "Users", icon: "U" },
+  { id: "promos", label: "Promos", icon: "P" },
+  { id: "buy", label: "Buy for User", icon: "$" },
+  { id: "pricing", label: "Pricing", icon: "%" },
+  { id: "logs", label: "Logs", icon: "L" },
+];
+
+function formatTime(seconds: number) {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = seconds % 60;
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m ${s}s`;
+}
 
 export default function AdminPage() {
   const { user, loading: authLoading, logout } = useAuth();
   const router = useRouter();
-  const [tab, setTab] = useState<"overview" | "users" | "promos" | "pricing" | "logs">("overview");
+  const [tab, setTab] = useState<Tab>("overview");
   const [users, setUsers] = useState<UserRecord[]>([]);
   const [promos, setPromos] = useState<PromoRecord[]>([]);
   const [logs, setLogs] = useState<LogRecord[]>([]);
@@ -69,6 +107,12 @@ export default function AdminPage() {
   const [creditMsg, setCreditMsg] = useState("");
   const [creditLoading, setCreditLoading] = useState(false);
 
+  // Buy for user form
+  const [buyEmail, setBuyEmail] = useState("");
+  const [buyPackId, setBuyPackId] = useState("");
+  const [buyMsg, setBuyMsg] = useState("");
+  const [buyLoading, setBuyLoading] = useState(false);
+
   // Promo form
   const [promoCode, setPromoCode] = useState("");
   const [promoBonus, setPromoBonus] = useState("");
@@ -77,7 +121,6 @@ export default function AdminPage() {
   const [promoMsg, setPromoMsg] = useState("");
   const [promoLoading, setPromoLoading] = useState(false);
 
-  // Sidebar collapsed
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   useEffect(() => {
@@ -94,13 +137,14 @@ export default function AdminPage() {
   async function loadData() {
     setLoading(true);
     try {
-      const usersSnap = await getDocs(query(collection(getDb(), "users"), orderBy("createdAt", "desc"), limit(200)));
+      const db = getDb();
+      const usersSnap = await getDocs(query(collection(db, "users"), orderBy("createdAt", "desc"), limit(200)));
       setUsers(usersSnap.docs.map((d) => ({ id: d.id, ...d.data() } as UserRecord)));
 
-      const promosSnap = await getDocs(query(collection(getDb(), "promos"), orderBy("createdAt", "desc")));
+      const promosSnap = await getDocs(query(collection(db, "promos"), orderBy("createdAt", "desc")));
       setPromos(promosSnap.docs.map((d) => ({ id: d.id, ...d.data() } as PromoRecord)));
 
-      const logsSnap = await getDocs(query(collection(getDb(), "adminLogs"), orderBy("createdAt", "desc"), limit(50)));
+      const logsSnap = await getDocs(query(collection(db, "adminLogs"), orderBy("createdAt", "desc"), limit(50)));
       setLogs(logsSnap.docs.map((d) => ({ id: d.id, ...d.data() } as LogRecord)));
     } catch (err) {
       console.error("Failed to load admin data:", err);
@@ -108,12 +152,14 @@ export default function AdminPage() {
     setLoading(false);
   }
 
+  // ─── Credit User (manual seconds) ─────────────────
   const handleCreditUser = async (e: React.FormEvent) => {
     e.preventDefault();
     setCreditMsg("");
     setCreditLoading(true);
     try {
-      const q = query(collection(getDb(), "users"), where("email", "==", creditEmail));
+      const db = getDb();
+      const q = query(collection(db, "users"), where("email", "==", creditEmail));
       const snap = await getDocs(q);
       if (snap.empty) {
         setCreditMsg("User not found with this email");
@@ -122,12 +168,16 @@ export default function AdminPage() {
       }
       const targetDoc = snap.docs[0];
       const seconds = parseInt(creditSeconds);
-      await updateDoc(doc(getDb(), "users", targetDoc.id), {
+      if (isNaN(seconds) || seconds <= 0) {
+        setCreditMsg("Enter a valid number of seconds");
+        setCreditLoading(false);
+        return;
+      }
+      await updateDoc(doc(db, "users", targetDoc.id), {
         "wallet.balanceSeconds": increment(seconds),
         "wallet.totalPurchased": increment(seconds),
       });
-      // Log the action
-      await setDoc(doc(collection(getDb(), "adminLogs")), {
+      await setDoc(doc(collection(db, "adminLogs")), {
         action: "credit_user",
         adminEmail: user?.email,
         targetUser: creditEmail,
@@ -135,24 +185,96 @@ export default function AdminPage() {
         reason: creditReason,
         createdAt: new Date().toISOString(),
       });
-      setCreditMsg(`Added ${seconds}s (${Math.floor(seconds / 60)}m ${seconds % 60}s) to ${creditEmail}`);
+      setCreditMsg(`Added ${formatTime(seconds)} to ${creditEmail}`);
       setCreditEmail("");
       setCreditSeconds("");
       setCreditReason("");
       loadData();
-    } catch {
-      setCreditMsg("Failed to credit user");
+    } catch (err) {
+      console.error("Credit user error:", err);
+      setCreditMsg("Failed to credit user. Check Firestore rules.");
     }
     setCreditLoading(false);
   };
 
+  // ─── Buy for User (at Decart cost, no profit) ────
+  const handleBuyForUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBuyMsg("");
+    setBuyLoading(true);
+    try {
+      const db = getDb();
+      const pack = DECART_PACKS.find((p) => p.id === buyPackId);
+      if (!pack) {
+        setBuyMsg("Select a credit pack");
+        setBuyLoading(false);
+        return;
+      }
+
+      // Find user by email
+      const q = query(collection(db, "users"), where("email", "==", buyEmail));
+      const snap = await getDocs(q);
+      if (snap.empty) {
+        setBuyMsg("User not found with this email");
+        setBuyLoading(false);
+        return;
+      }
+
+      const targetDoc = snap.docs[0];
+
+      // Add credits to user wallet
+      await updateDoc(doc(db, "users", targetDoc.id), {
+        "wallet.balanceSeconds": increment(pack.seconds),
+        "wallet.totalPurchased": increment(pack.seconds),
+      });
+
+      // Log the transaction
+      await setDoc(doc(collection(db, "transactions")), {
+        userId: targetDoc.id,
+        type: "admin_purchase",
+        seconds: pack.seconds,
+        amount: pack.costGHS,
+        currency: "GHS",
+        paymentRef: `admin:${user?.email}`,
+        createdAt: new Date().toISOString(),
+      });
+
+      // Log admin action
+      await setDoc(doc(collection(db, "adminLogs")), {
+        action: "buy_for_user",
+        adminEmail: user?.email,
+        targetUser: buyEmail,
+        seconds: pack.seconds,
+        amount: pack.costGHS,
+        reason: `Admin purchased ${pack.name} pack at Decart cost (GH ${pack.costGHS})`,
+        createdAt: new Date().toISOString(),
+      });
+
+      setBuyMsg(`Added ${pack.timeLabel} (${pack.seconds}s) to ${buyEmail} at Decart cost GH ${pack.costGHS}`);
+      setBuyEmail("");
+      setBuyPackId("");
+      loadData();
+    } catch (err) {
+      console.error("Buy for user error:", err);
+      setBuyMsg("Failed to process. Check Firestore rules.");
+    }
+    setBuyLoading(false);
+  };
+
+  // ─── Promo CRUD ────────────────────────────────────
   const handleCreatePromo = async (e: React.FormEvent) => {
     e.preventDefault();
     setPromoMsg("");
     setPromoLoading(true);
     try {
+      const db = getDb();
       const code = promoCode.toUpperCase().trim();
-      await setDoc(doc(collection(getDb(), "promos")), {
+      if (!code) {
+        setPromoMsg("Enter a promo code");
+        setPromoLoading(false);
+        return;
+      }
+      await setDoc(doc(collection(db, "promos")), {
         code,
         bonusSeconds: parseInt(promoBonus) || 0,
         discountPercent: parseInt(promoDiscount) || 0,
@@ -161,7 +283,7 @@ export default function AdminPage() {
         active: true,
         createdAt: new Date().toISOString(),
       });
-      await setDoc(doc(collection(getDb(), "adminLogs")), {
+      await setDoc(doc(collection(db, "adminLogs")), {
         action: "create_promo",
         adminEmail: user?.email,
         details: `Created promo "${code}" — bonus: ${promoBonus}s, discount: ${promoDiscount}%, max uses: ${promoMaxUses || "unlimited"}`,
@@ -173,67 +295,59 @@ export default function AdminPage() {
       setPromoDiscount("");
       setPromoMaxUses("");
       loadData();
-    } catch {
+    } catch (err) {
+      console.error("Create promo error:", err);
       setPromoMsg("Failed to create promo");
     }
     setPromoLoading(false);
   };
 
   const togglePromo = async (promoId: string, currentActive: boolean) => {
-    await updateDoc(doc(getDb(), "promos", promoId), { active: !currentActive });
-    await setDoc(doc(collection(getDb(), "adminLogs")), {
-      action: currentActive ? "deactivate_promo" : "activate_promo",
-      adminEmail: user?.email,
-      details: `Toggled promo ${promoId}`,
-      createdAt: new Date().toISOString(),
-    });
-    loadData();
+    try {
+      const db = getDb();
+      await updateDoc(doc(db, "promos", promoId), { active: !currentActive });
+      await setDoc(doc(collection(db, "adminLogs")), {
+        action: currentActive ? "deactivate_promo" : "activate_promo",
+        adminEmail: user?.email,
+        details: `Toggled promo ${promoId}`,
+        createdAt: new Date().toISOString(),
+      });
+      loadData();
+    } catch (err) {
+      console.error("Toggle promo error:", err);
+    }
   };
 
-  const formatTime = (seconds: number) => {
-    const h = Math.floor(seconds / 3600);
-    const m = Math.floor((seconds % 3600) / 60);
-    const s = seconds % 60;
-    if (h > 0) return `${h}h ${m}m`;
-    return `${m}m ${s}s`;
-  };
-
+  // ─── Computed stats ────────────────────────────────
   const filteredUsers = users.filter(
     (u) =>
       u.email?.toLowerCase().includes(userSearch.toLowerCase()) ||
       u.displayName?.toLowerCase().includes(userSearch.toLowerCase())
   );
 
-  // Stats
   const totalUsers = users.length;
   const totalCreditsIssued = users.reduce((sum, u) => sum + (u.wallet?.totalPurchased || 0), 0);
   const totalCreditsUsed = users.reduce((sum, u) => sum + (u.wallet?.totalUsed || 0), 0);
   const activePromos = promos.filter((p) => p.active).length;
 
-  // Decart cost
-  const DECART_COST_PER_SEC = 0.02;
-  const GHS_PER_USD = 15;
-
-  const CREDIT_PACKS = [
-    { id: "starter", name: "Starter", seconds: 300, priceGHS: 250, timeLabel: "5 min" },
-    { id: "basic", name: "Basic", seconds: 900, priceGHS: 650, timeLabel: "15 min" },
-    { id: "pro", name: "Pro", seconds: 1800, priceGHS: 1100, timeLabel: "30 min" },
-    { id: "creator", name: "Creator", seconds: 3600, priceGHS: 1800, timeLabel: "1 hour" },
-    { id: "unlimited", name: "Unlimited", seconds: 18000, priceGHS: 7500, timeLabel: "5 hours" },
-  ];
-
-  const NAV_ITEMS = [
-    { id: "overview" as const, label: "Overview", icon: "O" },
-    { id: "users" as const, label: "Users", icon: "U" },
-    { id: "promos" as const, label: "Promos", icon: "P" },
-    { id: "pricing" as const, label: "Pricing", icon: "$" },
-    { id: "logs" as const, label: "Logs", icon: "L" },
-  ];
-
   if (authLoading || !user) {
     return (
       <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
         <div className="text-neutral-500 text-sm">Loading...</div>
+      </div>
+    );
+  }
+
+  if (!ADMIN_EMAILS.includes(user.email || "")) {
+    return (
+      <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-red-400 text-sm font-semibold mb-2">Access Denied</div>
+          <div className="text-neutral-500 text-xs">You don't have admin access.</div>
+          <Link href="/dashboard" className="inline-block mt-4 px-4 py-2 bg-indigo-500 text-white text-xs rounded-lg">
+            Go to Dashboard
+          </Link>
+        </div>
       </div>
     );
   }
@@ -297,6 +411,7 @@ export default function AdminPage() {
 
         {/* Content */}
         <main className="flex-1 overflow-y-auto p-4 md:p-6 pb-24 md:pb-6">
+
           {/* ─── Overview ─── */}
           {tab === "overview" && (
             <div className="space-y-6">
@@ -310,12 +425,11 @@ export default function AdminPage() {
                 ].map((s) => (
                   <div key={s.label} className="p-4 rounded-xl bg-[#111] border border-white/5">
                     <div className="text-[10px] text-neutral-500 uppercase tracking-wider">{s.label}</div>
-                    <div className={`font-display text-xl font-bold mt-1 ${s.color}`}>{s.value}</div>
+                    <div className={`text-xl font-bold mt-1 ${s.color}`}>{s.value}</div>
                   </div>
                 ))}
               </div>
 
-              {/* Revenue estimate */}
               <div className="p-5 rounded-xl bg-[#111] border border-white/5">
                 <h3 className="text-sm font-semibold mb-3">Revenue Estimate</h3>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -338,7 +452,6 @@ export default function AdminPage() {
                 </div>
               </div>
 
-              {/* Recent activity */}
               <div className="p-5 rounded-xl bg-[#111] border border-white/5">
                 <h3 className="text-sm font-semibold mb-3">Recent Activity</h3>
                 {logs.length === 0 ? (
@@ -348,14 +461,14 @@ export default function AdminPage() {
                     {logs.slice(0, 5).map((log) => (
                       <div key={log.id} className="flex items-center gap-3 py-2 border-b border-white/5 last:border-0">
                         <div className={`w-6 h-6 rounded flex items-center justify-center text-[9px] font-bold ${
-                          log.action === "credit_user" ? "bg-emerald-500/10 text-emerald-400" :
+                          log.action === "credit_user" || log.action === "buy_for_user" ? "bg-emerald-500/10 text-emerald-400" :
                           log.action === "create_promo" ? "bg-indigo-500/10 text-indigo-400" :
                           "bg-white/5 text-neutral-400"
                         }`}>
-                          {log.action === "credit_user" ? "+" : log.action === "create_promo" ? "P" : "A"}
+                          {log.action === "credit_user" || log.action === "buy_for_user" ? "+" : log.action === "create_promo" ? "P" : "A"}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <div className="text-xs text-white truncate">{log.details || log.action.replace("_", " ")}</div>
+                          <div className="text-xs text-white truncate">{log.details || log.action.replace(/_/g, " ")}</div>
                           <div className="text-[10px] text-neutral-500">{log.targetUser || log.adminEmail}</div>
                         </div>
                         <div className="text-[10px] text-neutral-600 flex-shrink-0">
@@ -385,7 +498,7 @@ export default function AdminPage() {
 
               {/* Credit User Form */}
               <div className="p-4 rounded-xl bg-[#111] border border-white/5">
-                <h3 className="text-sm font-semibold mb-3">Credit User</h3>
+                <h3 className="text-sm font-semibold mb-3">Credit User (Manual)</h3>
                 {creditMsg && (
                   <div className={`mb-3 p-2 rounded text-xs ${creditMsg.includes("not found") || creditMsg.includes("Failed") ? "bg-red-500/10 text-red-400" : "bg-emerald-500/10 text-emerald-400"}`}>
                     {creditMsg}
@@ -470,7 +583,6 @@ export default function AdminPage() {
             <div className="space-y-4">
               <h2 className="text-lg font-bold">Promo Codes ({promos.length})</h2>
 
-              {/* Create Promo */}
               <div className="p-4 rounded-xl bg-[#111] border border-white/5">
                 <h3 className="text-sm font-semibold mb-3">Create Promo Code</h3>
                 {promoMsg && (
@@ -508,7 +620,6 @@ export default function AdminPage() {
                 </form>
               </div>
 
-              {/* Promos List */}
               <div className="rounded-xl bg-[#111] border border-white/5 overflow-hidden">
                 {promos.length === 0 ? (
                   <div className="text-center py-12 text-neutral-600 text-xs">No promo codes created yet</div>
@@ -545,6 +656,109 @@ export default function AdminPage() {
             </div>
           )}
 
+          {/* ─── Buy for User (at Decart cost) ─── */}
+          {tab === "buy" && (
+            <div className="space-y-6">
+              <div>
+                <h2 className="text-lg font-bold">Buy Credits for User</h2>
+                <p className="text-xs text-neutral-500 mt-1">
+                  Purchase credits for any user at Decart&apos;s original cost. No profit markup — you pay the real API price.
+                </p>
+              </div>
+
+              {/* Decart Cost Info */}
+              <div className="p-5 rounded-xl bg-emerald-500/[0.06] border border-emerald-500/15">
+                <div className="text-[10px] text-neutral-500 uppercase tracking-wider mb-1">Decart API Cost</div>
+                <div className="text-2xl font-bold text-emerald-400">${DECART_COST_PER_SEC}/sec = GH {(DECART_COST_PER_SEC * 60 * GHS_PER_USD).toFixed(0)}/min</div>
+              </div>
+
+              {/* Buy Form */}
+              <div className="p-5 rounded-xl bg-[#111] border border-white/5">
+                <h3 className="text-sm font-semibold mb-3">Purchase for User</h3>
+                {buyMsg && (
+                  <div className={`mb-3 p-2 rounded text-xs ${buyMsg.includes("not found") || buyMsg.includes("Failed") ? "bg-red-500/10 text-red-400" : "bg-emerald-500/10 text-emerald-400"}`}>
+                    {buyMsg}
+                  </div>
+                )}
+                <form onSubmit={handleBuyForUser} className="space-y-4">
+                  <div>
+                    <label className="block text-[10px] text-neutral-500 uppercase tracking-wider mb-1">User Email</label>
+                    <input
+                      type="email"
+                      value={buyEmail}
+                      onChange={(e) => setBuyEmail(e.target.value)}
+                      placeholder="user@example.com"
+                      required
+                      className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-white focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] text-neutral-500 uppercase tracking-wider mb-2">Select Pack (at Decart cost)</label>
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+                      {DECART_PACKS.map((pack) => (
+                        <button
+                          key={pack.id}
+                          type="button"
+                          onClick={() => setBuyPackId(pack.id)}
+                          className={`p-3 rounded-lg border text-left transition ${
+                            buyPackId === pack.id
+                              ? "bg-emerald-500/10 border-emerald-500/40"
+                              : "bg-white/5 border-white/10 hover:border-white/20"
+                          }`}
+                        >
+                          <div className="text-[10px] text-neutral-400">{pack.name}</div>
+                          <div className="text-sm font-bold text-white mt-0.5">{pack.timeLabel}</div>
+                          <div className="text-xs font-bold text-emerald-400 mt-0.5">GH {pack.costGHS}</div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={buyLoading || !buyEmail || !buyPackId}
+                    className="w-full py-3 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium rounded-xl transition"
+                  >
+                    {buyLoading ? "Processing..." : buyPackId ? `Add ${DECART_PACKS.find((p) => p.id === buyPackId)?.timeLabel || ""} to user (GH ${DECART_PACKS.find((p) => p.id === buyPackId)?.costGHS || 0})` : "Select a pack"}
+                  </button>
+                </form>
+              </div>
+
+              {/* Comparison table */}
+              <div className="p-5 rounded-xl bg-[#111] border border-white/5">
+                <h3 className="text-sm font-semibold mb-3">Cost Comparison</h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-white/5 text-neutral-400 text-[10px] uppercase tracking-wider">
+                        <th className="text-left px-3 py-2">Pack</th>
+                        <th className="text-left px-3 py-2">Time</th>
+                        <th className="text-left px-3 py-2">User Pays</th>
+                        <th className="text-left px-3 py-2">Decart Cost</th>
+                        <th className="text-left px-3 py-2">Your Profit</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {USER_PACKS.map((up) => {
+                        const dp = DECART_PACKS.find((d) => d.id === up.id)!;
+                        return (
+                          <tr key={up.id} className="border-t border-white/5">
+                            <td className="px-3 py-2 text-xs font-medium text-white">{up.name}</td>
+                            <td className="px-3 py-2 text-xs text-neutral-400">{up.timeLabel}</td>
+                            <td className="px-3 py-2 text-xs text-indigo-400">GH {up.priceGHS.toLocaleString()}</td>
+                            <td className="px-3 py-2 text-xs text-emerald-400">GH {dp.costGHS}</td>
+                            <td className="px-3 py-2 text-xs text-white font-medium">GH {up.priceGHS - dp.costGHS}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* ─── Pricing ─── */}
           {tab === "pricing" && (
             <div className="space-y-4">
@@ -552,7 +766,7 @@ export default function AdminPage() {
 
               <div className="p-5 rounded-xl bg-emerald-500/[0.06] border border-emerald-500/15">
                 <div className="text-[10px] text-neutral-500 uppercase tracking-wider mb-1">Decart API Cost</div>
-                <div className="font-display text-2xl font-bold text-emerald-400">${DECART_COST_PER_SEC}/sec</div>
+                <div className="text-2xl font-bold text-emerald-400">${DECART_COST_PER_SEC}/sec</div>
                 <div className="text-xs text-neutral-500 mt-1">
                   = ${DECART_COST_PER_SEC * 60}/min = GH {(DECART_COST_PER_SEC * 60 * GHS_PER_USD).toFixed(0)}/min (at $1=GH{GHS_PER_USD})
                 </div>
@@ -572,18 +786,17 @@ export default function AdminPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {CREDIT_PACKS.map((pack) => {
-                        const costUSD = pack.seconds * DECART_COST_PER_SEC;
-                        const costGHS = costUSD * GHS_PER_USD;
-                        const profit = pack.priceGHS - costGHS;
+                      {USER_PACKS.map((pack) => {
+                        const dp = DECART_PACKS.find((d) => d.id === pack.id)!;
+                        const profit = pack.priceGHS - dp.costGHS;
                         const margin = ((profit / pack.priceGHS) * 100).toFixed(0);
                         return (
                           <tr key={pack.id} className="border-t border-white/5 hover:bg-white/[0.02]">
                             <td className="px-4 py-3 text-xs font-medium text-white">{pack.name}</td>
                             <td className="px-4 py-3 text-xs text-neutral-400">{pack.timeLabel}</td>
                             <td className="px-4 py-3 text-xs text-indigo-400 font-medium">GH {pack.priceGHS.toLocaleString()}</td>
-                            <td className="px-4 py-3 text-xs text-emerald-400">GH {costGHS.toFixed(0)}</td>
-                            <td className="px-4 py-3 text-xs text-white font-medium">GH {profit.toFixed(0)}</td>
+                            <td className="px-4 py-3 text-xs text-emerald-400">GH {dp.costGHS}</td>
+                            <td className="px-4 py-3 text-xs text-white font-medium">GH {profit}</td>
                             <td className="px-4 py-3">
                               <span className={`text-xs px-2 py-0.5 rounded ${parseInt(margin) >= 50 ? "bg-emerald-500/10 text-emerald-400" : "bg-amber-500/10 text-amber-400"}`}>
                                 {margin}%
@@ -601,8 +814,8 @@ export default function AdminPage() {
                 <h3 className="text-sm font-semibold mb-2">Pricing Strategy</h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
                   <div className="p-3 rounded-lg bg-white/5">
-                    <div className="text-neutral-500 mb-1">Virofy charges</div>
-                    <div className="text-white font-bold">~GH 60/min</div>
+                    <div className="text-neutral-500 mb-1">Market average</div>
+                    <div className="text-white font-bold">~GH 50/min</div>
                   </div>
                   <div className="p-3 rounded-lg bg-white/5">
                     <div className="text-neutral-500 mb-1">Your cost</div>
@@ -635,12 +848,12 @@ export default function AdminPage() {
                     {logs.map((log) => (
                       <div key={log.id} className="px-4 py-3 flex items-start gap-3">
                         <div className={`w-7 h-7 rounded-lg flex items-center justify-center text-[9px] font-bold flex-shrink-0 ${
-                          log.action === "credit_user" ? "bg-emerald-500/10 text-emerald-400" :
+                          log.action === "credit_user" || log.action === "buy_for_user" ? "bg-emerald-500/10 text-emerald-400" :
                           log.action === "create_promo" ? "bg-indigo-500/10 text-indigo-400" :
                           log.action?.includes("deactivate") ? "bg-red-500/10 text-red-400" :
                           "bg-white/5 text-neutral-400"
                         }`}>
-                          {log.action === "credit_user" ? "+" : log.action === "create_promo" ? "P" : "A"}
+                          {log.action === "credit_user" || log.action === "buy_for_user" ? "+" : log.action === "create_promo" ? "P" : "A"}
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="text-xs text-white">
@@ -649,8 +862,8 @@ export default function AdminPage() {
                           {log.details && <div className="text-[10px] text-neutral-500 mt-0.5 truncate">{log.details}</div>}
                           <div className="flex items-center gap-2 mt-1 text-[10px] text-neutral-600">
                             <span>by {log.adminEmail}</span>
-                            {log.targetUser && <span>→ {log.targetUser}</span>}
-                            {log.createdAt && <span>• {new Date(log.createdAt).toLocaleString()}</span>}
+                            {log.targetUser &&                            <span>{"->"} {log.targetUser}</span>}
+                            {log.createdAt &&                            <span>{" * "}{new Date(log.createdAt).toLocaleString()}</span>}
                           </div>
                         </div>
                       </div>

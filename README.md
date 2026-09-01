@@ -1,6 +1,6 @@
 # AvatarLive — AI Live Streaming Platform
 
-Your own Virofy-style platform powered by Decart AI's Lucy 2.5 model.
+Savatar — AI-powered live streaming platform.
 
 ## What This Is
 
