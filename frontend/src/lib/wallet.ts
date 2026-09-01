@@ -10,30 +10,23 @@ import {
   getDocs,
   serverTimestamp,
 } from "firebase/firestore";
-import { db } from "./firebase";
+import { getDb } from "./firebase";
+export { CREDIT_PACKS } from "./credit-packs";
 
 // ─── Credit Packs (user-facing pricing in GHS) ──────────
-export const CREDIT_PACKS = [
-  { id: "starter", name: "Starter", seconds: 300, priceGHS: 250, priceLabel: "GH 250", timeLabel: "5 min" },
-  { id: "basic", name: "Basic", seconds: 900, priceGHS: 650, priceLabel: "GH 650", timeLabel: "15 min" },
-  { id: "pro", name: "Pro", seconds: 1800, priceGHS: 1100, priceLabel: "GH 1,100", timeLabel: "30 min" },
-  { id: "creator", name: "Creator", seconds: 3600, priceGHS: 1800, priceLabel: "GH 1,800", timeLabel: "1 hour" },
-  { id: "unlimited", name: "Unlimited", seconds: 18000, priceGHS: 7500, priceLabel: "GH 7,500", timeLabel: "5 hours" },
-];
-
 // Admin sees Decart's original cost
 export const DECART_COST_PER_SEC = 0.02; // USD
 
 // ─── Add credits to user wallet ──────────────────────────
 export async function addCreditsToWallet(userId: string, seconds: number, paymentRef?: string) {
-  const userRef = doc(db, "users", userId);
+  const userRef = doc(getDb(), "users", userId);
   await updateDoc(userRef, {
     "wallet.balanceSeconds": increment(seconds),
     "wallet.totalPurchased": increment(seconds),
   });
 
   // Log transaction
-  await addDoc(collection(db, "transactions"), {
+  await addDoc(collection(getDb(), "transactions"), {
     userId,
     type: "purchase",
     seconds,
@@ -44,7 +37,7 @@ export async function addCreditsToWallet(userId: string, seconds: number, paymen
 
 // ─── Deduct one second (called every second while streaming) ──────────
 export async function deductSecond(userId: string): Promise<boolean> {
-  const userRef = doc(db, "users", userId);
+  const userRef = doc(getDb(), "users", userId);
   const userSnap = await getDoc(userRef);
 
   if (!userSnap.exists()) return false;
@@ -65,7 +58,7 @@ export async function deductSecond(userId: string): Promise<boolean> {
 // ─── Apply promo code ────────────────────────────────────
 export async function applyPromoCode(userId: string, promoCode: string): Promise<{ success: boolean; message: string; bonusSeconds?: number }> {
   // Check if promo exists
-  const promosRef = collection(db, "promos");
+  const promosRef = collection(getDb(), "promos");
   const q = query(promosRef, where("code", "==", promoCode.toUpperCase()));
   const promoSnap = await getDocs(q);
 
@@ -87,7 +80,7 @@ export async function applyPromoCode(userId: string, promoCode: string): Promise
   }
 
   // Check if user already used this promo
-  const userRef = doc(db, "users", userId);
+  const userRef = doc(getDb(), "users", userId);
   const userSnap = await getDoc(userRef);
   const userData = userSnap.data();
   const promoUsed = userData?.promoUsed || [];
@@ -110,7 +103,7 @@ export async function applyPromoCode(userId: string, promoCode: string): Promise
   });
 
   // Increment promo usage count
-  await updateDoc(doc(db, "promos", promoDoc.id), {
+  await updateDoc(doc(getDb(), "promos", promoDoc.id), {
     usedCount: increment(1),
   });
 
@@ -129,7 +122,7 @@ export async function createPromoCode(data: {
   maxUses?: number;
   expiresAt?: string;
 }) {
-  return addDoc(collection(db, "promos"), {
+  return addDoc(collection(getDb(), "promos"), {
     code: data.code.toUpperCase(),
     discountPercent: data.discountPercent || 0,
     bonusSeconds: data.bonusSeconds || 0,
@@ -146,7 +139,7 @@ export async function adminCreditUser(userId: string, seconds: number, reason: s
   await addCreditsToWallet(userId, seconds, `admin:${reason}`);
 
   // Log admin action
-  await addDoc(collection(db, "adminLogs"), {
+  await addDoc(collection(getDb(), "adminLogs"), {
     action: "credit_user",
     userId,
     seconds,
@@ -157,7 +150,7 @@ export async function adminCreditUser(userId: string, seconds: number, reason: s
 
 // ─── Admin: Get user by email ────────────────────────────
 export async function getUserByEmail(email: string) {
-  const usersRef = collection(db, "users");
+  const usersRef = collection(getDb(), "users");
   const q = query(usersRef, where("email", "==", email));
   const snap = await getDocs(q);
 
@@ -177,7 +170,7 @@ export function startDebitLoop(
   const tick = async () => {
     if (!running) return;
 
-    const userRef = doc(db, "users", userId);
+    const userRef = doc(getDb(), "users", userId);
     const userSnap = await getDoc(userRef);
 
     if (!userSnap.exists()) {

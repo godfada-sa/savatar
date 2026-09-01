@@ -19,7 +19,7 @@ import {
   serverTimestamp,
   setDoc,
 } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { getDb } from "@/lib/firebase";
 
 interface UserRecord {
   id: string;
@@ -91,29 +91,29 @@ export default function AdminPage() {
     loadData();
   }, []);
 
-  const loadData = async () => {
+  async function loadData() {
     setLoading(true);
     try {
-      const usersSnap = await getDocs(query(collection(db, "users"), orderBy("createdAt", "desc"), limit(200)));
+      const usersSnap = await getDocs(query(collection(getDb(), "users"), orderBy("createdAt", "desc"), limit(200)));
       setUsers(usersSnap.docs.map((d) => ({ id: d.id, ...d.data() } as UserRecord)));
 
-      const promosSnap = await getDocs(query(collection(db, "promos"), orderBy("createdAt", "desc")));
+      const promosSnap = await getDocs(query(collection(getDb(), "promos"), orderBy("createdAt", "desc")));
       setPromos(promosSnap.docs.map((d) => ({ id: d.id, ...d.data() } as PromoRecord)));
 
-      const logsSnap = await getDocs(query(collection(db, "adminLogs"), orderBy("createdAt", "desc"), limit(50)));
+      const logsSnap = await getDocs(query(collection(getDb(), "adminLogs"), orderBy("createdAt", "desc"), limit(50)));
       setLogs(logsSnap.docs.map((d) => ({ id: d.id, ...d.data() } as LogRecord)));
     } catch (err) {
       console.error("Failed to load admin data:", err);
     }
     setLoading(false);
-  };
+  }
 
   const handleCreditUser = async (e: React.FormEvent) => {
     e.preventDefault();
     setCreditMsg("");
     setCreditLoading(true);
     try {
-      const q = query(collection(db, "users"), where("email", "==", creditEmail));
+      const q = query(collection(getDb(), "users"), where("email", "==", creditEmail));
       const snap = await getDocs(q);
       if (snap.empty) {
         setCreditMsg("User not found with this email");
@@ -122,12 +122,12 @@ export default function AdminPage() {
       }
       const targetDoc = snap.docs[0];
       const seconds = parseInt(creditSeconds);
-      await updateDoc(doc(db, "users", targetDoc.id), {
+      await updateDoc(doc(getDb(), "users", targetDoc.id), {
         "wallet.balanceSeconds": increment(seconds),
         "wallet.totalPurchased": increment(seconds),
       });
       // Log the action
-      await setDoc(doc(collection(db, "adminLogs")), {
+      await setDoc(doc(collection(getDb(), "adminLogs")), {
         action: "credit_user",
         adminEmail: user?.email,
         targetUser: creditEmail,
@@ -152,7 +152,7 @@ export default function AdminPage() {
     setPromoLoading(true);
     try {
       const code = promoCode.toUpperCase().trim();
-      await setDoc(doc(collection(db, "promos")), {
+      await setDoc(doc(collection(getDb(), "promos")), {
         code,
         bonusSeconds: parseInt(promoBonus) || 0,
         discountPercent: parseInt(promoDiscount) || 0,
@@ -161,7 +161,7 @@ export default function AdminPage() {
         active: true,
         createdAt: new Date().toISOString(),
       });
-      await setDoc(doc(collection(db, "adminLogs")), {
+      await setDoc(doc(collection(getDb(), "adminLogs")), {
         action: "create_promo",
         adminEmail: user?.email,
         details: `Created promo "${code}" — bonus: ${promoBonus}s, discount: ${promoDiscount}%, max uses: ${promoMaxUses || "unlimited"}`,
@@ -180,8 +180,8 @@ export default function AdminPage() {
   };
 
   const togglePromo = async (promoId: string, currentActive: boolean) => {
-    await updateDoc(doc(db, "promos", promoId), { active: !currentActive });
-    await setDoc(doc(collection(db, "adminLogs")), {
+    await updateDoc(doc(getDb(), "promos", promoId), { active: !currentActive });
+    await setDoc(doc(collection(getDb(), "adminLogs")), {
       action: currentActive ? "deactivate_promo" : "activate_promo",
       adminEmail: user?.email,
       details: `Toggled promo ${promoId}`,

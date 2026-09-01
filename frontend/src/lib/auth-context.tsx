@@ -11,7 +11,7 @@ import {
   User,
 } from "firebase/auth";
 import { doc, getDoc, setDoc, onSnapshot, updateDoc, increment } from "firebase/firestore";
-import { auth, db, googleProvider, appleProvider } from "./firebase";
+import { getAuthInstance, getDb, googleProvider, appleProvider } from "./firebase";
 
 interface Wallet {
   balanceSeconds: number;
@@ -57,12 +57,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Listen to auth state
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+    const unsubscribe = onAuthStateChanged(getAuthInstance(), async (firebaseUser) => {
       setUser(firebaseUser);
 
       if (firebaseUser) {
         // Get or create user document
-        const userRef = doc(db, "users", firebaseUser.uid);
+        const userRef = doc(getDb(), "users", firebaseUser.uid);
         const userSnap = await getDoc(userRef);
 
         if (!userSnap.exists()) {            // Create new user document
@@ -102,13 +102,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = async (email: string, password: string) => {
-    await signInWithEmailAndPassword(auth, email, password);
+    await signInWithEmailAndPassword(getAuthInstance(), email, password);
   };
 
   const signup = async (email: string, password: string, name: string) => {
-    const result = await createUserWithEmailAndPassword(auth, email, password);      // Update display name
+    const result = await createUserWithEmailAndPassword(getAuthInstance(), email, password);      // Update display name
     if (result.user) {
-      await setDoc(doc(db, "users", result.user.uid), {
+      await setDoc(doc(getDb(), "users", result.user.uid), {
         uid: result.user.uid,
         email,
         displayName: name,
@@ -126,25 +126,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const loginWithGoogle = async () => {
-    await signInWithPopup(auth, googleProvider);
+    await signInWithPopup(getAuthInstance(), googleProvider);
   };
 
   const loginWithApple = async () => {
-    await signInWithPopup(auth, appleProvider);
+    await signInWithPopup(getAuthInstance(), appleProvider);
   };
 
   const logout = async () => {
-    await signOut(auth);
+    await signOut(getAuthInstance());
     setUserData(null);
   };
 
   const resetPassword = async (email: string) => {
-    await sendPasswordResetEmail(auth, email);
+    await sendPasswordResetEmail(getAuthInstance(), email);
   };
 
   const addCredits = async (seconds: number) => {
     if (!user) return;
-    const userRef = doc(db, "users", user.uid);
+    const userRef = doc(getDb(), "users", user.uid);
     await updateDoc(userRef, {
       "wallet.balanceSeconds": increment(seconds),
       "wallet.totalPurchased": increment(seconds),
@@ -155,7 +155,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!user || !userData) return;
     if (userData.wallet.balanceSeconds <= 0) return;
 
-    const userRef = doc(db, "users", user.uid);
+    const userRef = doc(getDb(), "users", user.uid);
     await updateDoc(userRef, {
       "wallet.balanceSeconds": increment(-1),
       "wallet.totalUsed": increment(1),

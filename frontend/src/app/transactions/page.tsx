@@ -6,7 +6,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
 import { collection, query, where, orderBy, getDocs } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { getDb } from "@/lib/firebase";
 import DashboardLayout from "@/components/DashboardLayout";
 
 interface Transaction {
@@ -24,25 +24,25 @@ export default function TransactionsPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (user) loadTransactions();
-  }, [user]);
-
-  const loadTransactions = async () => {
     if (!user) return;
-    setLoading(true);
-    try {
-      const q = query(
-        collection(db, "transactions"),
-        where("userId", "==", user.uid),
-        orderBy("createdAt", "desc")
-      );
-      const snap = await getDocs(q);
-      setTransactions(snap.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Transaction)));
-    } catch (err) {
-      console.error("Failed to load transactions:", err);
+    const userId = user.uid;
+    async function loadTransactions() {
+      setLoading(true);
+      try {
+        const q = query(
+          collection(getDb(), "transactions"),
+          where("userId", "==", userId),
+          orderBy("createdAt", "desc")
+        );
+        const snap = await getDocs(q);
+        setTransactions(snap.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Transaction)));
+      } catch (err) {
+        console.error("Failed to load transactions:", err);
+      }
+      setLoading(false);
     }
-    setLoading(false);
-  };
+    void loadTransactions();
+  }, [user]);
 
   const balanceMinutes = ((userData?.wallet?.balanceSeconds || 0) / 60).toFixed(1);
   const formatTime = (seconds: number) => {
