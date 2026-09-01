@@ -17,6 +17,7 @@ export const runtime = "nodejs";
 
 const ALLOWED_MODELS = new Set(["lucy-latest", "lucy-restyle-latest", "lucy-vton-latest"]);
 const MAX_PREPAID_SESSION_SECONDS = 300;
+const MINIMUM_STREAM_SECONDS = 60;
 
 function permanentApiKey() {
   const value = process.env.DECART_API_KEY;
@@ -44,8 +45,8 @@ export async function POST(req: NextRequest) {
     const reservedSeconds = await db.runTransaction(async (transaction) => {
       const userSnapshot = await transaction.get(userRef);
       const balanceSeconds = Math.floor(Number(userSnapshot.data()?.wallet?.balanceSeconds ?? 0));
-      if (!userSnapshot.exists || !Number.isSafeInteger(balanceSeconds) || balanceSeconds <= 0) {
-        throw new RequestError(402, "Streaming credits are required");
+      if (!userSnapshot.exists || !Number.isSafeInteger(balanceSeconds) || balanceSeconds < MINIMUM_STREAM_SECONDS) {
+        throw new RequestError(402, "At least one minute of streaming credits is required");
       }
 
       const seconds = Math.min(balanceSeconds, MAX_PREPAID_SESSION_SECONDS);

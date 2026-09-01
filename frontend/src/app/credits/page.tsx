@@ -122,9 +122,9 @@ function CreditsContent() {
 
   return (
     <DashboardLayout>
-      <div className="p-6">
+      <div className="p-3 sm:p-6">
         {/* Credits & Billing Header */}
-        <div className="p-6 rounded-xl bg-indigo-500/[0.06] border border-indigo-500/15 mb-6 flex items-center justify-between">
+        <div className="p-4 sm:p-6 rounded-xl bg-indigo-500/[0.06] border border-indigo-500/15 mb-6 flex items-center justify-between gap-3">
           <div>
             <div className="text-[10px] text-indigo-400 font-semibold uppercase tracking-wider mb-1">Credits & Billing</div>
             <h1 className="text-xl font-bold">Buy Credits, Unlock Possibilities</h1>
@@ -132,7 +132,7 @@ function CreditsContent() {
               Choose a pack, pay via MoMo or Telecel Cash. Credits are added instantly after payment confirmation.
             </p>
           </div>
-          <div className="text-center px-6 py-3 rounded-xl bg-[#111] border border-white/5">
+          <div className="hidden sm:block text-center px-6 py-3 rounded-xl bg-[#111] border border-white/5">
             <div className="text-[10px] text-neutral-500 uppercase tracking-wider">Available Balance</div>
             <div className="text-2xl font-bold text-indigo-400">{balanceMinutes}</div>
             <div className="text-[10px] text-neutral-500">minutes</div>
@@ -140,33 +140,33 @@ function CreditsContent() {
         </div>
 
         {/* Credit Packs */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-3 mb-6">
           {CREDIT_PACKS.map((pack) => (
             <button
               key={pack.id}
               onClick={() => selectPack(pack.id)}
-              className={`p-4 rounded-xl border text-left transition ${
+              className={`flex items-center gap-4 p-4 rounded-xl border text-left transition md:block ${
                 selectedPack === pack.id
                   ? "bg-indigo-500/10 border-indigo-500/40"
                   : "bg-[#111] border-white/5 hover:border-white/10"
               }`}
             >
-              <div className="text-xs text-neutral-400 mb-1">{pack.name}</div>
-              <div className="text-xl font-bold text-white">
+              <div className="shrink-0 text-xs text-neutral-400 md:mb-1">{pack.name}</div>
+              <div className="shrink-0 text-xl font-bold text-white">
                 {pack.seconds >= 60 ? Math.floor(pack.seconds / 60) : pack.seconds}
                 <span className="text-xs text-neutral-500 font-normal ml-1">
                   {pack.seconds >= 60 ? "min" : "sec"}
                 </span>
               </div>
-              <div className="text-lg font-bold text-white mt-1">
+              <div className="shrink-0 text-lg font-bold text-white md:mt-1">
                 GH {pack.priceGHS.toLocaleString()}
               </div>
-              <ul className="mt-2 space-y-0.5">
+              <ul className="hidden md:block mt-2 space-y-0.5">
                 <li className="text-[10px] text-neutral-500">~{pack.timeLabel} of AI streaming</li>
                 <li className="text-[10px] text-neutral-500">Instant wallet top-up</li>
                 <li className="text-[10px] text-neutral-500">Use on Studio & OBS</li>
               </ul>
-              <div className="mt-3 w-full py-2 rounded-lg bg-white/5 border border-white/10 text-xs text-center text-neutral-300 font-medium">
+              <div className="ml-auto md:ml-0 md:mt-3 w-auto md:w-full px-3 md:px-0 py-2 rounded-lg bg-white/5 border border-white/10 text-xs text-center text-neutral-300 font-medium">
                 Get {pack.name}
               </div>
             </button>

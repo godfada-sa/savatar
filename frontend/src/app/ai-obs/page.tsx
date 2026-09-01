@@ -12,7 +12,7 @@ interface Background {
 }
 
 export default function AiObsPage() {
-  const { user } = useAuth();
+  const { user, userData } = useAuth();
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [cameraActive, setCameraActive] = useState(false);
@@ -175,10 +175,12 @@ export default function AiObsPage() {
                 </div>
                 <div className="grid grid-cols-[1fr_auto] gap-2 p-2 border-t border-white/5">
                   <button
-                    onClick={() => { window.location.href = "/dashboard"; }}
+                    onClick={() => {
+                      window.location.href = (userData?.wallet?.balanceSeconds ?? 0) < 60 ? "/credits" : "/dashboard";
+                    }}
                     className="px-4 py-1.5 rounded-lg text-xs font-medium transition bg-indigo-500 hover:bg-indigo-600 text-white"
                   >
-                    Open Studio
+                    {(userData?.wallet?.balanceSeconds ?? 0) < 60 ? "Buy credits" : "Open Studio"}
                   </button>
                   <select
                     value={resolution}

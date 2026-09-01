@@ -165,8 +165,8 @@ export default function Dashboard() {
       setError("Sign in before starting an AI stream.");
       return;
     }
-    if ((userData?.wallet?.balanceSeconds ?? 0) <= 0) {
-      setError("Streaming credits are required to start an AI stream.");
+    if ((userData?.wallet?.balanceSeconds ?? 0) < 60) {
+      window.location.href = "/credits";
       return;
     }
     if (!streamRef.current) {

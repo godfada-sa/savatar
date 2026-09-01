@@ -72,11 +72,6 @@ const NAV_ITEMS = [
   },
 ];
 
-// Bottom nav items (mobile only - subset of most important)
-const BOTTOM_NAV = NAV_ITEMS.filter((item) =>
-  ["/dashboard", "/feed", "/credits", "/analytics", "/settings"].includes(item.href)
-);
-
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { user, userData, loading: authLoading, logout } = useAuth();
   const router = useRouter();
@@ -125,7 +120,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </button>
 
         {/* Status cards - responsive grid */}
-        <div className="flex-1 grid grid-cols-2 lg:grid-cols-4 gap-2">
+        <div className="ml-auto flex items-stretch gap-2 sm:ml-0 sm:flex-1 sm:grid sm:grid-cols-2 lg:grid-cols-4">
           <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-[#111] border border-white/5 min-w-0">
             <span className="text-[9px] sm:text-[10px] text-neutral-500 uppercase tracking-wider leading-none whitespace-nowrap">Credits</span>
             <span className="font-display text-sm sm:text-lg font-bold leading-none truncate">{balanceMinutes}m</span>
@@ -134,7 +129,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <span className="text-[9px] sm:text-[10px] text-neutral-500 uppercase tracking-wider leading-none whitespace-nowrap">Plan</span>
             <span className="font-display text-sm sm:text-lg font-bold leading-none truncate">{plan}</span>
           </div>
-          <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-[#111] border border-white/5 min-w-0">
+          <div className="hidden sm:flex items-center gap-2 px-3 py-2 rounded-xl bg-[#111] border border-white/5 min-w-0">
             <span className="text-[9px] sm:text-[10px] text-neutral-500 uppercase tracking-wider leading-none whitespace-nowrap">Status</span>
             <div className="flex items-center gap-1">
               <span className="w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0" />
@@ -230,29 +225,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </aside>
 
         {/* Main Content */}
-        <main className="flex-1 overflow-y-auto pb-20 md:pb-0">{children}</main>
+        <main className="flex-1 overflow-y-auto">{children}</main>
       </div>
-
-      {/* Mobile Bottom Navigation */}
-      <nav className="fixed bottom-0 left-0 right-0 z-20 md:hidden bg-[#0a0a0a] border-t border-white/5 px-2 py-1 safe-area-bottom">
-        <div className="flex items-center justify-around">
-          {BOTTOM_NAV.map((item) => {
-            const isActive = pathname === item.href;
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`flex flex-col items-center gap-0.5 px-2 py-1.5 rounded-lg transition ${
-                  isActive ? "text-indigo-400" : "text-neutral-500"
-                }`}
-              >
-                <span className="flex-shrink-0">{item.icon}</span>
-                <span className="text-[9px] font-medium">{item.label}</span>
-              </Link>
-            );
-          })}
-        </div>
-      </nav>
     </div>
   );
 }
