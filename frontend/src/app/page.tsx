@@ -56,32 +56,44 @@ const steps = [
 const plans = [
   {
     name: "Starter",
-    price: "GH 250",
-    duration: "5 minutes",
+    credits: "300 credits",
+    price: "GH 133",
+    duration: "~2.5 min AI streaming",
     description: "For trying a focused creative idea.",
     features: ["All transformation modes", "Live room access", "Viewer chat"],
   },
   {
     name: "Basic",
-    price: "GH 650",
-    duration: "15 minutes",
+    credits: "1,000 credits",
+    price: "GH 427",
+    duration: "~8 min AI streaming",
     description: "For short shows and product demos.",
     features: ["All transformation modes", "Live room access", "Viewer chat"],
     featured: true,
   },
   {
     name: "Pro",
-    price: "GH 1,100",
-    duration: "30 minutes",
+    credits: "2,000 credits",
+    price: "GH 839",
+    duration: "~17 min AI streaming",
     description: "For regular live sessions and events.",
     features: ["All transformation modes", "Live room access", "Viewer chat"],
   },
   {
-    name: "Creator",
-    price: "GH 1,800",
-    duration: "1 hour",
+    name: "Ultimate",
+    credits: "5,000 credits",
+    price: "GH 2,183",
+    duration: "~42 min AI streaming",
     description: "For longer broadcasts and campaigns.",
     features: ["All transformation modes", "Live room access", "Viewer chat"],
+  },
+  {
+    name: "Creator",
+    credits: "12,000 credits",
+    price: "GH 5,039",
+    duration: "~100 min AI streaming",
+    description: "For professional creators and agencies.",
+    features: ["All transformation modes", "Live room access", "Viewer chat", "Priority support"],
   },
 ];
 
@@ -310,7 +322,8 @@ function Pricing() {
               <p className="mt-5 text-sm leading-6 text-neutral-500">{plan.description}</p>
               <div className="mt-7">
                 <p className="font-display text-3xl font-bold tracking-[-0.035em] text-white">{plan.price}</p>
-                <p className="mt-1 text-xs font-medium text-neutral-500">{plan.duration} of AI streaming</p>
+                <p className="mt-1 text-xs font-medium text-indigo-400">{plan.credits}</p>
+                <p className="mt-0.5 text-[11px] text-neutral-500">{plan.duration}</p>
               </div>
               <ul className="mt-7 space-y-3 text-xs text-neutral-400">
                 {plan.features.map((feature) => (

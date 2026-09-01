@@ -56,19 +56,19 @@ const DECART_COST_PER_SEC = 0.02;
 const GHS_PER_USD = 15;
 
 const DECART_PACKS = [
-  { id: "starter", name: "Starter", seconds: 300, costGHS: +(300 * DECART_COST_PER_SEC * GHS_PER_USD).toFixed(0), timeLabel: "5 min" },
-  { id: "basic", name: "Basic", seconds: 900, costGHS: +(900 * DECART_COST_PER_SEC * GHS_PER_USD).toFixed(0), timeLabel: "15 min" },
-  { id: "pro", name: "Pro", seconds: 1800, costGHS: +(1800 * DECART_COST_PER_SEC * GHS_PER_USD).toFixed(0), timeLabel: "30 min" },
-  { id: "creator", name: "Creator", seconds: 3600, costGHS: +(3600 * DECART_COST_PER_SEC * GHS_PER_USD).toFixed(0), timeLabel: "1 hour" },
-  { id: "unlimited", name: "Unlimited", seconds: 18000, costGHS: +(18000 * DECART_COST_PER_SEC * GHS_PER_USD).toFixed(0), timeLabel: "5 hours" },
+  { id: "starter", name: "Starter", seconds: 150, costGHS: +(150 * DECART_COST_PER_SEC * GHS_PER_USD).toFixed(0), timeLabel: "~2.5 min" },
+  { id: "basic", name: "Basic", seconds: 500, costGHS: +(500 * DECART_COST_PER_SEC * GHS_PER_USD).toFixed(0), timeLabel: "~8 min" },
+  { id: "pro", name: "Pro", seconds: 1000, costGHS: +(1000 * DECART_COST_PER_SEC * GHS_PER_USD).toFixed(0), timeLabel: "~17 min" },
+  { id: "ultimate", name: "Ultimate", seconds: 2500, costGHS: +(2500 * DECART_COST_PER_SEC * GHS_PER_USD).toFixed(0), timeLabel: "~42 min" },
+  { id: "creator", name: "Creator", seconds: 6000, costGHS: +(6000 * DECART_COST_PER_SEC * GHS_PER_USD).toFixed(0), timeLabel: "~100 min" },
 ];
 
 const USER_PACKS = [
-  { id: "starter", name: "Starter", seconds: 300, priceGHS: 250, timeLabel: "5 min" },
-  { id: "basic", name: "Basic", seconds: 900, priceGHS: 650, timeLabel: "15 min" },
-  { id: "pro", name: "Pro", seconds: 1800, priceGHS: 1100, timeLabel: "30 min" },
-  { id: "creator", name: "Creator", seconds: 3600, priceGHS: 1800, timeLabel: "1 hour" },
-  { id: "unlimited", name: "Unlimited", seconds: 18000, priceGHS: 7500, timeLabel: "5 hours" },
+  { id: "starter", name: "Starter", seconds: 150, credits: 300, priceGHS: 133, timeLabel: "~2.5 min" },
+  { id: "basic", name: "Basic", seconds: 500, credits: 1000, priceGHS: 427, timeLabel: "~8 min" },
+  { id: "pro", name: "Pro", seconds: 1000, credits: 2000, priceGHS: 839, timeLabel: "~17 min" },
+  { id: "ultimate", name: "Ultimate", seconds: 2500, credits: 5000, priceGHS: 2183, timeLabel: "~42 min" },
+  { id: "creator", name: "Creator", seconds: 6000, credits: 12000, priceGHS: 5039, timeLabel: "~100 min" },
 ];
 
 type Tab = "overview" | "users" | "promos" | "buy" | "pricing" | "logs";
