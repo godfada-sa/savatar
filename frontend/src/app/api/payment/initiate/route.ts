@@ -18,12 +18,6 @@ export const runtime = "nodejs";
 
 const MOOLRE_BASE_URL = process.env.MOOLRE_BASE_URL ?? "https://api.moolre.com";
 
-const networkMap = {
-  mtn: "13",
-  telecel: "6",
-  airteltigo: "7",
-} as const;
-
 function serverVariable(name: string): string {
   const value = process.env[name];
   if (!value) throw new Error(`Missing server environment variable: ${name}`);
@@ -36,13 +30,12 @@ export async function POST(req: NextRequest) {
     const user = await requireAuthenticatedUser(req, { requireVerifiedEmail: true });
     const body = await readJsonObject(req, 2_048);
     const packId = typeof body.packId === "string" ? body.packId : "";
-    const method = typeof body.method === "string" ? body.method as keyof typeof networkMap : undefined;
+    const method = typeof body.method === "string" ? body.method : "";
     const pack = getCreditPack(packId);
-    const channel = method ? networkMap[method] : undefined;
     const phone = typeof body.phone === "string" ? body.phone.replace(/\D/g, "") : "";
 
-    if (!pack || !channel || !/^0\d{9}$/.test(phone)) {
-      throw new RequestError(400, "Choose a valid credit pack, network, and 10-digit Ghana phone number");
+    if (!pack || !/^0\d{9}$/.test(phone)) {
+      throw new RequestError(400, "Choose a valid credit pack and 10-digit Ghana phone number");
     }
 
     const { db } = getAdminServices();
@@ -64,12 +57,13 @@ export async function POST(req: NextRequest) {
       currency: "GHS",
       accountNumber,
       phoneLast4: phone.slice(-4),
-      channel,
+      method,
       status: "pending",
       createdAt: FieldValue.serverTimestamp(),
     });
 
-    const response = await fetch(`${MOOLRE_BASE_URL}/open/transact/payment`, {
+    // Generate Moolre payment link (hosted payment page)
+    const response = await fetch(`${MOOLRE_BASE_URL}/embed/link`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -78,12 +72,21 @@ export async function POST(req: NextRequest) {
       },
       body: JSON.stringify({
         type: 1,
-        channel,
-        currency: "GHS",
-        payer: phone,
         amount: pack.priceGHS.toFixed(2),
+        email: user.email,
         externalref: reference,
+        callback: `${req.nextUrl.origin}/api/payment/callback`,
+        redirect: `${req.nextUrl.origin}/credits?payment=success&ref=${reference}`,
+        reusable: "0",
+        currency: "GHS",
         accountnumber: accountNumber,
+        metadata: {
+          userId: user.uid,
+          packId: pack.id,
+          seconds: pack.seconds,
+          phone,
+          method,
+        },
       }),
       cache: "no-store",
       signal: AbortSignal.timeout(15_000),
@@ -93,26 +96,23 @@ export async function POST(req: NextRequest) {
       status?: number | string;
       code?: string;
       message?: string | null;
-      data?: unknown;
+      data?: { authorization_url?: string; reference?: string } | null;
     };
 
     const providerMessage = typeof result.message === "string" ? result.message.slice(0, 300) : null;
-    const providerPaymentId = typeof result.data === "string" || typeof result.data === "number"
-      ? String(result.data).slice(0, 200)
-      : null;
 
-    if (!response.ok || Number(result.status) !== 1) {
+    if (!response.ok || Number(result.status) !== 1 || !result.data?.authorization_url) {
       await paymentRef.update({
         status: "initiation_failed",
         providerCode: typeof result.code === "string" ? result.code.slice(0, 50) : null,
         providerMessage,
         updatedAt: FieldValue.serverTimestamp(),
       });
-      throw new RequestError(502, "Payment initiation failed. Please try again.");
+      throw new RequestError(502, providerMessage || "Payment initiation failed. Please try again.");
     }
 
     await paymentRef.update({
-      providerPaymentId,
+      authorizationUrl: result.data.authorization_url,
       providerCode: typeof result.code === "string" ? result.code.slice(0, 50) : null,
       updatedAt: FieldValue.serverTimestamp(),
     });
@@ -120,15 +120,18 @@ export async function POST(req: NextRequest) {
     return privateJson({
       success: true,
       reference,
-      paymentId: providerPaymentId ?? reference,
+      authorizationUrl: result.data.authorization_url,
       amount: pack.priceGHS,
-      message: "Payment initiated. Approve the prompt on your phone.",
+      message: "Redirecting to payment page...",
     });
   } catch (error) {
     console.error("Payment initiation error:", error instanceof Error ? error.message : "unknown error");
+    if (error instanceof RequestError) {
+      return errorJson(error);
+    }
     if (error instanceof Error && error.message.startsWith("Missing server environment variable")) {
       return privateJson({ error: "Payment service is not configured" }, { status: 503 });
     }
-    return errorJson(error);
+    return privateJson({ error: "Unable to initiate payment. Please try again." }, { status: 500 });
   }
 }

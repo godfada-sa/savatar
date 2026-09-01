@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { CREDIT_PACKS } from "@/lib/credit-packs";
 import DashboardLayout from "@/components/DashboardLayout";
 
-export default function CreditsPage() {
+function CreditsContent() {
   const { user, userData } = useAuth();
   const [selectedPack, setSelectedPack] = useState<string | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<"mtn" | "telecel" | "airteltigo">("mtn");
@@ -13,6 +14,15 @@ export default function CreditsPage() {
   const [processing, setProcessing] = useState(false);
 
   const balanceMinutes = ((userData?.wallet?.balanceSeconds || 0) / 60).toFixed(1);
+  const searchParams = useSearchParams();
+  const paymentStatus = searchParams.get("payment");
+  const paymentRef = searchParams.get("ref");
+
+  useEffect(() => {
+    if (paymentStatus === "success" && paymentRef) {
+      alert(`Payment completed! Reference: ${paymentRef}. Your credits will appear shortly after confirmation.`);
+    }
+  }, [paymentStatus, paymentRef]);
 
   const handlePurchase = async () => {
     if (!selectedPack || !phoneNumber || !user) return;
@@ -34,10 +44,9 @@ export default function CreditsPage() {
         }),
       });
       const data = await response.json();
-      if (data.success) {
-        alert(`Payment initiated! GH ${Number(data.amount).toFixed(0)} via ${paymentMethod.toUpperCase()}. Check your phone for the payment prompt.`);
-        setSelectedPack(null);
-        setPhoneNumber("");
+      if (data.success && data.authorizationUrl) {
+        // Redirect to Moolre payment page
+        window.location.href = data.authorizationUrl;
       } else {
         alert(data.error || "Payment failed. Please try again.");
       }
@@ -51,11 +60,7 @@ export default function CreditsPage() {
   return (
     <DashboardLayout>
       <div className="p-6">
-        {/* Error banner */}
-        <div className="mb-4 p-4 rounded-xl bg-red-950/30 border border-red-500/20">
-          <div className="text-sm font-semibold text-red-400">Session error</div>
-          <div className="text-xs text-red-300/70 mt-0.5">No camera was found. Connect a camera, then reload this page.</div>
-        </div>
+
 
         {/* Credits & Billing Header */}
         <div className="p-6 rounded-xl bg-indigo-500/[0.06] border border-indigo-500/15 mb-6 flex items-center justify-between">
@@ -73,12 +78,7 @@ export default function CreditsPage() {
           </div>
         </div>
 
-        {/* Error banner bottom */}
-        {!userData && (
-          <div className="mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-xs text-red-400">
-            No camera was found. Connect a camera, then reload this page.
-          </div>
-        )}
+
 
         {/* Credit Packs */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
@@ -155,7 +155,7 @@ export default function CreditsPage() {
                 placeholder="024 123 4567"
                 className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-white placeholder-neutral-600 focus:outline-none focus:border-indigo-500 transition"
               />
-              <p className="text-[11px] text-neutral-600 mt-1">You will receive a payment prompt on this number</p>
+              <p className="text-[11px] text-neutral-600 mt-1">You'll be redirected to a secure payment page</p>
             </div>
 
             <button
@@ -169,5 +169,13 @@ export default function CreditsPage() {
         )}
       </div>
     </DashboardLayout>
+  );
+}
+
+export default function CreditsPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center"><div className="text-neutral-500 text-sm">Loading...</div></div>}>
+      <CreditsContent />
+    </Suspense>
   );
 }
