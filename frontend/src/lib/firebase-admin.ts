@@ -1,5 +1,3 @@
-import "server-only";
-
 import { cert, getApps, initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
@@ -19,7 +17,15 @@ function getAdminApp() {
 
   const projectId = required("FIREBASE_PROJECT_ID", process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID);
   const clientEmail = required("FIREBASE_CLIENT_EMAIL");
-  const privateKey = required("FIREBASE_PRIVATE_KEY").replace(/\\n/g, "\n");
+  
+  // Handle all possible newline formats from Vercel env vars
+  let privateKey = required("FIREBASE_PRIVATE_KEY");
+  // Vercel may store newlines as literal \n (backslash + n)
+  privateKey = privateKey.replace(/\\n/g, "\n");
+  // Also handle double-escaped \\n
+  privateKey = privateKey.replace(/\\\\n/g, "\n");
+  // Clean up any extra whitespace around BEGIN/END markers
+  privateKey = privateKey.replace(/\n\s+/g, "\n");
 
   return initializeApp({
     credential: cert({ projectId, clientEmail, privateKey }),
