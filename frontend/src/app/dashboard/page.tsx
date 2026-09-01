@@ -67,6 +67,11 @@ export default function Dashboard() {
     reader.readAsDataURL(file);
   };
 
+  const removeReferenceImage = () => {
+    localStorage.removeItem("savatar-reference-image");
+    setReferenceImage(null);
+  };
+
   const referenceImageBlob = async () => {
     if (!referenceImage) return null;
     return (await fetch(referenceImage)).blob();
@@ -617,7 +622,7 @@ export default function Dashboard() {
             </a>
           </div>
         </div>
-        {lookModalOpen && <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4 backdrop-blur-sm"><div className="w-full max-w-md rounded-2xl border border-indigo-400/30 bg-[#111827] p-5"><div className="flex justify-between"><h2 className="font-semibold">Your saved looks</h2><button onClick={() => setLookModalOpen(false)}>×</button></div><p className="mt-1 text-xs text-neutral-400">Saved only in this browser.</p>{referenceImage && <img src={referenceImage} alt="Saved look" className="mt-4 h-28 w-28 rounded-lg object-cover" />}<input ref={lookInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => saveReferenceImage(e.target.files?.[0])}/><button onClick={() => lookInputRef.current?.click()} className="mt-4 rounded-lg bg-indigo-500 px-4 py-2 text-sm">Upload another image</button></div></div>}
+        {lookModalOpen && <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4 backdrop-blur-sm"><div className="w-full max-w-md rounded-2xl border border-indigo-400/30 bg-[#111827] p-5"><div className="flex justify-between"><h2 className="font-semibold">Your saved looks</h2><button onClick={() => setLookModalOpen(false)}>×</button></div><p className="mt-1 text-xs text-neutral-400">Saved only in this browser.</p>{referenceImage && <div className="relative mt-4 h-28 w-28"><img src={referenceImage} alt="Saved look" className="h-full w-full rounded-lg object-cover"/><button onClick={removeReferenceImage} aria-label="Delete saved image" className="absolute -right-2 -top-2 grid h-6 w-6 place-items-center rounded-full bg-red-500 text-xs font-bold text-white shadow-lg">×</button></div>}<input ref={lookInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => saveReferenceImage(e.target.files?.[0])}/><button onClick={() => lookInputRef.current?.click()} className="mt-4 rounded-lg bg-indigo-500 px-4 py-2 text-sm">{referenceImage ? "Upload another image" : "Upload image"}</button></div></div>}
       </div>
     </DashboardLayout>
   );

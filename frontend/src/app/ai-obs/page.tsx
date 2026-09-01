@@ -8,7 +8,7 @@ interface Background {
   id: string;
   name: string;
   category: string;
-  position?: string;
+  image?: string;
 }
 
 export default function AiObsPage() {
@@ -27,28 +27,24 @@ export default function AiObsPage() {
 
   const backgrounds: Background[] = [
     { id: "original", name: "Original", category: "all" },
-    // Professional
-    { id: "luxury-suite", name: "Luxury Modern Suite", category: "luxury", position: "0% 0%" },
-    { id: "presidential", name: "Presidential Suite", category: "luxury", position: "50% 0%" },
-    { id: "business-room", name: "Premium Business Room", category: "luxury", position: "100% 0%" },
-    { id: "ceo-office", name: "Executive CEO Office", category: "professional", position: "0% 100%" },
-    { id: "meeting-room", name: "Corporate Meeting Room", category: "professional", position: "50% 100%" },
-    { id: "workspace", name: "Modern Creative Workspace", category: "professional", position: "100% 100%" },
-    // Luxury
-    { id: "luxury-suite-alt", name: "Luxury Suite", category: "luxury" },
-    { id: "penthouse", name: "Penthouse View", category: "luxury" },
-    { id: "yacht", name: "Yacht Interior", category: "luxury" },
-    // Nature
-    { id: "beach", name: "Tropical Beach", category: "nature" },
-    { id: "forest", name: "Mystical Forest", category: "nature" },
-    { id: "mountain", name: "Mountain Peak", category: "nature" },
-    { id: "sunset", name: "Golden Sunset", category: "nature" },
-    // Creative
-    { id: "cyberpunk", name: "Cyberpunk City", category: "creative" },
-    { id: "anime", name: "Anime World", category: "creative" },
-    { id: "space", name: "Space Station", category: "creative" },
-    { id: "underwater", name: "Underwater Ocean", category: "creative" },
-    { id: "gaming", name: "Gaming Room", category: "creative" },
+    { id: "luxury-modern", name: "Luxury Modern Suite", category: "luxury", image: "/backgrounds/luxury-modern-suite.jpg" },
+    { id: "presidential", name: "Presidential Suite", category: "luxury", image: "/backgrounds/presidential-suite.jpg" },
+    { id: "business-room", name: "Premium Business Room", category: "luxury", image: "/backgrounds/business-room.jpg" },
+    { id: "ceo-office", name: "Executive CEO Office", category: "professional", image: "/backgrounds/executive-office.jpg" },
+    { id: "meeting-room", name: "Corporate Meeting Room", category: "professional", image: "/backgrounds/meeting-room.jpg" },
+    { id: "workspace", name: "Creative Workspace", category: "professional", image: "/backgrounds/creative-workspace.jpg" },
+    { id: "luxury-suite", name: "Luxury Suite", category: "luxury", image: "/backgrounds/luxury-suite.jpg" },
+    { id: "penthouse", name: "Penthouse View", category: "luxury", image: "/backgrounds/penthouse.jpg" },
+    { id: "yacht", name: "Yacht Interior", category: "luxury", image: "/backgrounds/yacht.jpg" },
+    { id: "beach", name: "Tropical Beach", category: "nature", image: "/backgrounds/beach.jpg" },
+    { id: "forest", name: "Mystical Forest", category: "nature", image: "/backgrounds/forest.jpg" },
+    { id: "mountain", name: "Mountain Peak", category: "nature", image: "/backgrounds/mountain.jpg" },
+    { id: "sunset", name: "Golden Sunset", category: "nature", image: "/backgrounds/sunset.jpg" },
+    { id: "cyberpunk", name: "Cyberpunk City", category: "creative", image: "/backgrounds/cyberpunk.jpg" },
+    { id: "anime", name: "Tokyo Neon", category: "creative", image: "/backgrounds/anime-city.jpg" },
+    { id: "space", name: "Space Station", category: "creative", image: "/backgrounds/space.jpg" },
+    { id: "underwater", name: "Underwater Ocean", category: "creative", image: "/backgrounds/underwater.jpg" },
+    { id: "gaming", name: "Gaming Room", category: "creative", image: "/backgrounds/gaming.jpg" },
   ];
 
   const filteredBgs = backgrounds.filter((bg) => bgCategory === "all" || bg.category === bgCategory);
@@ -88,6 +84,12 @@ export default function AiObsPage() {
     const reader = new FileReader();
     reader.onload = () => { const image = String(reader.result); localStorage.setItem("savatar-reference-image", image); setReferenceImage(image); setSelectedLook("reference"); setLookModalOpen(false); };
     reader.readAsDataURL(file);
+  };
+
+  const removeReference = () => {
+    localStorage.removeItem("savatar-reference-image");
+    setReferenceImage(null);
+    setSelectedLook("default");
   };
 
   const selectBackground = (background: Background) => {
@@ -212,12 +214,12 @@ export default function AiObsPage() {
               <p className="text-[11px] text-neutral-500 mb-3">
                 Choose a scene here, then open Studio to begin the real AI stream.
               </p>
-              <div className="flex gap-2 mb-4">
+              <div className="-mx-1 mb-4 flex gap-2 overflow-x-auto px-1 pb-1 scrollbar-none">
                 {["all", "professional", "luxury", "nature", "creative"].map((cat) => (
                   <button
                     key={cat}
                     onClick={() => setBgCategory(cat)}
-                    className={`px-3 py-1 rounded-full text-xs font-medium transition ${
+                    className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition ${
                       bgCategory === cat ? "bg-indigo-500 text-white" : "bg-white/5 text-neutral-400 hover:text-white"
                     }`}
                   >
@@ -225,21 +227,27 @@ export default function AiObsPage() {
                   </button>
                 ))}
               </div>
-              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-7 gap-2">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
                 {filteredBgs.map((bg) => (
                   <button
                     key={bg.id}
                     onClick={() => selectBackground(bg)}
-                    className={`min-h-28 sm:aspect-square rounded-lg border text-center p-2 flex flex-col items-center justify-center gap-1 transition ${
+                    className={`group relative aspect-[4/3] overflow-hidden rounded-xl border text-left transition ${
                       selectedBg === bg.id
-                        ? "border-indigo-500 bg-indigo-500/10"
-                        : "border-white/5 bg-white/5 hover:border-white/10"
+                        ? "border-indigo-400 ring-2 ring-indigo-500/30"
+                        : "border-white/10 bg-white/5 hover:-translate-y-0.5 hover:border-white/25"
                     }`}
                   >
-                    <div className="w-8 h-8 rounded bg-white/10 flex items-center justify-center text-[10px] text-neutral-500">
-                      {bg.id === "original" ? "CAM" : <span className="h-full w-full rounded bg-cover" style={{ backgroundImage: "url('/backgrounds/studio-scenes.png')", backgroundPosition: bg.position, backgroundSize: "300% 200%" }} />}
+                    {bg.image ? (
+                      <img src={bg.image} alt={bg.name} loading="lazy" className="h-full w-full object-cover transition duration-300 group-hover:scale-105" />
+                    ) : (
+                      <div className="grid h-full w-full place-items-center bg-gradient-to-br from-slate-800 to-slate-950 text-xs text-neutral-400">Your camera</div>
+                    )}
+                    <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black via-black/70 to-transparent px-3 pb-2 pt-8">
+                      <span className="block text-[11px] font-medium leading-tight text-white">{bg.name}</span>
+                      <span className="text-[9px] capitalize text-neutral-400">{bg.id === "original" ? "Camera" : bg.category}</span>
                     </div>
-                    <span className="text-[9px] text-neutral-400 leading-tight">{bg.name}</span>
+                    {selectedBg === bg.id && <span className="absolute right-2 top-2 grid h-6 w-6 place-items-center rounded-full bg-indigo-500 text-xs text-white shadow-lg">✓</span>}
                   </button>
                 ))}
               </div>
@@ -321,7 +329,7 @@ export default function AiObsPage() {
             </div>
           </div>
         </div>
-        {lookModalOpen && <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4 backdrop-blur-sm"><div className="w-full max-w-md rounded-2xl border border-indigo-400/30 bg-[#111827] p-5 shadow-2xl"><div className="flex items-center justify-between"><h2 className="font-semibold">Choose your look</h2><button onClick={() => setLookModalOpen(false)} className="rounded border border-white/10 px-2">×</button></div><p className="mt-1 text-xs text-neutral-400">Stored only in this browser until its site data is cleared.</p>{referenceImage && <img src={referenceImage} alt="Saved reference" className="mt-4 h-28 w-28 rounded-lg object-cover" />}<input ref={fileInputRef} onChange={(event) => uploadReference(event.target.files?.[0])} type="file" accept="image/*" className="hidden"/><button onClick={() => fileInputRef.current?.click()} className="mt-4 rounded-lg bg-indigo-500 px-4 py-2 text-sm font-medium text-white">Upload reference image</button></div></div>}
+        {lookModalOpen && <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4 backdrop-blur-sm"><div className="w-full max-w-md rounded-2xl border border-indigo-400/30 bg-[#111827] p-5 shadow-2xl"><div className="flex items-center justify-between"><h2 className="font-semibold">Choose your look</h2><button onClick={() => setLookModalOpen(false)} className="rounded border border-white/10 px-2">×</button></div><p className="mt-1 text-xs text-neutral-400">Stored only in this browser until its site data is cleared.</p>{referenceImage && <div className="relative mt-4 h-28 w-28"><img src={referenceImage} alt="Saved reference" className="h-full w-full rounded-lg object-cover"/><button onClick={removeReference} aria-label="Delete saved image" className="absolute -right-2 -top-2 grid h-6 w-6 place-items-center rounded-full bg-red-500 text-xs font-bold text-white shadow-lg">×</button></div>}<input ref={fileInputRef} onChange={(event) => uploadReference(event.target.files?.[0])} type="file" accept="image/*" className="hidden"/><button onClick={() => fileInputRef.current?.click()} className="mt-4 rounded-lg bg-indigo-500 px-4 py-2 text-sm font-medium text-white">{referenceImage ? "Upload another image" : "Upload reference image"}</button></div></div>}
       </div>
     </DashboardLayout>
   );
