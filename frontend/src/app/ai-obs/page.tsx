@@ -103,7 +103,7 @@ export default function AiObsPage() {
 
   return (
     <DashboardLayout>
-      <div className="p-6">
+      <div className="p-3 sm:p-6 space-y-4">
         {/* Error banner */}
         {(error || !cameraActive) && (
           <div className="mb-4 p-4 rounded-xl bg-red-950/30 border border-red-500/20">
@@ -114,18 +114,18 @@ export default function AiObsPage() {
           </div>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
           {/* Main Area */}
           <div className="lg:col-span-2 space-y-4">
             {/* Video Feeds */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
               {/* Camera Input */}
               <div className="rounded-xl bg-[#111] border border-white/5 overflow-hidden">
                 <div className="p-3 border-b border-white/5 flex items-center justify-between">
                   <span className="text-xs font-semibold">Camera Input</span>
                   <span className="text-[10px] text-neutral-500 px-2 py-0.5 rounded bg-white/5">Private</span>
                 </div>
-                <div className="relative aspect-video bg-[#0a0a0a]">
+                <div className="relative aspect-[4/3] sm:aspect-video bg-[#0a0a0a]">
                   <video ref={videoRef} autoPlay muted playsInline className="w-full h-full object-cover" />
                   {!cameraActive && (
                     <div className="absolute inset-0 flex flex-col items-center justify-center text-neutral-600">
@@ -139,9 +139,9 @@ export default function AiObsPage() {
                     Your camera
                   </div>
                 </div>
-                <div className="p-2 border-t border-white/5 flex items-center gap-2">
-                  <button onClick={cameraActive ? stopCamera : startCamera} className="px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-[11px] text-neutral-300">{cameraActive ? "Stop camera" : "Camera"}</button>
-                  <button onClick={toggleMic} disabled={!cameraActive} className="px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-[11px] text-neutral-300 disabled:opacity-40">Mic</button>
+                <div className="grid grid-cols-2 gap-2 p-2 border-t border-white/5">
+                  <button onClick={cameraActive ? stopCamera : startCamera} className="px-3 py-2.5 rounded-lg bg-white/5 border border-indigo-500/50 text-xs text-neutral-200">{cameraActive ? "Stop camera" : "Camera"}</button>
+                  <button onClick={toggleMic} disabled={!cameraActive} className="px-3 py-2.5 rounded-lg bg-white/5 border border-indigo-500/50 text-xs text-neutral-200 disabled:opacity-40">Mic</button>
                 </div>
               </div>
 
@@ -153,12 +153,12 @@ export default function AiObsPage() {
                     {streaming ? "Live" : "Offline"}
                   </span>
                 </div>
-                <div className="relative aspect-video bg-[#0a0a0a]">
+                <div className="relative aspect-[4/3] sm:aspect-video bg-[#07111a]">
                   <div className="absolute inset-0 flex items-center justify-center text-neutral-600">
                     <span className="text-xs">{streaming ? "AI output streaming" : "Start streaming to see output"}</span>
                   </div>
                 </div>
-                <div className="p-2 border-t border-white/5 flex items-center gap-2">
+                <div className="grid grid-cols-[1fr_auto] gap-2 p-2 border-t border-white/5">
                   <button
                     onClick={cameraActive ? () => setStreaming(!streaming) : startCamera}
                     className={`px-4 py-1.5 rounded-lg text-xs font-medium transition ${
@@ -210,12 +210,12 @@ export default function AiObsPage() {
                   </button>
                 ))}
               </div>
-              <div className="grid grid-cols-4 md:grid-cols-7 gap-2">
+              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-7 gap-2">
                 {filteredBgs.map((bg) => (
                   <button
                     key={bg.id}
                     onClick={() => setSelectedBg(bg.id)}
-                    className={`aspect-square rounded-lg border text-center p-2 flex flex-col items-center justify-center gap-1 transition ${
+                    className={`min-h-28 sm:aspect-square rounded-lg border text-center p-2 flex flex-col items-center justify-center gap-1 transition ${
                       selectedBg === bg.id
                         ? "border-indigo-500 bg-indigo-500/10"
                         : "border-white/5 bg-white/5 hover:border-white/10"
@@ -233,7 +233,7 @@ export default function AiObsPage() {
             {/* Choose Your Look */}
             <div className="p-4 rounded-xl bg-[#111] border border-white/5">
               <h3 className="text-sm font-semibold mb-3">Choose your look</h3>
-              <div className="flex items-center gap-4">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-4">
                 <div className="flex gap-2">
                   {["default", "anime", "cyberpunk", "ghibli"].map((look) => (
                     <button
@@ -250,7 +250,7 @@ export default function AiObsPage() {
                     </button>
                   ))}
                 </div>
-                <button onClick={() => setLookModalOpen(true)} className="flex items-center gap-2 px-4 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-xs text-neutral-300 transition">
+                <button onClick={() => setLookModalOpen(true)} className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-sm text-neutral-200 transition">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                   </svg>
@@ -268,17 +268,17 @@ export default function AiObsPage() {
               <p className="text-[11px] text-neutral-500 mb-3">
                 Add this private URL as a Browser Source in OBS (1280x720). When you Start Streaming, OBS switches to the AI program output.
               </p>
-              <div className="p-2 rounded-lg bg-white/5 border border-white/10 mb-3">
+              <div className="p-3 rounded-lg bg-black border border-white/10 mb-3">
                 <code className="text-[10px] text-indigo-400 break-all">{obsUrl}</code>
               </div>
-              <div className="flex gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <button
                   onClick={() => { navigator.clipboard.writeText(obsUrl); alert("OBS URL copied!"); }}
-                  className="flex-1 px-3 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-xs text-white font-medium transition"
+                  className="px-3 py-3 bg-indigo-500 hover:bg-indigo-600 border border-indigo-400 rounded-lg text-sm text-white font-medium transition"
                 >
                   Copy URL
                 </button>
-                <a href={obsUrl} target="_blank" rel="noreferrer" className="px-3 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-xs text-white font-medium transition">
+                <a href={obsUrl} target="_blank" rel="noreferrer" className="px-3 py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-sm text-white font-medium transition text-center">
                   Open preview
                 </a>
               </div>
