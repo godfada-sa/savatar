@@ -102,6 +102,12 @@ export async function requireAuthenticatedUser(
   }
 }
 
+export async function requireAdminUser(req: NextRequest): Promise<DecodedIdToken> {
+  const user = await requireAuthenticatedUser(req, { requireVerifiedEmail: true });
+  if (user.admin !== true) throw new RequestError(403, "Administrator access required");
+  return user;
+}
+
 export function clientIp(req: NextRequest) {
   return (req.headers.get("x-forwarded-for")?.split(",")[0] ?? req.headers.get("x-real-ip") ?? "unknown").trim();
 }
