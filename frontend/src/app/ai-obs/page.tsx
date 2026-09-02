@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useAuth } from "@/lib/auth-context";
+import { getOrCreateStreamRoomId } from "@/lib/stream-room";
 import DashboardLayout from "@/components/DashboardLayout";
 
 interface Background {
@@ -51,7 +52,7 @@ export default function AiObsPage() {
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
-      setObsUrl(`${window.location.origin}/obs/creator-${user?.uid || "demo"}`);
+      setObsUrl(`${window.location.origin}/obs/${getOrCreateStreamRoomId()}`);
       setReferenceImage(localStorage.getItem("savatar-reference-image"));
     });
     return () => cancelAnimationFrame(frame);
@@ -196,11 +197,11 @@ export default function AiObsPage() {
                     onClick={() => {
                       if ((userData?.wallet?.balanceSeconds ?? 0) < 60) { window.location.href = "/credits"; return; }
                       stopCamera();
-                      window.open("/dashboard", "savatar-studio");
+                      window.open("/dashboard?start=1", "savatar-studio");
                     }}
                     className="px-4 py-1.5 rounded-lg text-xs font-medium transition bg-indigo-500 hover:bg-indigo-600 text-white"
                   >
-                    {(userData?.wallet?.balanceSeconds ?? 0) < 60 ? "Buy credits" : "Open Studio"}
+                    {(userData?.wallet?.balanceSeconds ?? 0) < 60 ? "Buy credits" : "Start Stream"}
                   </button>
                   <select
                     value={resolution}
@@ -218,7 +219,7 @@ export default function AiObsPage() {
             <div className="p-4 rounded-xl bg-[#111] border border-white/5">
               <h3 className="text-sm font-semibold mb-1">Backgrounds</h3>
               <p className="text-[11px] text-neutral-500 mb-3">
-                Choose a scene here, then open Studio to begin the real AI stream.
+                Choose a scene here, then select Start Stream to launch the AI output.
               </p>
               <div className="-mx-1 mb-4 flex gap-2 overflow-x-auto px-1 pb-1 scrollbar-none">
                 {["all", "professional", "luxury", "nature", "creative"].map((cat) => (
@@ -295,7 +296,7 @@ export default function AiObsPage() {
             <div className="p-4 rounded-xl bg-[#111] border border-white/5">
               <h3 className="text-sm font-semibold mb-2">OBS Browser Source</h3>
               <p className="text-[11px] text-neutral-500 mb-3">
-                Add this URL as a Browser Source in OBS (1280×720). Start your real stream in Studio and OBS receives it automatically.
+                Add this URL as a Browser Source in OBS (1280×720). Start Stream opens the camera and connects this output automatically.
               </p>
               <div className="p-3 rounded-lg bg-black border border-white/10 mb-3">
                 <code className="text-[10px] text-indigo-400 break-all">{obsUrl}</code>

@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { io, Socket } from "socket.io-client";
 import { useAuth } from "@/lib/auth-context";
 import { iceServers, signalingUrl } from "@/lib/client-config";
+import { getOrCreateStreamRoomId } from "@/lib/stream-room";
 import DashboardLayout from "@/components/DashboardLayout";
 
 type Mode = "character" | "style" | "background" | "vton" | "vfx";
@@ -30,13 +31,19 @@ export default function Dashboard() {
   const [roomId, setRoomId] = useState("");
   const [viewerCount, setViewerCount] = useState(0);
   const [cameraDevice, setCameraDevice] = useState("default");
-  const [resolution, setResolution] = useState("1080p");
+  // Decart's realtime models currently produce a 720p-class stream. Matching
+  // the capture to that output avoids an unnecessary 1080p upload and reduces
+  // connection failures on slower browsers.
+  const [resolution, setResolution] = useState("720p");
   const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>([]);
   const [error, setError] = useState("");
+  const [startupStatus, setStartupStatus] = useState("");
   const [showLiveChat, setShowLiveChat] = useState(false);
   const [lookModalOpen, setLookModalOpen] = useState(false);
   const [referenceImage, setReferenceImage] = useState<string | null>(null);
   const lookInputRef = useRef<HTMLInputElement>(null);
+  const autoStartAttemptedRef = useRef(false);
+  const appliedReferenceRef = useRef<string | null>(null);
 
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -70,21 +77,22 @@ export default function Dashboard() {
     if (!clientRef.current) return;
     const blob = await (await fetch(dataUrl)).blob();
     await clientRef.current.set({ image: blob, prompt: prompt || "Substitute the character in the video with the person in the reference image.", enhance: true });
+    appliedReferenceRef.current = dataUrl;
   }, [prompt]);
 
   useEffect(() => {
-    if (referenceImage && isStreaming) {
+    if (referenceImage && isStreaming && referenceImage !== appliedReferenceRef.current) {
       void applyReferenceImage(referenceImage).catch(() => setError("The new reference image could not be applied."));
     }
   }, [applyReferenceImage, isStreaming, referenceImage]);
 
   useEffect(() => {
-    if (!referenceImage && isStreaming && clientRef.current) {
+    if (!referenceImage && appliedReferenceRef.current && isStreaming && clientRef.current) {
       void clientRef.current.set({
         image: null,
         prompt: prompt || "Preserve the subject and original camera scene.",
         enhance: true,
-      }).catch(() => setError("The selected background could not be applied."));
+      }).then(() => { appliedReferenceRef.current = null; }).catch(() => setError("The selected background could not be applied."));
     }
   }, [isStreaming, prompt, referenceImage]);
 
@@ -142,12 +150,13 @@ export default function Dashboard() {
     return `${m.toString().padStart(2, "0")}:${sec.toString().padStart(2, "0")}`;
   };
 
-  const openCamera = async (targetResolution: string, targetDevice: string) => {
+  const openCamera = useCallback(async (targetResolution: string, targetDevice: string) => {
     try {
+      setStartupStatus("Requesting camera and microphone access");
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
-          width: targetResolution === "1080p" ? 1920 : 1280,
-          height: targetResolution === "1080p" ? 1080 : 720,
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
           frameRate: { ideal: 30 },
           deviceId: targetDevice !== "default" ? { exact: targetDevice } : undefined,
         },
@@ -162,10 +171,14 @@ export default function Dashboard() {
       setCameraActive(true);
       setMicEnabled(true);
       setError("");
+      setStartupStatus("Camera ready");
+      return stream;
     } catch {
       setError("No camera was found. Connect a camera, then reload this page.");
+      setStartupStatus("");
+      return null;
     }
-  };
+  }, []);
 
   const startCamera = () => openCamera(resolution, cameraDevice);
 
@@ -188,6 +201,7 @@ export default function Dashboard() {
     peerConnectionsRef.current.clear();
     pendingPeerCandidatesRef.current.clear();
     transformedStreamRef.current = null;
+    appliedReferenceRef.current = null;
     if (socketRef.current) {
       socketRef.current.emit("broadcaster-stopped", { roomId });
       socketRef.current.disconnect();
@@ -219,6 +233,8 @@ export default function Dashboard() {
     }
 
     try {
+      setError("");
+      setStartupStatus("Authorizing a secure AI session");
       const { createDecartClient, models } = await import("@decartai/sdk");
       const modelId = (MODES.find((m) => m.id === activeMode)?.model || "lucy-2.5") as DecartModelId;
       const idToken = await user.getIdToken();
@@ -237,13 +253,27 @@ export default function Dashboard() {
 
       const model = models.realtime(modelId as Parameters<typeof models.realtime>[0]);
       const client = createDecartClient({ apiKey: tokenResult.apiKey });
+      const initialImage = referenceImage ? await (await fetch(referenceImage)).blob() : undefined;
+      appliedReferenceRef.current = referenceImage;
 
       const realtimeClient = await client.realtime.connect(streamRef.current, {
         model,
+        onConnectionChange: (state) => {
+          const labels = {
+            connecting: "Connecting to the AI service",
+            connected: "AI connected; waiting for output",
+            generating: "AI output live",
+            reconnecting: "Reconnecting to the AI service",
+            disconnected: "AI stream disconnected",
+          } as const;
+          setStartupStatus(labels[state]);
+        },
+        onQueuePosition: ({ position }) => setStartupStatus(`AI queue position: ${position}`),
         onRemoteStream: (transformedStream: MediaStream) => {
           const outputStream = new MediaStream([...transformedStream.getVideoTracks(), ...(streamRef.current?.getAudioTracks() ?? [])]);
           transformedStreamRef.current = outputStream;
           if (localVideoRef.current) localVideoRef.current.srcObject = outputStream;
+          setStartupStatus("AI output live");
           const transformedVideoTrack = transformedStream.getVideoTracks()[0];
           if (transformedVideoTrack) {
             for (const pc of peerConnectionsRef.current.values()) {
@@ -255,6 +285,7 @@ export default function Dashboard() {
           }
         },
         initialState: {
+          image: initialImage,
           prompt: {
             text: prompt || (referenceImage
               ? "Substitute the character in the video with the person in the reference image."
@@ -267,6 +298,8 @@ export default function Dashboard() {
 
       realtimeClient.on("error", (err: { message: string }) => {
         console.error("Decart error:", err);
+        setError(err.message || "The AI stream disconnected unexpectedly.");
+        setStartupStatus("AI connection failed");
       });
 
       clientRef.current = realtimeClient;
@@ -276,7 +309,7 @@ export default function Dashboard() {
       // Signaling server for viewers
       // Stable per-creator room lets the OBS browser-source URL attach to the
       // same live output as viewers.
-      const newRoomId = `creator-${user.uid}`;
+      const newRoomId = getOrCreateStreamRoomId();
       setRoomId(newRoomId);
 
       const socket = io(signalingUrl, {
@@ -377,8 +410,19 @@ export default function Dashboard() {
     } catch (err) {
       console.error("SDK connect error:", err);
       setError(err instanceof Error ? err.message : "Failed to start the AI stream.");
+      setStartupStatus("");
     }
   }, [activeMode, prompt, referenceImage, resolution, user, userData?.wallet?.balanceSeconds]);
+
+  useEffect(() => {
+    if (autoStartAttemptedRef.current || !user || !userData) return;
+    if (new URLSearchParams(window.location.search).get("start") !== "1") return;
+    autoStartAttemptedRef.current = true;
+    void (async () => {
+      const stream = await openCamera(resolution, cameraDevice);
+      if (stream) await goLive();
+    })();
+  }, [cameraDevice, goLive, openCamera, resolution, user, userData]);
 
   const stopStream = () => {
     if (clientRef.current) {
@@ -394,6 +438,7 @@ export default function Dashboard() {
     peerConnectionsRef.current.clear();
     pendingPeerCandidatesRef.current.clear();
     transformedStreamRef.current = null;
+    appliedReferenceRef.current = null;
     if (localVideoRef.current && streamRef.current) {
       localVideoRef.current.srcObject = streamRef.current;
     }
@@ -401,6 +446,7 @@ export default function Dashboard() {
     setIsConnected(false);
     setStreamDuration(0);
     setViewerCount(0);
+    setStartupStatus("");
   };
 
   const balanceMinutes = ((userData?.wallet?.balanceSeconds || 0) / 60).toFixed(1);
@@ -418,6 +464,11 @@ export default function Dashboard() {
             >
               Dismiss
             </button>
+          </div>
+        )}
+        {!error && startupStatus && (
+          <div className="rounded-xl border border-indigo-400/20 bg-indigo-400/10 px-4 py-3 text-xs text-indigo-100" role="status" aria-live="polite">
+            {startupStatus}
           </div>
         )}
 
@@ -513,8 +564,7 @@ export default function Dashboard() {
                 disabled={isStreaming}
                 className="px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-xs text-white focus:outline-none disabled:opacity-50"
               >
-                <option value="720p">720p</option>
-                <option value="1080p">1080p</option>
+                <option value="720p">720p (AI optimized)</option>
               </select>
               <button onClick={() => setLookModalOpen(true)} className="col-span-2 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-xs text-neutral-300 hover:bg-white/10 transition">
                 Switch look →

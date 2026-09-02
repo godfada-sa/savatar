@@ -4,10 +4,18 @@ import { getPaystackSecret, verifyAndFulfillPaystackPayment } from "@/lib/paysta
 import { privateJson } from "@/lib/server-security";
 
 export const runtime = "nodejs";
+const MAX_WEBHOOK_BYTES = 64 * 1024;
 
 export async function POST(req: NextRequest) {
   try {
+    const declaredLength = Number(req.headers.get("content-length") ?? "0");
+    if (Number.isFinite(declaredLength) && declaredLength > MAX_WEBHOOK_BYTES) {
+      return privateJson({ error: "Webhook body is too large" }, { status: 413 });
+    }
     const rawBody = await req.text();
+    if (Buffer.byteLength(rawBody, "utf8") > MAX_WEBHOOK_BYTES) {
+      return privateJson({ error: "Webhook body is too large" }, { status: 413 });
+    }
     const supplied = req.headers.get("x-paystack-signature") ?? "";
     const expected = createHmac("sha512", getPaystackSecret()).update(rawBody).digest("hex");
     const suppliedBuffer = Buffer.from(supplied, "utf8");

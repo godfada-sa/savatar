@@ -1,12 +1,6 @@
 /**
- * Savatar Signaling Server
- * Handles WebRTC room management and stream relay
- * 
- * Architecture:
- * - Broadcaster connects and publishes AI-transformed stream
- * - Viewers connect and subscribe to the broadcaster's stream
- * - Server relays WebRTC signaling (SDP offers/answers, ICE candidates)
- * - Server does NOT handle media — that's peer-to-peer via WebRTC
+ * Savatar's Socket.IO signaling service. Media remains peer-to-peer; this
+ * process only authorizes broadcasters and relays bounded WebRTC messages.
  */
 
 const { Server } = require("socket.io");
@@ -15,14 +9,16 @@ const { cert, getApps, initializeApp } = require("firebase-admin/app");
 const { getAuth } = require("firebase-admin/auth");
 
 const PORT = Number(process.env.PORT || process.env.SIGNALING_PORT || 4000);
-const allowedOrigins = (process.env.ALLOWED_ORIGINS || "http://localhost:3000,http://127.0.0.1:3000")
+const MAX_VIEWERS_PER_ROOM = 100;
+const MAX_SIGNAL_BYTES = 48 * 1024;
+const ROOM_ID_PATTERN = /^stream-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || "https://savatar.vercel.app,http://localhost:3000,http://127.0.0.1:3000")
   .split(",")
-  .map((origin) => origin.trim())
+  .map((origin) => origin.trim().replace(/\/$/, ""))
   .filter(Boolean);
 
 function allowOrigin(origin, callback) {
-  // Health checks and other non-browser clients do not send an Origin header.
-  if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+  if (!origin || allowedOrigins.includes(origin.replace(/\/$/, ""))) return callback(null, true);
   return callback(new Error("Origin is not allowed"));
 }
 
@@ -42,217 +38,213 @@ async function authenticatedBroadcaster(socket) {
   if (typeof token !== "string" || token.length === 0 || token.length > 8192) return null;
   try {
     const decoded = await firebaseAuth().verifyIdToken(token, true);
-    return decoded.email_verified ? decoded.uid : null;
+    if (decoded.firebase?.sign_in_provider === "password" && !decoded.email_verified) return null;
+    return decoded.uid;
   } catch {
     return null;
   }
 }
 
-const server = http.createServer((req, res) => {
-  // CORS headers for health checks
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET");
-  
-  if (req.url === "/health") {
-    res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ status: "ok", rooms: Object.keys(rooms).length }));
-  } else {
-    res.writeHead(404);
-    res.end();
+function isObject(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function isRoomId(value) {
+  return typeof value === "string" && ROOM_ID_PATTERN.test(value);
+}
+
+function isBoundedObject(value) {
+  if (!isObject(value)) return false;
+  try {
+    return Buffer.byteLength(JSON.stringify(value), "utf8") <= MAX_SIGNAL_BYTES;
+  } catch {
+    return false;
   }
+}
+
+function withinRateLimit(socket, scope, limit, windowMs) {
+  const now = Date.now();
+  const current = socket.rateLimits.get(scope);
+  if (!current || now - current.startedAt >= windowMs) {
+    socket.rateLimits.set(scope, { startedAt: now, count: 1 });
+    return true;
+  }
+  if (current.count >= limit) return false;
+  current.count += 1;
+  return true;
+}
+
+const rooms = new Map();
+
+const server = http.createServer((req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+  res.setHeader("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'");
+  res.setHeader("Cross-Origin-Resource-Policy", "same-site");
+  res.setHeader("Referrer-Policy", "no-referrer");
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+
+  if (req.method === "GET" && req.url === "/health") {
+    res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+    res.end(JSON.stringify({ status: "ok", rooms: rooms.size }));
+    return;
+  }
+  res.writeHead(404);
+  res.end();
 });
 
 const io = new Server(server, {
-  cors: {
-    origin: allowOrigin,
-    methods: ["GET", "POST"],
-  },
+  cors: { origin: allowOrigin, methods: ["GET", "POST"] },
+  maxHttpBufferSize: 64 * 1024,
+  perMessageDeflate: false,
+  pingInterval: 25_000,
+  pingTimeout: 20_000,
 });
 
-// Room state: { roomId: { broadcaster: socketId, viewers: Set<socketId> } }
-const rooms = {};
-const CHAT_WINDOW_MS = 60_000;
-const CHAT_MESSAGES_PER_WINDOW = 12;
-
 io.on("connection", (socket) => {
-  console.log(`[connect] ${socket.id}`);
+  socket.rateLimits = new Map();
 
-  // ─── Join Room ──────────────────────────────────────
-  socket.on("join-room", async ({ roomId, role }) => {
-    if (typeof roomId !== "string" || !/^[a-z0-9-]{1,64}$/i.test(roomId)) return;
-    if (role !== "broadcaster" && role !== "viewer") return;
+  socket.on("join-room", async (payload) => {
+    if (!withinRateLimit(socket, "join", 10, 60_000) || !isObject(payload)) return;
+    const { roomId, role } = payload;
+    if (!isRoomId(roomId) || (role !== "broadcaster" && role !== "viewer")) return;
+
+    let userId = null;
     if (role === "broadcaster") {
-      const userId = await authenticatedBroadcaster(socket);
+      userId = await authenticatedBroadcaster(socket);
       if (!userId) {
         socket.emit("authorization-error", "Sign in with a verified account to broadcast.");
         socket.disconnect(true);
         return;
       }
-      socket.userId = userId;
-    }
-    console.log(`[join-room] ${socket.id} -> ${roomId} (${role})`);
-
-    // Leave any previous rooms
-    for (const rid of Object.keys(rooms)) {
-      if (rooms[rid].broadcaster === socket.id || rooms[rid].viewers.has(socket.id)) {
-        leaveRoom(rid, socket);
-      }
     }
 
-    // Create room if it doesn't exist
-    if (!rooms[roomId]) {
-      rooms[roomId] = { broadcaster: null, broadcasterUserId: null, viewers: new Set(), streamActive: false };
+    leaveCurrentRoom(socket);
+    let room = rooms.get(roomId);
+    if (!room) {
+      room = { broadcaster: null, broadcasterUserId: null, viewers: new Set(), streamActive: false };
+      rooms.set(roomId, room);
     }
 
-    const room = rooms[roomId];
+    if (role === "broadcaster" && room.broadcaster) {
+      socket.emit("room-error", "This stream is already being broadcast.");
+      return;
+    }
+    if (role === "viewer" && room.viewers.size >= MAX_VIEWERS_PER_ROOM) {
+      socket.emit("room-error", "This stream has reached its viewer limit.");
+      return;
+    }
+
     socket.roomId = roomId;
     socket.role = role;
+    socket.userId = userId;
+    socket.join(roomId);
 
     if (role === "broadcaster") {
-      if (room.broadcaster) {
-        socket.emit("room-error", "This stream is already being broadcast.");
-        return;
-      }
       room.broadcaster = socket.id;
-      room.broadcasterUserId = socket.userId;
+      room.broadcasterUserId = userId;
       room.streamActive = true;
-      socket.join(roomId);
-
-      // Notify existing viewers that broadcaster arrived
       socket.to(roomId).emit("broadcaster-joined");
     } else {
       room.viewers.add(socket.id);
-      socket.join(roomId);
-
-      // Tell viewer if stream is active AND notify broadcaster a viewer joined
       if (room.streamActive && room.broadcaster) {
         socket.emit("broadcaster-exists");
-        // Tell broadcaster to send offer to this new viewer
         io.to(room.broadcaster).emit("viewer-joined", { viewerId: socket.id });
       }
     }
 
-    // Send room info
-    socket.emit("room-joined", {
-      roomId,
-      role,
-      viewerCount: room.viewers.size,
-      streamActive: room.streamActive,
-    });
-
-    // Broadcast updated viewer count
+    socket.emit("room-joined", { roomId, role, viewerCount: room.viewers.size, streamActive: room.streamActive });
     io.to(roomId).emit("viewer-count", room.viewers.size);
   });
 
-  // ─── WebRTC Signaling ───────────────────────────────
-  // Broadcaster sends offer to specific viewer
-  socket.on("offer", ({ roomId, offer, viewerId }) => {
-    console.log(`[offer] from ${socket.id} to ${viewerId}`);
-    const room = rooms[roomId];
-    if (room?.broadcaster === socket.id && room.viewers.has(viewerId)) {
+  socket.on("offer", (payload) => {
+    if (!withinRateLimit(socket, "signal", 240, 60_000) || !isObject(payload)) return;
+    const { roomId, offer, viewerId } = payload;
+    const room = rooms.get(roomId);
+    if (room?.broadcaster === socket.id && typeof viewerId === "string" && room.viewers.has(viewerId) && isBoundedObject(offer)) {
       io.to(viewerId).emit("offer", { offer, broadcasterId: socket.id });
     }
   });
 
-  // Viewer sends answer back to broadcaster
-  socket.on("answer", ({ roomId, answer, broadcasterId }) => {
-    console.log(`[answer] from ${socket.id} to ${broadcasterId}`);
-    const room = rooms[roomId];
-    if (room?.broadcaster === broadcasterId && room.viewers.has(socket.id)) {
+  socket.on("answer", (payload) => {
+    if (!withinRateLimit(socket, "signal", 240, 60_000) || !isObject(payload)) return;
+    const { roomId, answer, broadcasterId } = payload;
+    const room = rooms.get(roomId);
+    if (room?.broadcaster === broadcasterId && room.viewers.has(socket.id) && isBoundedObject(answer)) {
       io.to(broadcasterId).emit("answer", { answer, viewerId: socket.id });
     }
   });
 
-  // ICE candidate exchange
-  socket.on("ice-candidate", ({ roomId, candidate, targetId }) => {
-    const room = rooms[roomId];
-    const isBroadcasterToViewer = room?.broadcaster === socket.id && room.viewers.has(targetId);
-    const isViewerToBroadcaster = room?.broadcaster === targetId && room.viewers.has(socket.id);
-    if (isBroadcasterToViewer || isViewerToBroadcaster) {
+  socket.on("ice-candidate", (payload) => {
+    if (!withinRateLimit(socket, "signal", 240, 60_000) || !isObject(payload)) return;
+    const { roomId, candidate, targetId } = payload;
+    const room = rooms.get(roomId);
+    if (!room || typeof targetId !== "string" || !isBoundedObject(candidate)) return;
+    const broadcasterToViewer = room.broadcaster === socket.id && room.viewers.has(targetId);
+    const viewerToBroadcaster = room.broadcaster === targetId && room.viewers.has(socket.id);
+    if (broadcasterToViewer || viewerToBroadcaster) {
       io.to(targetId).emit("ice-candidate", { candidate, fromId: socket.id });
     }
   });
 
-  // ─── Broadcaster Events ─────────────────────────────
-  socket.on("broadcaster-started", ({ roomId }) => {
-    const room = rooms[roomId];
+  socket.on("broadcaster-started", (payload) => {
+    const roomId = isObject(payload) ? payload.roomId : null;
+    const room = rooms.get(roomId);
     if (room?.broadcaster === socket.id) {
       room.streamActive = true;
       socket.to(roomId).emit("stream-started");
     }
   });
 
-  socket.on("broadcaster-stopped", ({ roomId }) => {
-    const room = rooms[roomId];
+  socket.on("broadcaster-stopped", (payload) => {
+    const roomId = isObject(payload) ? payload.roomId : null;
+    const room = rooms.get(roomId);
     if (room?.broadcaster === socket.id) {
       room.streamActive = false;
       socket.to(roomId).emit("stream-stopped");
     }
   });
 
-  // ─── Chat ───────────────────────────────────────────
-  socket.on("chat-message", ({ roomId, username, message }) => {
-    const room = rooms[roomId];
-    if (!room || socket.roomId !== roomId || typeof username !== "string" || typeof message !== "string") return;
-    const safeUsername = username.trim().slice(0, 40);
+  socket.on("chat-message", (payload) => {
+    if (!withinRateLimit(socket, "chat", 12, 60_000) || !isObject(payload)) return;
+    const { roomId, message } = payload;
+    const room = rooms.get(roomId);
+    const isMember = room && (room.broadcaster === socket.id || room.viewers.has(socket.id));
+    if (!isMember || socket.roomId !== roomId || typeof message !== "string") return;
     const safeMessage = message.trim().slice(0, 500);
-    if (!safeUsername || !safeMessage) return;
-    const now = Date.now();
-    const chatRate = socket.chatRate ?? { startedAt: now, count: 0 };
-    if (now - chatRate.startedAt >= CHAT_WINDOW_MS) {
-      chatRate.startedAt = now;
-      chatRate.count = 0;
-    }
-    if (chatRate.count >= CHAT_MESSAGES_PER_WINDOW) {
-      socket.emit("chat-error", "You are sending messages too quickly.");
-      return;
-    }
-    chatRate.count += 1;
-    socket.chatRate = chatRate;
+    if (!safeMessage) return;
     io.to(roomId).emit("chat-message", {
-      username: safeUsername,
+      username: socket.role === "broadcaster" ? "Creator" : "Viewer",
       message: safeMessage,
       timestamp: Date.now(),
     });
   });
 
-  // ─── Disconnect ─────────────────────────────────────
-  socket.on("disconnect", () => {
-    console.log(`[disconnect] ${socket.id}`);
-    if (socket.roomId) {
-      leaveRoom(socket.roomId, socket);
-    }
-  });
-
-  function leaveRoom(roomId, sock) {
-    const room = rooms[roomId];
-    if (!room) return;
-
-    if (room.broadcaster === sock.id) {
-      room.broadcaster = null;
-      room.broadcasterUserId = null;
-      room.streamActive = false;
-      sock.to(roomId).emit("broadcaster-left");
-      console.log(`[broadcaster-left] ${roomId}`);
-    } else {
-      room.viewers.delete(sock.id);
-      if (room.broadcaster) {
-        io.to(room.broadcaster).emit("viewer-left", { viewerId: sock.id });
-      }
-    }
-
-    sock.leave(roomId);
-    io.to(roomId).emit("viewer-count", room.viewers.size);
-
-    // Clean up empty rooms
-    if (!room.broadcaster && room.viewers.size === 0) {
-      delete rooms[roomId];
-      console.log(`[room-deleted] ${roomId}`);
-    }
-  }
+  socket.on("disconnect", () => leaveCurrentRoom(socket));
 });
 
+function leaveCurrentRoom(socket) {
+  const roomId = socket.roomId;
+  if (!roomId) return;
+  const room = rooms.get(roomId);
+  if (!room) return;
+
+  if (room.broadcaster === socket.id) {
+    room.broadcaster = null;
+    room.broadcasterUserId = null;
+    room.streamActive = false;
+    socket.to(roomId).emit("broadcaster-left");
+  } else if (room.viewers.delete(socket.id) && room.broadcaster) {
+    io.to(room.broadcaster).emit("viewer-left", { viewerId: socket.id });
+  }
+
+  socket.leave(roomId);
+  io.to(roomId).emit("viewer-count", room.viewers.size);
+  socket.roomId = null;
+  socket.role = null;
+  if (!room.broadcaster && room.viewers.size === 0) rooms.delete(roomId);
+}
+
 server.listen(PORT, () => {
-  console.log(`Savatar Signaling Server running on port ${PORT}`);
-  console.log(`Health check: http://localhost:${PORT}/health`);
+  console.log(`Savatar signaling service listening on port ${PORT}`);
 });
