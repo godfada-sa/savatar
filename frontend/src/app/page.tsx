@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 const features = [
   {
@@ -99,12 +99,28 @@ const plans = [
 
 function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [logoVisible, setLogoVisible] = useState(false);
+
+  useEffect(() => {
+    const onArrived = () => setLogoVisible(true);
+    window.addEventListener("splash-logo-arrived", onArrived);
+    // If splash was skipped (already seen), show logo immediately
+    if (!sessionStorage.getItem("savatar-splash-seen")) {
+      setLogoVisible(true);
+    }
+    return () => window.removeEventListener("splash-logo-arrived", onArrived);
+  }, []);
 
   return (
     <nav className="fixed inset-x-0 top-0 z-50 border-b border-white/8 bg-[#090909]/95 backdrop-blur-xl">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5 sm:px-6">
         <Link href="/" className="flex items-center gap-2.5" aria-label="Savatar home">
-          <Image src="/logo.svg" alt="" width={30} height={30} priority />
+          <span
+            data-nav-logo
+            className={`transition-opacity duration-300 ${logoVisible ? "opacity-100" : "opacity-0"}`}
+          >
+            <Image src="/logo.svg" alt="" width={30} height={30} priority />
+          </span>
           <span className="font-display text-[15px] font-bold tracking-[-0.02em] text-white">Savatar</span>
         </Link>
 
@@ -239,7 +255,11 @@ function Hero() {
             ))}
           </div>
         </div>
-        <StudioPreview />
+        {/* Studio mockup is desktop-only — on mobile it stacks below the hero
+            text and makes the page scroll too long. lg+ shows it side-by-side. */}
+        <div className="hidden lg:block">
+          <StudioPreview />
+        </div>
       </div>
     </section>
   );
@@ -309,11 +329,15 @@ function Pricing() {
           <p className="max-w-md text-sm leading-6 text-neutral-500 sm:text-right">No subscription and no automatic renewal. Credits stay in your wallet until you use them.</p>
         </div>
 
-        <div className="mt-12 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {/* Mobile: horizontal swipeable carousel (one pack per screen, no long
+            vertical stack). sm+: normal 2-col, lg+: 4-col grid. */}
+        <div className="mt-12 -mx-5 flex snap-x snap-mandatory gap-4 overflow-x-auto px-5 pb-2 sm:mx-0 sm:grid sm:grid-cols-2 sm:overflow-visible sm:px-0 sm:pb-0 lg:grid-cols-4">
           {plans.map((plan) => (
             <article
               key={plan.name}
-              className={`flex min-h-[350px] flex-col rounded-2xl border bg-[#101010] p-6 ${plan.featured ? "border-indigo-400/50" : "border-white/10"}`}
+              className={`flex min-h-[350px] w-[85%] flex-shrink-0 snap-center flex-col rounded-2xl border bg-[#101010] p-6 sm:w-auto ${
+                plan.featured ? "border-indigo-400/50" : "border-white/10"
+              }`}
             >
               <div className="flex min-h-7 items-start justify-between gap-3">
                 <h3 className="font-display text-base font-bold text-white">{plan.name}</h3>
@@ -344,6 +368,9 @@ function Pricing() {
             </article>
           ))}
         </div>
+        <p className="mt-3 text-center text-[11px] text-neutral-500 sm:hidden">
+          Swipe to see all packs
+        </p>
       </div>
     </section>
   );

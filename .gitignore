@@ -41,3 +41,6 @@ next-env.d.ts
 
 .vercel
 .env*
+
+# Freebuff preview logs
+.freebuff/

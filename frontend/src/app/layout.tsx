@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { DM_Sans, Manrope } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth-context";
+import LoadingScreen from "@/components/LoadingScreen";
 
 const bodyFont = DM_Sans({
   subsets: ["latin"],
@@ -31,6 +32,7 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${bodyFont.variable} ${displayFont.variable}`}>
       <body className="antialiased">
+        <LoadingScreen />
         <AuthProvider>{children}</AuthProvider>
       </body>
     </html>

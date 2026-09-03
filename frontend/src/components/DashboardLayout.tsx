@@ -77,12 +77,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const router = useRouter();
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const mountedRef = useState(() => ({ current: false }))[0];
 
   useEffect(() => {
-    if (!authLoading && !user) {
+    mountedRef.current = true;
+  }, []);
+
+  useEffect(() => {
+    if (!authLoading && !user && mountedRef.current) {
       router.push("/login");
     }
-  }, [user, authLoading, router]);
+  }, [user, authLoading, router, mountedRef]);
 
   // Close sidebar on route change (mobile)
   useEffect(() => {

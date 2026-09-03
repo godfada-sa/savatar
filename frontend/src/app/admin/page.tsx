@@ -15,6 +15,7 @@ import {
   where,
 } from "firebase/firestore";
 import { getDb } from "@/lib/firebase";
+import { CREDIT_PACKS, DECART_COST_PACKS, DECART_COST_PER_SEC, GHS_PER_USD } from "@/lib/credit-packs";
 
 interface UserRecord {
   id: string;
@@ -47,24 +48,8 @@ interface LogRecord {
 
 const ADMIN_EMAILS = ["safful652@gmail.com"];
 
-const DECART_COST_PER_SEC = 0.02;
-const GHS_PER_USD = 15;
-
-const DECART_PACKS = [
-  { id: "starter", name: "Starter", seconds: 150, costGHS: +(150 * DECART_COST_PER_SEC * GHS_PER_USD).toFixed(0), timeLabel: "~2.5 min" },
-  { id: "basic", name: "Basic", seconds: 500, costGHS: +(500 * DECART_COST_PER_SEC * GHS_PER_USD).toFixed(0), timeLabel: "~8 min" },
-  { id: "pro", name: "Pro", seconds: 1000, costGHS: +(1000 * DECART_COST_PER_SEC * GHS_PER_USD).toFixed(0), timeLabel: "~17 min" },
-  { id: "ultimate", name: "Ultimate", seconds: 2500, costGHS: +(2500 * DECART_COST_PER_SEC * GHS_PER_USD).toFixed(0), timeLabel: "~42 min" },
-  { id: "creator", name: "Creator", seconds: 6000, costGHS: +(6000 * DECART_COST_PER_SEC * GHS_PER_USD).toFixed(0), timeLabel: "~100 min" },
-];
-
-const USER_PACKS = [
-  { id: "starter", name: "Starter", seconds: 150, credits: 300, priceGHS: 139, timeLabel: "~2.5 min" },
-  { id: "basic", name: "Basic", seconds: 500, credits: 1000, priceGHS: 439, timeLabel: "~8 min" },
-  { id: "pro", name: "Pro", seconds: 1000, credits: 2000, priceGHS: 839, timeLabel: "~17 min" },
-  { id: "ultimate", name: "Ultimate", seconds: 2500, credits: 5000, priceGHS: 2189, timeLabel: "~42 min" },
-  { id: "creator", name: "Creator", seconds: 6000, credits: 12000, priceGHS: 5039, timeLabel: "~100 min" },
-];
+const DECART_PACKS = DECART_COST_PACKS;
+const USER_PACKS = CREDIT_PACKS;
 
 type Tab = "overview" | "users" | "promos" | "buy" | "pricing" | "logs";
 
@@ -117,13 +102,20 @@ export default function AdminPage() {
   const [promoLoading, setPromoLoading] = useState(false);
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const mountedRef = useState(() => ({ current: false }))[0];
 
   useEffect(() => {
-    if (!authLoading && !user) router.push("/login");
-    if (!authLoading && user && !ADMIN_EMAILS.includes(user.email || "")) {
-      router.push("/dashboard");
+    mountedRef.current = true;
+  }, []);
+
+  useEffect(() => {
+    if (!authLoading && mountedRef.current) {
+      if (!user) router.push("/login");
+      else if (!ADMIN_EMAILS.includes(user.email || "")) {
+        router.push("/dashboard");
+      }
     }
-  }, [user, authLoading, router]);
+  }, [user, authLoading, router, mountedRef]);
 
   useEffect(() => {
     loadData();

@@ -12,10 +12,7 @@ import {
 } from "firebase/firestore";
 import { getDb } from "./firebase";
 export { CREDIT_PACKS } from "./credit-packs";
-
-// ─── Credit Packs (user-facing pricing in GHS) ──────────
-// Admin sees Decart's original cost
-export const DECART_COST_PER_SEC = 0.02; // USD
+export { DECART_COST_PER_SEC } from "./credit-packs";
 
 // ─── Add credits to user wallet ──────────────────────────
 export async function addCreditsToWallet(userId: string, seconds: number, paymentRef?: string) {

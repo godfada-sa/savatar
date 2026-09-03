@@ -26,6 +26,8 @@ export default function Dashboard() {
   const [activeMode, setActiveMode] = useState<Mode>("character");
   const [prompt, setPrompt] = useState("");
   const [streamDuration, setStreamDuration] = useState(0);
+  const [remainingSeconds, setRemainingSeconds] = useState(0);
+  const [reservedSeconds, setReservedSeconds] = useState(0);
   const [cameraActive, setCameraActive] = useState(false);
   const [micEnabled, setMicEnabled] = useState(true);
   const [roomId, setRoomId] = useState("");
@@ -44,6 +46,11 @@ export default function Dashboard() {
   const lookInputRef = useRef<HTMLInputElement>(null);
   const autoStartAttemptedRef = useRef(false);
   const appliedReferenceRef = useRef<string | null>(null);
+  const sessionIdRef = useRef<string | null>(null);
+  const idTokenRef = useRef<string | null>(null);
+  // Tracks whether Decart is actively generating output ("generating" state).
+  // Countdown only ticks when this is true — user doesn't pay during connect/queue/reconnect.
+  const isDecartActiveRef = useRef(false);
 
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -108,19 +115,64 @@ export default function Dashboard() {
     setReferenceImage(null);
   };
 
-  // Display time only. Credits are reserved by the server before the realtime
-  // token is issued, so a browser cannot run an unpaid session.
+  // Live countdown: only ticks when Decart is in "generating" state.
+  // User does not pay during connect, queue, or reconnect.
+  // When remaining hits 0, auto-end the stream.
   useEffect(() => {
-    if (isStreaming && user) {
-      const timer = setInterval(() => setStreamDuration((d) => d + 1), 1000);
-      return () => clearInterval(timer);
-    }
-  }, [isStreaming, user]);
+    if (!isStreaming) return;
+    const timer = setInterval(() => {
+      setStreamDuration((d) => d + 1);
+      // Only count down credits when Decart is actively generating
+      if (!isDecartActiveRef.current) return;
+      setRemainingSeconds((r) => {
+        if (r <= 1) {
+          clearInterval(timer);
+          setTimeout(() => stopStream(), 0);
+          return 0;
+        }
+        return r - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isStreaming]);
+
+  // Notify server on tab close / navigation so unused credits are refunded.
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      const sid = sessionIdRef.current;
+      const token = idTokenRef.current;
+      if (!sid || !token) return;
+      // Use sendBeacon for reliability during page unload
+      const blob = new Blob([JSON.stringify({ sessionId: sid })], { type: "application/json" });
+      navigator.sendBeacon("/api/streaming/end", blob);
+      // Also try a fetch for Authorization header (sendBeacon can't set headers)
+      void fetch("/api/streaming/end", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ sessionId: sid }),
+        keepalive: true,
+      }).catch(() => {});
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, []);
 
   useEffect(() => {
     const peers = peerConnectionsRef.current;
     const pendingCandidates = pendingPeerCandidatesRef.current;
     return () => {
+      // Notify server to refund unused time on unmount
+      const sid = sessionIdRef.current;
+      const token = idTokenRef.current;
+      if (sid && token) {
+        void fetch("/api/streaming/end", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ sessionId: sid }),
+          keepalive: true,
+        }).catch(() => {});
+      }
       clientRef.current?.disconnect();
       socketRef.current?.disconnect();
       for (const connection of peers.values()) connection.close();
@@ -192,7 +244,11 @@ export default function Dashboard() {
     if (cameraActive && !isStreaming) void openCamera(resolution, nextDevice);
   };
 
-  const stopCamera = () => {
+  const stopCamera = async () => {
+    // If a stream is active, end it properly to refund credits
+    if (isStreaming) {
+      await stopStream();
+    }
     if (clientRef.current) {
       clientRef.current.disconnect();
       clientRef.current = null;
@@ -246,10 +302,17 @@ export default function Dashboard() {
         },
         body: JSON.stringify({ model: modelId }),
       });
-      const tokenResult = await tokenResponse.json() as { apiKey?: string; error?: string };
+      const tokenResult = await tokenResponse.json() as { apiKey?: string; error?: string; maxSessionDuration?: number; sessionId?: string };
       if (!tokenResponse.ok || !tokenResult.apiKey) {
         throw new Error(tokenResult.error || "Unable to authorize this AI session");
       }
+
+      // Store session info for countdown and cleanup
+      sessionIdRef.current = tokenResult.sessionId ?? null;
+      idTokenRef.current = idToken;
+      const sessionSeconds = tokenResult.maxSessionDuration ?? 0;
+      setReservedSeconds(sessionSeconds);
+      setRemainingSeconds(sessionSeconds);
 
       const model = models.realtime(modelId as Parameters<typeof models.realtime>[0]);
       const client = createDecartClient({ apiKey: tokenResult.apiKey });
@@ -267,6 +330,15 @@ export default function Dashboard() {
             disconnected: "AI stream disconnected",
           } as const;
           setStartupStatus(labels[state]);
+
+          // Only count down credits when Decart is actively generating
+          isDecartActiveRef.current = state === "generating";
+
+          // Auto-end stream if Decart disconnects (user doesn't pay for dead sessions)
+          if (state === "disconnected") {
+            setError("The AI session ended. Unused credits have been returned.");
+            setTimeout(() => stopStream(), 0);
+          }
         },
         onQueuePosition: ({ position }) => setStartupStatus(`AI queue position: ${position}`),
         onRemoteStream: (transformedStream: MediaStream) => {
@@ -298,12 +370,17 @@ export default function Dashboard() {
 
       realtimeClient.on("error", (err: { message: string }) => {
         console.error("Decart error:", err);
+        isDecartActiveRef.current = false;
         setError(err.message || "The AI stream disconnected unexpectedly.");
         setStartupStatus("AI connection failed");
+        // Auto-stop: refund unused credits
+        setTimeout(() => stopStream(), 0);
       });
 
       clientRef.current = realtimeClient;
+      isDecartActiveRef.current = false;
       setIsConnected(true);
+      setStreamDuration(0);
       setIsStreaming(true);
 
       // Signaling server for viewers
@@ -412,6 +489,7 @@ export default function Dashboard() {
       setError(err instanceof Error ? err.message : "Failed to start the AI stream.");
       setStartupStatus("");
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeMode, prompt, referenceImage, resolution, user, userData?.wallet?.balanceSeconds]);
 
   useEffect(() => {
@@ -424,7 +502,28 @@ export default function Dashboard() {
     })();
   }, [cameraDevice, goLive, openCamera, resolution, user, userData]);
 
-  const stopStream = () => {
+  const stopStream = useCallback(async () => {
+    isDecartActiveRef.current = false;
+
+    // Notify server to refund unused reserved time
+    const currentSessionId = sessionIdRef.current;
+    const currentToken = idTokenRef.current;
+    if (currentSessionId && currentToken) {
+      try {
+        await fetch("/api/streaming/end", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${currentToken}` },
+          body: JSON.stringify({ sessionId: currentSessionId }),
+        });
+      } catch {
+        // Best-effort: if the refund call fails, the session will still time
+        // out server-side and the user can retry from the same browser.
+        console.error("Failed to notify server of stream end");
+      }
+      sessionIdRef.current = null;
+      idTokenRef.current = null;
+    }
+
     if (clientRef.current) {
       clientRef.current.disconnect();
       clientRef.current = null;
@@ -445,9 +544,11 @@ export default function Dashboard() {
     setIsStreaming(false);
     setIsConnected(false);
     setStreamDuration(0);
+    setRemainingSeconds(0);
+    setReservedSeconds(0);
     setViewerCount(0);
     setStartupStatus("");
-  };
+  }, [roomId]);
 
   const balanceMinutes = ((userData?.wallet?.balanceSeconds || 0) / 60).toFixed(1);
   return (
@@ -522,6 +623,27 @@ export default function Dashboard() {
                 <div className="absolute bottom-2 left-2 px-2 py-0.5 bg-black/60 rounded text-[10px] text-neutral-300">
                   Your camera
                 </div>
+                {isStreaming && reservedSeconds > 0 && (
+                  <div className="absolute top-2 right-2 flex items-center gap-2">
+                    <div className={`px-2.5 py-1 rounded-lg bg-black/70 backdrop-blur-sm flex items-center gap-1.5 ${
+                      remainingSeconds <= 30 ? "border border-red-500/40" : remainingSeconds <= 60 ? "border border-amber-500/30" : "border border-white/10"
+                    }`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${
+                        isDecartActiveRef.current
+                          ? remainingSeconds <= 30 ? "bg-red-400 animate-pulse" : "bg-emerald-400"
+                          : "bg-amber-400 animate-pulse"
+                      }`} />
+                      <span className={`font-mono text-xs font-bold ${
+                        remainingSeconds <= 30 ? "text-red-400" : remainingSeconds <= 60 ? "text-amber-400" : "text-white"
+                      }`}>
+                        {formatTime(remainingSeconds)}
+                      </span>
+                      {!isDecartActiveRef.current && startupStatus && (
+                        <span className="text-[9px] text-neutral-400 ml-0.5">waiting</span>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -614,11 +736,32 @@ export default function Dashboard() {
             {/* Stream Status */}
             <div className="p-4 rounded-xl bg-[#111] border border-white/5">
               <h3 className="text-sm font-semibold mb-3">Stream status</h3>
+              {isStreaming && reservedSeconds > 0 && (
+                <div className="mb-3">
+                  <div className="flex items-center justify-between text-[10px] text-neutral-500 mb-1">
+                    <span>Credits remaining</span>
+                    <span>{formatTime(remainingSeconds)} / {formatTime(reservedSeconds)}</span>
+                  </div>
+                  <div className="h-2 rounded-full bg-white/5 overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all duration-1000 ${
+                        remainingSeconds <= 30 ? "bg-red-500" : remainingSeconds <= 60 ? "bg-amber-500" : "bg-indigo-500"
+                      }`}
+                      style={{ width: `${reservedSeconds > 0 ? (remainingSeconds / reservedSeconds) * 100 : 0}%` }}
+                    />
+                  </div>
+                  {remainingSeconds <= 30 && remainingSeconds > 0 && (
+                    <p className="text-[10px] text-red-400 mt-1">Stream will auto-end when credits run out</p>
+                  )}
+                </div>
+              )}
               <div className="grid grid-cols-3 gap-2">
                 <div className="text-center p-2 rounded-lg bg-white/5">
-                  <div className="text-[10px] text-neutral-500 mb-0.5">Status</div>
-                  <div className={`text-xs font-semibold ${isStreaming ? "text-emerald-400" : "text-neutral-400"}`}>
-                    {isStreaming ? "Live" : "Offline"}
+                  <div className="text-[10px] text-neutral-500 mb-0.5">AI Status</div>
+                  <div className={`text-xs font-semibold ${
+                    isDecartActiveRef.current ? "text-emerald-400" : isStreaming ? "text-amber-400" : "text-neutral-400"
+                  }`}>
+                    {isDecartActiveRef.current ? "Generating" : isStreaming ? "Connecting" : "Offline"}
                   </div>
                 </div>
                 <div className="text-center p-2 rounded-lg bg-white/5">

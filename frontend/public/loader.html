@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Savatar — Loading</title>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: #090909; color: #fff;
+    overflow: hidden; height: 100vh;
+  }
+
+  /* ==============================
+     SPLASH
+     ============================== */
+  #splash {
+    position: fixed; inset: 0; background: #090909;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    z-index: 100;
+  }
+
+  /* Ambient floating particles */
+  .particles { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+  .particle {
+    position: absolute;
+    width: var(--size, 3px); height: var(--size, 3px);
+    background: var(--color, rgba(99,102,241,0.15));
+    border-radius: 50%;
+    opacity: 0;
+  }
+
+  /* Radial glow behind logo */
+  .logo-glow {
+    position: absolute;
+    width: 260px; height: 260px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(99,102,241,0.12) 0%, transparent 70%);
+    opacity: 0; filter: blur(40px);
+    pointer-events: none;
+  }
+
+  /* SVG logo */
+  .logo-wrap {
+    width: 88px; height: 88px;
+    margin-bottom: 28px; opacity: 0;
+    position: relative; z-index: 2;
+    filter: drop-shadow(0 0 0px rgba(99,102,241,0));
+  }
+  .logo-wrap svg { width: 100%; height: 100%; }
+
+  /* Title — letter spans for stagger */
+  .spl-title {
+    font-family: 'Manrope', sans-serif;
+    font-size: 34px; font-weight: 800;
+    letter-spacing: -0.02em;
+    display: flex; overflow: hidden;
+    position: relative; z-index: 2;
+  }
+  .spl-title .char {
+    display: inline-block;
+    opacity: 0; transform: translateY(100%);
+  }
+
+  /* Tagline — word spans */
+  .spl-tagline {
+    font-size: 12px; color: #525252;
+    letter-spacing: 0.14em; text-transform: uppercase;
+    margin-top: 8px; overflow: hidden;
+    display: flex; gap: 6px;
+    position: relative; z-index: 2;
+  }
+  .spl-tagline .word {
+    display: inline-block;
+    opacity: 0; transform: translateY(12px);
+  }
+
+  /* Loading bar with shimmer */
+  .spl-bar-wrap {
+    width: 180px; height: 2px;
+    background: #1a1a1a; border-radius: 2px;
+    margin-top: 44px; overflow: hidden;
+    opacity: 0; position: relative; z-index: 2;
+  }
+  .spl-bar-fill {
+    width: 0%; height: 100%;
+    background: linear-gradient(90deg, #4f46e5, #6366f1, #818cf8);
+    border-radius: 2px;
+    position: relative;
+  }
+  .spl-bar-fill::after {
+    content: '';
+    position: absolute; inset: 0;
+    background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.4) 50%, transparent 100%);
+    transform: translateX(-100%);
+    animation: shimmer 1.2s ease-in-out infinite;
+  }
+  @keyframes shimmer {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(200%); }
+  }
+
+  /* Streaming wave lines at bottom */
+  .wave-container {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    height: 60px; overflow: hidden; opacity: 0;
+  }
+  .wave-line {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    height: 1px;
+  }
+
+  /* Live indicator */
+  .live-dot {
+    position: absolute; top: 24px; right: 24px;
+    display: flex; align-items: center; gap: 8px;
+    opacity: 0; z-index: 2;
+  }
+  .live-dot .dot {
+    width: 7px; height: 7px;
+    background: #22c55e; border-radius: 50%;
+    box-shadow: 0 0 8px rgba(34,197,94,0.5);
+    animation: livePulse 1.5s ease-in-out infinite;
+  }
+  .live-dot span {
+    font-size: 10px; font-weight: 700;
+    letter-spacing: 0.14em; text-transform: uppercase;
+    color: #22c55e;
+  }
+  @keyframes livePulse {
+    0%, 100% { opacity: 1; box-shadow: 0 0 8px rgba(34,197,94,0.5); }
+    50% { opacity: 0.4; box-shadow: 0 0 2px rgba(34,197,94,0.2); }
+  }
+
+  /* Corner accent lines */
+  .corner { position: absolute; opacity: 0; z-index: 2; }
+  .corner-tl { top: 28px; left: 28px; }
+  .corner-tr { top: 28px; right: 28px; }
+  .corner-bl { bottom: 28px; left: 28px; }
+  .corner-br { bottom: 28px; right: 28px; }
+  .corner svg { width: 24px; height: 24px; }
+
+  /* ==============================
+     MAIN CONTENT
+     ============================== */
+  #main {
+    opacity: 0; pointer-events: none;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    height: 100vh; text-align: center; padding: 24px;
+  }
+
+  #main h1 {
+    font-family: 'Manrope', sans-serif;
+    font-size: 44px; font-weight: 800;
+    line-height: 1.1; letter-spacing: -0.03em;
+    margin-bottom: 10px;
+  }
+  #main h1 em { font-style: normal; color: #818cf8; }
+  #main p {
+    color: #525252; font-size: 15px;
+    line-height: 1.6; margin-bottom: 32px;
+    max-width: 400px;
+  }
+
+  .cta {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: #6366f1; color: #fff;
+    font-family: 'Manrope', sans-serif;
+    font-weight: 700; font-size: 14px;
+    padding: 14px 36px; border-radius: 10px;
+    text-decoration: none;
+    opacity: 0; transform: translateY(10px);
+    transition: background 0.2s;
+  }
+  .cta:hover { background: #4f46e5; }
+  .cta svg { width: 16px; height: 16px; }
+
+  .pills {
+    display: flex; flex-wrap: wrap; gap: 8px;
+    justify-content: center; margin-bottom: 36px;
+  }
+  .pill {
+    display: flex; align-items: center; gap: 6px;
+    background: #141414; border: 1px solid #262626;
+    border-radius: 8px; padding: 8px 14px;
+    font-size: 12px; color: #737373;
+    opacity: 0; transform: translateY(12px);
+  }
+  .pill svg { width: 14px; height: 14px; color: #6366f1; }
+
+  .replay {
+    position: fixed; bottom: 20px; right: 20px;
+    background: #141414; border: 1px solid #262626; color: #737373;
+    padding: 8px 16px; border-radius: 8px; cursor: pointer;
+    font-family: 'DM Sans', sans-serif; font-size: 12px;
+    z-index: 200; opacity: 0; transition: all 0.2s;
+  }
+  .replay:hover { background: #1c1c1c; color: #fff; }
+</style>
+</head>
+<body>
+
+<!-- ====== SPLASH ====== -->
+<div id="splash">
+  <!-- Ambient particles container -->
+  <div class="particles" id="particles"></div>
+
+  <!-- Radial glow -->
+  <div class="logo-glow" id="logoGlow"></div>
+
+  <!-- Corner accents -->
+  <div class="corner corner-tl" id="cTL">
+    <svg viewBox="0 0 24 24" fill="none"><path d="M1 23V1h22" stroke="#6366f1" stroke-width="1" opacity="0.3"/></svg>
+  </div>
+  <div class="corner corner-tr" id="cTR">
+    <svg viewBox="0 0 24 24" fill="none"><path d="M23 23V1H1" stroke="#6366f1" stroke-width="1" opacity="0.3"/></svg>
+  </div>
+  <div class="corner corner-bl" id="cBL">
+    <svg viewBox="0 0 24 24" fill="none"><path d="M1 1v22h22" stroke="#6366f1" stroke-width="1" opacity="0.3"/></svg>
+  </div>
+  <div class="corner corner-br" id="cBR">
+    <svg viewBox="0 0 24 24" fill="none"><path d="M23 1v22H1" stroke="#6366f1" stroke-width="1" opacity="0.3"/></svg>
+  </div>
+
+  <!-- Live indicator -->
+  <div class="live-dot" id="liveDot">
+    <div class="dot"></div>
+    <span>Live</span>
+  </div>
+
+  <!-- SVG Logo -->
+  <div class="logo-wrap" id="logoWrap">
+    <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="2" result="blur"/>
+          <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+      </defs>
+      <rect id="logoBg" x="1" y="1" width="46" height="46" rx="11"
+            stroke="#6366f1" stroke-width="2" fill="none"
+            stroke-dasharray="172" stroke-dashoffset="172"/>
+      <path id="sPath"
+            d="M16 14c0-2.2 1.8-4 4-4h8c2.2 0 4 1.8 4 4v2c0 1.1-.9 2-2 2h-10c-2.2 0-4 1.8-4 4v2c0 2.2 1.8 4 4 4h12c2.2 0 4 1.8 4 4v2c0 2.2-1.8 4-4 4h-8c-2.2 0-4-1.8-4-4v-2"
+            stroke="white" stroke-width="2.5" stroke-linecap="round" fill="none"
+            stroke-dasharray="120" stroke-dashoffset="120" filter="url(#glow)"/>
+      <circle id="logoDot" cx="38" cy="10" r="0" fill="#22c55e"/>
+      <!-- Orbiting ring around logo -->
+      <circle id="orbitRing" cx="24" cy="24" r="30" stroke="#6366f1" stroke-width="0.5"
+              fill="none" opacity="0" stroke-dasharray="4 8"
+              stroke-dashoffset="0"/>
+    </svg>
+  </div>
+
+  <!-- Title: each letter is a span -->
+  <div class="spl-title" id="splTitle"></div>
+
+  <!-- Tagline: each word is a span -->
+  <div class="spl-tagline" id="splTagline">
+    <span class="word">AI</span>
+    <span class="word">FULL</span>
+    <span class="word">BODY</span>
+    <span class="word">SWAP</span>
+    <span class="word">FOR</span>
+    <span class="word">CREATORS</span>
+  </div>
+
+  <!-- Loading bar -->
+  <div class="spl-bar-wrap" id="splBar"><div class="spl-bar-fill" id="splBarFill"></div></div>
+
+  <!-- Streaming wave at bottom -->
+  <div class="wave-container" id="waveContainer">
+    <canvas id="waveCanvas" style="width:100%;height:100%;"></canvas>
+  </div>
+</div>
+
+<!-- ====== MAIN CONTENT ====== -->
+<div id="main">
+  <h1>Transform your camera.<br><em>Go live as anyone.</em></h1>
+  <p>Create a polished AI-powered live presence, switch looks in real time, and invite viewers into a shareable room.</p>
+
+  <div class="pills">
+    <div class="pill">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.75 6.75a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.5 20.25a7.5 7.5 0 0115 0"/></svg>
+      Character replacement
+    </div>
+    <div class="pill">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.53 16.122a3 3 0 00-5.78 1.128 2.25 2.25 0 01-2.4 2.245 4.5 4.5 0 008.4-2.245c0-.399-.078-.78-.22-1.128zm0 0a15.998 15.998 0 003.388-1.62m-3.421-3.419a15.996 15.996 0 014.648-4.763l5.814-3.876a1.151 1.151 0 011.597 1.597L17.68 9.855a15.995 15.995 0 01-4.763 4.648"/></svg>
+      Live style control
+    </div>
+    <div class="pill">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.75 8.25l4.72-4.72a.75.75 0 011.28.53v15.88a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z"/></svg>
+      Shareable rooms
+    </div>
+  </div>
+
+  <a href="/signup" class="cta" id="ctaBtn">
+    Start creating
+    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3"/></svg>
+  </a>
+</div>
+
+<button class="replay" id="replayBtn">▶ Replay</button>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script>
+// ===== Generate title letters =====
+const titleEl = document.getElementById('splTitle');
+'Savatar'.split('').forEach(ch => {
+  const span = document.createElement('span');
+  span.className = 'char';
+  span.textContent = ch;
+  titleEl.appendChild(span);
+});
+
+// ===== Generate particles =====
+const particlesEl = document.getElementById('particles');
+for (let i = 0; i < 30; i++) {
+  const p = document.createElement('div');
+  p.className = 'particle';
+  p.style.left = Math.random() * 100 + '%';
+  p.style.top = Math.random() * 100 + '%';
+  p.style.setProperty('--size', (2 + Math.random() * 4) + 'px');
+  const isGreen = Math.random() > 0.7;
+  p.style.setProperty('--color', isGreen
+    ? 'rgba(34,197,94,0.12)'
+    : `rgba(99,102,241,${0.06 + Math.random() * 0.12})`);
+  particlesEl.appendChild(p);
+}
+
+// ===== Wave canvas =====
+const canvas = document.getElementById('waveCanvas');
+const ctx = canvas.getContext('2d');
+let waveAnim = null;
+let waveActive = false;
+
+function resizeCanvas() {
+  canvas.width = canvas.parentElement.offsetWidth * 2;
+  canvas.height = canvas.parentElement.offsetHeight * 2;
+}
+resizeCanvas();
+
+function drawWaves(time) {
+  if (!waveActive) return;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const w = canvas.width;
+  const h = canvas.height;
+
+  for (let i = 0; i < 3; i++) {
+    ctx.beginPath();
+    ctx.strokeStyle = i === 0 ? 'rgba(99,102,241,0.25)'
+                    : i === 1 ? 'rgba(99,102,241,0.12)'
+                    : 'rgba(129,140,248,0.08)';
+    ctx.lineWidth = 1.5;
+    for (let x = 0; x <= w; x += 2) {
+      const y = h * 0.5
+        + Math.sin((x / w) * 4 + time * 0.002 + i * 1.2) * (8 + i * 4)
+        + Math.sin((x / w) * 7 + time * 0.003 + i * 0.8) * (4 + i * 2);
+      x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+  waveAnim = requestAnimationFrame(drawWaves);
+}
+
+// ===== Master animation =====
+let masterTL;
+
+function runAnimation() {
+  // Reset particles
+  gsap.set('.particle', { opacity: 0, y: 0 });
+
+  const tl = gsap.timeline({ delay: 0.3 });
+
+  // Phase 0: Ambient particles drift in
+  tl.to('.particle', {
+    opacity: (i) => 0.3 + Math.random() * 0.5,
+    y: (i) => -(20 + Math.random() * 40),
+    duration: 2.5,
+    stagger: { each: 0.05, from: 'random' },
+    ease: 'none',
+  }, 0)
+
+  // Phase 1: Corner accents slide in
+  .to(['#cTL', '#cTR', '#cBL', '#cBR'], {
+    opacity: 1, duration: 0.6, stagger: 0.08, ease: 'power2.out'
+  }, 0.2)
+
+  // Phase 2: Logo glow breathes in
+  .to('#logoGlow', { opacity: 1, duration: 1, ease: 'power2.out' }, 0.3)
+  .to('#logoGlow', { scale: 1.1, duration: 3, repeat: -1, yoyo: true, ease: 'sine.inOut' }, 0.3)
+
+  // Phase 3: Logo wraps in
+  .to('#logoWrap', { opacity: 1, duration: 0.3 }, 0.4)
+
+  // Phase 3a: Square border draws
+  .to('#logoBg', {
+    strokeDashoffset: 0, duration: 1.4,
+    ease: 'power2.inOut'
+  }, 0.5)
+
+  // Phase 3b: S path draws
+  .to('#sPath', {
+    strokeDashoffset: 0, duration: 1,
+    ease: 'power3.out'
+  }, 1.0)
+
+  // Phase 3c: Logo dot pops
+  .to('#logoDot', {
+    attr: { r: 4 }, duration: 0.35, ease: 'back.out(5)'
+  }, 1.6)
+
+  // Phase 3d: Orbit ring appears and rotates
+  .to('#orbitRing', { opacity: 0.25, duration: 0.5 }, 1.5)
+  .to('#orbitRing', {
+    attr: { 'stroke-dashoffset': -50 },
+    duration: 8, repeat: -1, ease: 'none'
+  }, 1.5)
+
+  // Phase 3e: Logo glow intensifies on dot pop
+  .to('#logoGlow', {
+    scale: 1.3, opacity: 1, duration: 0.3, ease: 'power2.out'
+  }, 1.6)
+  .to('#logoGlow', { scale: 1, duration: 0.8, ease: 'power2.out' }, 1.9)
+
+  // Phase 4: Title letters stagger in
+  .to('#splTitle .char', {
+    opacity: 1, y: 0, duration: 0.5,
+    stagger: 0.06, ease: 'power3.out'
+  }, 2.0)
+
+  // Phase 5: Tagline words stagger in
+  .to('#splTagline .word', {
+    opacity: 1, y: 0, duration: 0.4,
+    stagger: 0.08, ease: 'power2.out'
+  }, 2.4)
+
+  // Phase 6: Live indicator
+  .to('#liveDot', { opacity: 1, duration: 0.4, ease: 'power2.out' }, 2.6)
+
+  // Phase 7: Loading bar + shimmer
+  .to('#splBar', { opacity: 1, duration: 0.3 }, 2.8)
+  .to('#splBarFill', {
+    width: '100%', duration: 2,
+    ease: 'power1.inOut',
+    onStart: () => { waveActive = true; drawWaves(0); },
+  }, 2.8)
+
+  // Phase 7b: Wave container fades in
+  .to('#waveContainer', { opacity: 1, duration: 0.5 }, 2.8)
+
+  // Phase 8: Everything fades + scales out
+  .to(['#logoWrap', '#splTitle', '#splTagline', '#liveDot', '#orbitRing'], {
+    opacity: 0, y: -15, duration: 0.5, stagger: 0.03, ease: 'power2.in'
+  }, 5.2)
+  .to('#splBar', { opacity: 0, scaleX: 0.8, duration: 0.3, ease: 'power2.in' }, 5.2)
+  .to('#waveContainer', { opacity: 0, duration: 0.4 }, 5.2)
+  .to(['#cTL', '#cTR', '#cBL', '#cBR'], {
+    opacity: 0, duration: 0.3, stagger: 0.02
+  }, 5.2)
+  .to('#logoGlow', { opacity: 0, duration: 0.3 }, 5.2)
+  .to('.particle', { opacity: 0, duration: 0.4, stagger: 0.01 }, 5.2)
+
+  // Phase 9: Splash background fades
+  .to('#splash', {
+    opacity: 0, duration: 0.4, ease: 'power2.in',
+    onComplete: () => {
+      document.getElementById('splash').style.display = 'none';
+      waveActive = false;
+      cancelAnimationFrame(waveAnim);
+    }
+  }, 5.5)
+
+  // Phase 10: Main content enters
+  .to('#main', { opacity: 1, duration: 0.6, ease: 'power2.out' }, 5.8)
+  .set('#main', { pointerEvents: 'auto' })
+
+  // Phase 11: Main elements stagger
+  .to('#main h1', { opacity: 1, y: 0, duration: 0.5, ease: 'power2.out' }, 5.9)
+  .to('#main p', { opacity: 1, y: 0, duration: 0.4, ease: 'power2.out' }, 6.1)
+  .to('.pill', { opacity: 1, y: 0, duration: 0.4, stagger: 0.08, ease: 'power2.out' }, 6.3)
+  .to('#ctaBtn', { opacity: 1, y: 0, duration: 0.4, ease: 'power2.out' }, 6.5)
+  .to('#replayBtn', { opacity: 1, duration: 0.3 }, 6.6);
+
+  return tl;
+}
+
+masterTL = runAnimation();
+
+// Replay
+document.getElementById('replayBtn').addEventListener('click', () => {
+  masterTL.kill();
+  waveActive = false;
+  cancelAnimationFrame(waveAnim);
+
+  // Reset everything
+  gsap.set(['#splash', '#logoWrap', '#logoBg', '#sPath', '#logoDot', '#orbitRing',
+            '#splTitle', '#splTagline', '#splBar', '#splBarFill', '#liveDot',
+            '#logoGlow', '#waveContainer', '#cTL', '#cTR', '#cBL', '#cBR',
+            '.particle', '.pill', '#ctaBtn', '#replayBtn', '#main', '#main h1', '#main p'],
+    { clearProps: 'all' });
+  gsap.set('.particle', { opacity: 0, y: 0 });
+  gsap.set('.char', { opacity: 0, y: '100%' });
+  gsap.set('.word', { opacity: 0, y: 12 });
+  gsap.set('.pill', { opacity: 0, y: 12 });
+  gsap.set('#ctaBtn', { opacity: 0, y: 10 });
+  gsap.set('#replayBtn', { opacity: 0 });
+  gsap.set('#main', { opacity: 0, pointerEvents: 'none' });
+  document.getElementById('splash').style.display = '';
+  document.getElementById('splBarFill').style.width = '0%';
+  resizeCanvas();
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  masterTL = runAnimation();
+});
+</script>
+</body>
+</html>
