@@ -77,17 +77,24 @@ export async function POST(req: NextRequest) {
     const maxSessionDuration = reservedSeconds;
     const decart = createDecartClient({ apiKey: permanentApiKey() });
     const token = await decart.tokens.create({
-      expiresIn: 120,
+      // Token must outlive the reserved window so the provider-side cap
+      // (maxSessionDuration) is what ends the session, never a short token TTL.
+      expiresIn: Math.max(120, reservedSeconds + 60),
       allowedModels: [model],
       allowedOrigins: [origin],
       constraints: { realtime: { maxSessionDuration } },
       metadata: { userId: user.uid, service: "savatar" },
     });
 
+    // deadlineAt is the server-side hard deadline: activatedAt + reservedSeconds.
+    // If the client never calls /api/streaming/end (closed tab, crash), a sweep
+    // finalizes the session at this point and the full reservation is spent —
+    // the same window the countdown shows, so overuse is impossible.
     await sessionRef.update({
       status: "active",
       tokenExpiresAt: token.expiresAt,
       activatedAt: FieldValue.serverTimestamp(),
+      deadlineAt: new Date(Date.now() + reservedSeconds * 1000),
     });
 
     return privateJson({

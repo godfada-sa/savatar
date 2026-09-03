@@ -137,6 +137,41 @@ export default function Dashboard() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isStreaming]);
 
+  // Reconcile abandoned sessions from a previous visit: the server-side hard
+  // deadline (/api/streaming/sweep) finalizes any session whose reserved
+  // window elapsed without a client "end" call, so records never stay dangling.
+  useEffect(() => {
+    if (!user) return;
+    void user
+      .getIdToken()
+      .then((token) =>
+        fetch("/api/streaming/sweep", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({}),
+        })
+      )
+      .catch(() => {});
+  }, [user]);
+
+  // While live, periodically ask the server to finalize any session that passed
+  // its server-side deadline (e.g. Decart died and the "end" call was lost).
+  useEffect(() => {
+    if (!isStreaming) return;
+    const sweep = () => {
+      const token = idTokenRef.current;
+      if (!token) return;
+      void fetch("/api/streaming/sweep", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({}),
+      }).catch(() => {});
+    };
+    sweep();
+    const timer = setInterval(sweep, 30_000);
+    return () => clearInterval(timer);
+  }, [isStreaming]);
+
   // Notify server on tab close / navigation so unused credits are refunded.
   useEffect(() => {
     const handleBeforeUnload = () => {

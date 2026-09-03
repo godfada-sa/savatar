@@ -104,8 +104,13 @@ function Navbar() {
   useEffect(() => {
     const onArrived = () => setLogoVisible(true);
     window.addEventListener("splash-logo-arrived", onArrived);
-    // If splash was skipped (already seen), show logo immediately
-    if (!sessionStorage.getItem("savatar-splash-seen")) {
+    // Splash was skipped (already seen this session): show the logo immediately.
+    // When the splash plays, the LoadingScreen fires splash-logo-arrived once
+    // its logo lands in the navbar position, so we keep the logo hidden until
+    // then. (Previously this condition was inverted — the logo waited for an
+    // event that never fires when the splash is skipped, so a refresh made it
+    // disappear.)
+    if (sessionStorage.getItem("savatar-splash-seen")) {
       setLogoVisible(true);
     }
     return () => window.removeEventListener("splash-logo-arrived", onArrived);

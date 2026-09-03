@@ -1,4 +1,3 @@
-import { FieldValue } from "firebase-admin/firestore";
 import { NextRequest } from "next/server";
 import { getAdminServices } from "@/lib/firebase-admin";
 import {
@@ -10,6 +9,7 @@ import {
   requireAuthenticatedUser,
   RequestError,
 } from "@/lib/server-security";
+import { finalizeSessionInTransaction } from "@/lib/stream-sessions";
 
 export const runtime = "nodejs";
 
@@ -35,7 +35,12 @@ export async function POST(req: NextRequest) {
 
       if (session.userId !== user.uid) throw new RequestError(403, "Not your session");
       if (session.status === "completed" || session.status === "refunded") {
-        return { refunded: 0, alreadyProcessed: true };
+        return {
+          refunded: 0,
+          alreadyProcessed: true,
+          usedSeconds: Math.floor(Number(session.usedSeconds ?? 0)),
+          reservedSeconds: Math.floor(Number(session.reservedSeconds ?? 0)),
+        };
       }
 
       const reservedSeconds = Math.floor(Number(session.reservedSeconds ?? 0));
@@ -43,34 +48,25 @@ export async function POST(req: NextRequest) {
         return { refunded: 0, alreadyProcessed: false };
       }
 
-      // Calculate elapsed time from session start to now
-      const createdAt = session.createdAt?.toDate?.() ?? new Date();
-      const elapsedSeconds = Math.floor((Date.now() - createdAt.getTime()) / 1000);
-      const usedSeconds = Math.min(elapsedSeconds, reservedSeconds);
-      const unusedSeconds = reservedSeconds - usedSeconds;
+      // Shared finalization: clamps used time to the reserved window and
+      // refunds the unused remainder. Past the server-side deadline
+      // (activatedAt + reservedSeconds) usedSeconds == reservedSeconds, so a
+      // delayed "end" request can never claw back time the AI already burned.
+      const result = await finalizeSessionInTransaction(
+        transaction,
+        sessionRef,
+        userRef,
+        transactionRef,
+        session
+      );
 
-      if (unusedSeconds > 0) {
-        transaction.update(userRef, {
-          "wallet.balanceSeconds": FieldValue.increment(unusedSeconds),
-          "wallet.totalUsed": FieldValue.increment(-unusedSeconds),
-        });
-      }
-
-      transaction.update(sessionRef, {
-        status: "completed",
-        usedSeconds,
-        unusedSeconds,
-        endedAt: FieldValue.serverTimestamp(),
-      });
-
-      transaction.update(transactionRef, {
-        status: "completed",
-        usedSeconds,
-        unusedSeconds,
-        endedAt: FieldValue.serverTimestamp(),
-      });
-
-      return { refunded: unusedSeconds, alreadyProcessed: false, usedSeconds, reservedSeconds };
+      return {
+        refunded: result.unusedSeconds,
+        alreadyProcessed: result.alreadyProcessed,
+        usedSeconds: result.usedSeconds,
+        reservedSeconds,
+        deadlineHit: result.deadlineHit,
+      };
     });
 
     return privateJson({
