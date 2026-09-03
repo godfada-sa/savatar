@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
+import ThemeToggle from "@/components/ThemeToggle";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -63,20 +64,23 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center px-4">
+    <div className="relative min-h-screen bg-[#faf9f7] flex items-center justify-center px-4 py-10">
+      <div className="absolute right-4 top-4">
+        <ThemeToggle className="border border-stone-300 bg-white text-stone-600 hover:text-stone-900" />
+      </div>
       <div className="w-full max-w-sm">
         {/* Logo */}
         <Link href="/" className="flex items-center justify-center gap-2 mb-8">
           <img src="/logo.svg" alt="Savatar" className="w-8 h-8" />
-          <span className="text-white font-semibold text-lg tracking-tight">Savatar</span>
+          <span className="text-stone-900 font-semibold text-lg tracking-tight">Savatar</span>
         </Link>
 
-        <h1 className="text-xl font-semibold text-white text-center mb-1 tracking-tight">Welcome back</h1>
-        <p className="text-neutral-500 text-sm text-center mb-6">Sign in to your account</p>
+        <h1 className="text-xl font-semibold text-stone-900 text-center mb-1 tracking-tight">Welcome back</h1>
+        <p className="text-stone-500 text-sm text-center mb-6">Sign in to your account</p>
 
         {/* Error */}
         {error && (
-          <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-xs">
+          <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-red-600 text-xs">
             {error}
           </div>
         )}
@@ -85,7 +89,7 @@ export default function LoginPage() {
         <div className="space-y-3 mb-5">
           <button
             onClick={handleGoogleLogin}
-            className="w-full flex items-center justify-center gap-3 px-4 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-sm text-white transition"
+            className="w-full flex items-center justify-center gap-3 px-4 py-2.5 bg-white hover:bg-stone-50 border border-stone-300 rounded-lg text-sm text-stone-800 transition"
           >
             <svg className="w-4 h-4" viewBox="0 0 24 24">
               <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" />
@@ -98,9 +102,9 @@ export default function LoginPage() {
 
           <button
             onClick={handleAppleLogin}
-            className="w-full flex items-center justify-center gap-3 px-4 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-sm text-white transition"
+            className="w-full flex items-center justify-center gap-3 px-4 py-2.5 bg-white hover:bg-stone-50 border border-stone-300 rounded-lg text-sm text-stone-800 transition"
           >
-            <svg className="w-4 h-4" fill="white" viewBox="0 0 24 24">
+            <svg className="w-4 h-4" fill="#1c1917" viewBox="0 0 24 24">
               <path d="M17.05 20.28c-.98.95-2.05.88-3.08.4-1.09-.5-2.08-.48-3.24 0-1.44.62-2.2.44-3.06-.4C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.98-2.54 4.09zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z" />
             </svg>
             Continue with Apple
@@ -109,41 +113,41 @@ export default function LoginPage() {
 
         {/* Divider */}
         <div className="flex items-center gap-3 mb-5">
-          <div className="flex-1 h-px bg-white/10" />
-          <span className="text-xs text-neutral-600">or</span>
-          <div className="flex-1 h-px bg-white/10" />
+          <div className="flex-1 h-px bg-stone-300" />
+          <span className="text-xs text-stone-400">or</span>
+          <div className="flex-1 h-px bg-stone-300" />
         </div>
 
         {/* Email/Password Form */}
         {!showReset ? (
           <form onSubmit={handleLogin} className="space-y-3">
             <div>
-              <label className="block text-xs text-neutral-400 mb-1">Email</label>
+              <label className="block text-xs text-stone-600 mb-1">Email</label>
               <input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@example.com"
                 required
-                className="w-full px-3 py-2.5 bg-white/5 border border-white/10 rounded-lg text-sm text-white placeholder-neutral-600 focus:outline-none focus:border-indigo-500 transition"
+                className="w-full px-3 py-2.5 bg-white border border-stone-300 rounded-lg text-sm text-stone-900 placeholder-stone-400 focus:outline-none focus:border-[#ff4a1d] focus:ring-1 focus:ring-[#ff4a1d]/30 transition"
               />
             </div>
             <div>
-              <label className="block text-xs text-neutral-400 mb-1">Password</label>
+              <label className="block text-xs text-stone-600 mb-1">Password</label>
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Your password"
                 required
-                className="w-full px-3 py-2.5 bg-white/5 border border-white/10 rounded-lg text-sm text-white placeholder-neutral-600 focus:outline-none focus:border-indigo-500 transition"
+                className="w-full px-3 py-2.5 bg-white border border-stone-300 rounded-lg text-sm text-stone-900 placeholder-stone-400 focus:outline-none focus:border-[#ff4a1d] focus:ring-1 focus:ring-[#ff4a1d]/30 transition"
               />
             </div>
 
             <button
               type="button"
               onClick={() => { setShowReset(true); setResetEmail(email); }}
-              className="text-xs text-indigo-400 hover:text-indigo-300 transition"
+              className="text-xs text-[#e84314] hover:text-[#c73608] transition"
             >
               Forgot password?
             </button>
@@ -151,7 +155,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-2.5 bg-indigo-500 hover:bg-indigo-600 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition"
+              className="w-full py-2.5 bg-[#ff4a1d] hover:bg-[#e84314] disabled:opacity-50 text-white text-sm font-medium rounded-lg transition"
             >
               {loading ? "Signing in..." : "Sign In"}
             </button>
@@ -159,23 +163,23 @@ export default function LoginPage() {
         ) : (
           <form onSubmit={handleReset} className="space-y-3">
             {resetSent ? (
-              <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs">
+              <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs">
                 Password reset email sent. Check your inbox.
               </div>
             ) : (
               <>
-                <p className="text-xs text-neutral-400">Enter your email to receive a reset link.</p>
+                <p className="text-xs text-stone-500">Enter your email to receive a reset link.</p>
                 <input
                   type="email"
                   value={resetEmail}
                   onChange={(e) => setResetEmail(e.target.value)}
                   placeholder="you@example.com"
                   required
-                  className="w-full px-3 py-2.5 bg-white/5 border border-white/10 rounded-lg text-sm text-white placeholder-neutral-600 focus:outline-none focus:border-indigo-500 transition"
+                  className="w-full px-3 py-2.5 bg-white border border-stone-300 rounded-lg text-sm text-stone-900 placeholder-stone-400 focus:outline-none focus:border-[#ff4a1d] focus:ring-1 focus:ring-[#ff4a1d]/30 transition"
                 />
                 <button
                   type="submit"
-                  className="w-full py-2.5 bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-medium rounded-lg transition"
+                  className="w-full py-2.5 bg-[#ff4a1d] hover:bg-[#e84314] text-white text-sm font-medium rounded-lg transition"
                 >
                   Send Reset Link
                 </button>
@@ -184,7 +188,7 @@ export default function LoginPage() {
             <button
               type="button"
               onClick={() => { setShowReset(false); setResetSent(false); }}
-              className="text-xs text-neutral-500 hover:text-white transition"
+              className="text-xs text-stone-500 hover:text-stone-900 transition"
             >
               Back to login
             </button>
@@ -192,9 +196,9 @@ export default function LoginPage() {
         )}
 
         {/* Sign up link */}
-        <p className="text-center text-xs text-neutral-500 mt-6">
+        <p className="text-center text-xs text-stone-500 mt-6">
           Don&apos;t have an account?{" "}
-          <Link href="/signup" className="text-indigo-400 hover:text-indigo-300 transition">
+          <Link href="/signup" className="text-[#e84314] hover:text-[#c73608] transition font-medium">
             Sign up
           </Link>
         </p>

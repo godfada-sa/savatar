@@ -57,7 +57,7 @@ export default function LoadingScreen() {
             "--color",
             isGreen
               ? "rgba(34,197,94,0.12)"
-              : `rgba(99,102,241,${0.06 + Math.random() * 0.12})`
+              : `rgba(255,74,29,${0.08 + Math.random() * 0.14})`
           );
           particlesEl.appendChild(p);
         }
@@ -85,10 +85,10 @@ export default function LoadingScreen() {
           ctx.beginPath();
           ctx.strokeStyle =
             i === 0
-              ? "rgba(99,102,241,0.25)"
+              ? "rgba(255,74,29,0.24)"
               : i === 1
-                ? "rgba(99,102,241,0.12)"
-                : "rgba(129,140,248,0.08)";
+                ? "rgba(255,74,29,0.11)"
+                : "rgba(255,74,29,0.06)";
           ctx.lineWidth = 1.5;
           for (let x = 0; x <= w; x += 2) {
             const y =
@@ -299,31 +299,40 @@ export default function LoadingScreen() {
         .particle {
           position: absolute;
           width: var(--size, 3px); height: var(--size, 3px);
-          background: var(--color, rgba(99,102,241,0.15));
+          background: var(--color, rgba(255,74,29,0.18));
           border-radius: 50%; opacity: 0;
         }
+        .logo-cluster {
+          position: relative; width: 88px; height: 88px;
+          margin-bottom: 24px; z-index: 2;
+        }
         .logo-glow {
-          position: absolute; width: 260px; height: 260px;
+          position: absolute; left: 50%; top: 50%;
+          width: 200px; height: 200px; margin: -100px 0 0 -100px;
           border-radius: 50%;
-          background: radial-gradient(circle, rgba(99,102,241,0.12) 0%, transparent 70%);
-          opacity: 0; filter: blur(40px); pointer-events: none;
+          background: radial-gradient(circle, rgba(255,74,29,0.22) 0%, rgba(255,74,29,0.07) 45%, transparent 70%);
+          opacity: 0; filter: blur(34px); pointer-events: none;
         }
         .logo-wrap {
-          width: 88px; height: 88px; margin-bottom: 28px;
-          opacity: 0; position: relative; z-index: 2;
+          width: 100%; height: 100%;
+          opacity: 0; position: relative;
         }
         .logo-wrap svg { width: 100%; height: 100%; }
         .spl-title {
           font-family: var(--font-display), 'Manrope', sans-serif;
-          font-size: 34px; font-weight: 800; letter-spacing: -0.02em;
+          font-size: 38px; font-weight: 800; letter-spacing: -0.035em;
+          color: #f7f2ea;
           display: flex; overflow: hidden; position: relative; z-index: 2;
+        }
+        .spl-title .char:nth-child(1) {
+          color: #ff4a1d;
         }
         .spl-title .char {
           display: inline-block; opacity: 0; transform: translateY(100%);
         }
         .spl-tagline {
-          font-size: 12px; color: #525252; letter-spacing: 0.14em;
-          text-transform: uppercase; margin-top: 8px; overflow: hidden;
+          font-size: 11px; color: #8f8677; letter-spacing: 0.18em;
+          text-transform: uppercase; margin-top: 10px; overflow: hidden;
           display: flex; gap: 6px; position: relative; z-index: 2;
         }
         .spl-tagline .word {
@@ -335,7 +344,7 @@ export default function LoadingScreen() {
         }
         .spl-bar-fill {
           width: 0%; height: 100%;
-          background: linear-gradient(90deg, #4f46e5, #6366f1, #818cf8);
+          background: linear-gradient(90deg, #ff4a1d, #ff6a3d, #ff9a7a);
           border-radius: 2px; position: relative;
         }
         .spl-bar-fill::after {
@@ -378,22 +387,22 @@ export default function LoadingScreen() {
         .corner svg { width: 24px; height: 24px; }
       `}</style>
 
-      <div id="splash">
+      <div id="splash" className="force-dark">
         <div className="particles" id="particles" />
         <div className="logo-glow" id="logoGlow" />
 
         {/* Corner accents */}
         <div className="corner corner-tl" id="cTL">
-          <svg viewBox="0 0 24 24" fill="none"><path d="M1 23V1h22" stroke="#6366f1" strokeWidth="1" opacity="0.3" /></svg>
+          <svg viewBox="0 0 24 24" fill="none">            <path d="M1 23V1h22" stroke="#ff4a1d" strokeWidth="1" opacity="0.35" /></svg>
         </div>
         <div className="corner corner-tr" id="cTR">
-          <svg viewBox="0 0 24 24" fill="none"><path d="M23 23V1H1" stroke="#6366f1" strokeWidth="1" opacity="0.3" /></svg>
+          <svg viewBox="0 0 24 24" fill="none">            <path d="M23 23V1H1" stroke="#ff4a1d" strokeWidth="1" opacity="0.35" /></svg>
         </div>
         <div className="corner corner-bl" id="cBL">
-          <svg viewBox="0 0 24 24" fill="none"><path d="M1 1v22h22" stroke="#6366f1" strokeWidth="1" opacity="0.3" /></svg>
+          <svg viewBox="0 0 24 24" fill="none">            <path d="M1 1v22h22" stroke="#ff4a1d" strokeWidth="1" opacity="0.35" /></svg>
         </div>
         <div className="corner corner-br" id="cBR">
-          <svg viewBox="0 0 24 24" fill="none"><path d="M23 1v22H1" stroke="#6366f1" strokeWidth="1" opacity="0.3" /></svg>
+          <svg viewBox="0 0 24 24" fill="none">            <path d="M23 1v22H1" stroke="#ff4a1d" strokeWidth="1" opacity="0.35" /></svg>
         </div>
 
         {/* Live indicator */}
@@ -402,9 +411,11 @@ export default function LoadingScreen() {
           <span>Live</span>
         </div>
 
-        {/* SVG Logo */}
-        <div className="logo-wrap" id="logoWrap">
-          <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+        {/* SVG Logo + glow confined behind the badge */}
+        <div className="logo-cluster">
+          <div className="logo-glow" id="logoGlow" />
+          <div className="logo-wrap" id="logoWrap">
+            <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
             <defs>
               <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
                 <feGaussianBlur stdDeviation="2" result="blur" />
@@ -416,7 +427,7 @@ export default function LoadingScreen() {
             </defs>
             <rect
               id="logoBg" x="1" y="1" width="46" height="46" rx="11"
-              stroke="#6366f1" strokeWidth="2" fill="none"
+              stroke="#ff4a1d" strokeWidth="2" fill="none"
               strokeDasharray="172" strokeDashoffset="172"
             />
             <path
@@ -428,10 +439,11 @@ export default function LoadingScreen() {
             <circle id="logoDot" cx="38" cy="10" r="0" fill="#22c55e" />
             <circle
               id="orbitRing" cx="24" cy="24" r="30"
-              stroke="#6366f1" strokeWidth="0.5" fill="none"
+              stroke="#ff4a1d" strokeWidth="0.5" fill="none"
               opacity="0" strokeDasharray="4 8" strokeDashoffset="0"
             />
-          </svg>
+            </svg>
+          </div>
         </div>
 
         <div className="spl-title" id="splTitle" />

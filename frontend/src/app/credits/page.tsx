@@ -124,18 +124,18 @@ function CreditsContent() {
     <DashboardLayout>
       <div className="p-3 sm:p-6">
         {/* Credits & Billing Header */}
-        <div className="p-5 sm:p-6 rounded-xl bg-indigo-500/[0.06] border border-indigo-500/15 mb-5 flex flex-col items-stretch gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="p-5 sm:p-6 rounded-xl bg-[#ff4a1d]/6 border border-[#ff4a1d]/15 mb-5 flex flex-col items-stretch gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <div className="text-[10px] text-indigo-400 font-semibold uppercase tracking-wider mb-1">Credits & Billing</div>
-            <h1 className="text-xl font-bold">Buy Credits, Unlock Possibilities</h1>
-            <p className="text-xs text-neutral-500 mt-1 max-w-lg">
+            <div className="text-[10px] text-[#e84314] font-semibold uppercase tracking-wider mb-1">Credits & Billing</div>
+            <h1 className="text-xl font-bold text-stone-900">Buy Credits, Unlock Possibilities</h1>
+            <p className="text-xs text-stone-500 mt-1 max-w-lg">
               Choose a pack and pay securely by mobile money or card through Paystack. Credits are added after verification.
             </p>
           </div>
-          <div className="w-full text-left px-4 py-3 rounded-xl bg-[#111] border border-white/5 sm:w-auto sm:px-6 sm:text-center">
-            <div className="text-[10px] text-neutral-500 uppercase tracking-wider">Available Balance</div>
-            <div className="text-2xl font-bold text-indigo-400">{balanceMinutes}</div>
-            <div className="text-[10px] text-neutral-500">minutes</div>
+          <div className="w-full text-left px-4 py-3 rounded-xl bg-white border border-stone-200 sm:w-auto sm:px-6 sm:text-center">
+            <div className="text-[10px] text-stone-500 uppercase tracking-wider">Available Balance</div>
+            <div className="text-2xl font-bold text-[#e84314]">{balanceMinutes}</div>
+            <div className="text-[10px] text-stone-500">minutes</div>
           </div>
         </div>
 
@@ -147,49 +147,49 @@ function CreditsContent() {
               onClick={() => selectPack(pack.id)}
               className={`block w-full p-5 rounded-xl border text-left transition ${
                 selectedPack === pack.id
-                  ? "bg-indigo-500/10 border-indigo-500/40"
-                  : "bg-[#111] border-white/5 hover:border-white/10"
+                  ? "bg-[#ff4a1d]/8 border-[#ff4a1d]/50 ring-1 ring-[#ff4a1d]/30"
+                  : "bg-white border-stone-200 hover:border-stone-400"
               }`}
             >
-              <div className="text-sm text-neutral-300 mb-2">{pack.name} Plan</div>
-              <div className="text-3xl font-bold text-white">
+              <div className="text-sm text-stone-500 mb-2">{pack.name} Plan</div>
+              <div className="text-3xl font-bold text-stone-900">
                 {pack.seconds >= 60 ? Math.floor(pack.seconds / 60) : pack.seconds}
-                <span className="text-xs text-neutral-500 font-normal ml-1">
+                <span className="text-xs text-stone-500 font-normal ml-1">
                   {pack.seconds >= 60 ? "min" : "sec"}
                 </span>
               </div>
-              <div className="mt-4 border-t border-white/10 pt-4 text-2xl font-bold text-white">
+              <div className="mt-4 border-t border-stone-200 pt-4 text-2xl font-bold text-stone-900">
                 GH₵ {pack.priceGHS.toLocaleString()}
               </div>
               <ul className="mt-4 space-y-2">
-                <li className="text-xs text-neutral-500">• ~{pack.timeLabel} of AI streaming</li>
-                <li className="text-xs text-neutral-500">• Instant wallet top-up</li>
-                <li className="text-xs text-neutral-500">• Use on Studio & OBS</li>
+                <li className="text-xs text-stone-500">• ~{pack.timeLabel} of AI streaming</li>
+                <li className="text-xs text-stone-500">• Instant wallet top-up</li>
+                <li className="text-xs text-stone-500">• Use on Studio & OBS</li>
               </ul>
-              <div className="mt-5 w-full px-3 py-3 rounded-lg bg-white/5 border border-white/10 text-sm text-center text-neutral-200 font-medium">
+              <div className="mt-5 w-full px-3 py-3 rounded-lg border border-stone-300 bg-white text-sm text-center text-stone-700 font-medium">
                 Get {pack.name}
               </div>
             </button>
           ))}
         </div>
 
-        <p className="text-[11px] text-neutral-500 text-center mb-6">
+        <p className="text-[11px] text-stone-500 text-center mb-6">
           Credits are consumed while AI streaming is active. Durations above are estimates only.
         </p>
 
         {/* Payment Section */}
         {selectedPack && (
-          <div className="max-w-md mx-auto p-5 rounded-xl bg-[#111] border border-white/5 space-y-4">
-            <h3 className="text-sm font-semibold">Payment</h3>
+          <div className="max-w-md mx-auto p-5 rounded-xl bg-white border border-stone-200 space-y-4 shadow-sm">
+            <h3 className="text-sm font-semibold text-stone-900">Payment</h3>
 
-            <div className="rounded-lg border border-blue-500/20 bg-blue-500/[0.06] p-3">
-              <div className="text-xs font-medium text-blue-300">Secure Paystack checkout</div>
-              <p className="mt-1 text-[11px] text-neutral-500">Choose MTN MoMo, Telecel Cash, AT Money, or card on Paystack&apos;s payment page.</p>
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3">
+              <div className="text-xs font-medium text-emerald-700">Secure Paystack checkout</div>
+              <p className="mt-1 text-[11px] text-stone-500">Choose MTN MoMo, Telecel Cash, AT Money, or card on Paystack&apos;s payment page.</p>
             </div>
 
             {/* Promo Code */}
             <div>
-              <label className="block text-xs text-neutral-400 mb-1.5">Promo Code (optional)</label>
+              <label className="block text-xs text-stone-500 mb-1.5">Promo Code (optional)</label>
               <div className="flex gap-2">
                 <input
                   type="text"
@@ -197,12 +197,12 @@ function CreditsContent() {
                   onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
                   placeholder="Enter promo code"
                   disabled={!!promoResult}
-                  className="flex-1 px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-white placeholder-neutral-600 focus:outline-none focus:border-indigo-500 transition font-mono uppercase disabled:opacity-50"
+                  className="flex-1 px-3 py-2 bg-white border border-stone-300 rounded-lg text-sm text-stone-900 placeholder-stone-400 focus:outline-none focus:border-[#ff4a1d] transition font-mono uppercase disabled:opacity-50"
                 />
                 {promoResult ? (
                   <button
                     onClick={() => { setPromoResult(null); setPromoCode(""); setPromoError(""); }}
-                    className="px-3 py-2 bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-medium rounded-lg transition hover:bg-red-500/20"
+                    className="px-3 py-2 bg-white border border-red-300 text-red-600 text-xs font-medium rounded-lg transition hover:bg-red-50"
                   >
                     Remove
                   </button>
@@ -210,7 +210,7 @@ function CreditsContent() {
                   <button
                     onClick={validatePromo}
                     disabled={!promoCode.trim() || promoLoading}
-                    className="px-3 py-2 bg-white/5 border border-white/10 text-neutral-300 text-xs font-medium rounded-lg transition hover:bg-white/10 disabled:opacity-50"
+                    className="px-3 py-2 bg-white border border-stone-300 text-stone-600 text-xs font-medium rounded-lg transition hover:bg-stone-50 disabled:opacity-50"
                   >
                     {promoLoading ? "..." : "Apply"}
                   </button>
@@ -219,67 +219,67 @@ function CreditsContent() {
 
               {/* Promo result */}
               {promoResult && (
-                <div className="mt-2 p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+                <div className="mt-2 p-2 rounded-lg bg-emerald-50 border border-emerald-200">
                   <div className="flex items-center gap-2">
-                    <svg className="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                     </svg>
-                    <span className="text-xs text-emerald-400 font-medium">{promoResult.message}</span>
+                    <span className="text-xs text-emerald-700 font-medium">{promoResult.message}</span>
                   </div>
                 </div>
               )}
 
               {/* Promo error */}
               {promoError && (
-                <div className="mt-2 p-2 rounded-lg bg-red-500/10 border border-red-500/20">
-                  <span className="text-xs text-red-400">{promoError}</span>
+                <div className="mt-2 p-2 rounded-lg bg-red-50 border border-red-200">
+                  <span className="text-xs text-red-600">{promoError}</span>
                 </div>
               )}
             </div>
 
             {/* Price Summary */}
-            <div className="p-3 rounded-lg bg-white/5 space-y-2">
+            <div className="p-3 rounded-lg bg-stone-50 space-y-2">
               <div className="flex items-center justify-between text-xs">
-                <span className="text-neutral-400">{selectedPackData?.name} Pack ({selectedPackData?.timeLabel})</span>
-                <span className="text-white">GH {selectedPackData?.priceGHS.toLocaleString()}</span>
+                <span className="text-stone-500">{selectedPackData?.name} Pack ({selectedPackData?.timeLabel})</span>
+                <span className="text-stone-900">GH {selectedPackData?.priceGHS.toLocaleString()}</span>
               </div>
 
               {promoResult?.discountPercent ? (
                 <div className="flex items-center justify-between text-xs">
-                  <span className="text-emerald-400">{promoResult.discountPercent}% Promo Discount</span>
-                  <span className="text-emerald-400">-GH {(selectedPackData!.priceGHS - finalPrice).toFixed(0)}</span>
+                  <span className="text-emerald-600">{promoResult.discountPercent}% Promo Discount</span>
+                  <span className="text-emerald-600">-GH {(selectedPackData!.priceGHS - finalPrice).toFixed(0)}</span>
                 </div>
               ) : null}
 
               {promoResult?.bonusSeconds ? (
                 <div className="flex items-center justify-between text-xs">
-                  <span className="text-emerald-400">Bonus Time</span>
-                  <span className="text-emerald-400">+{promoResult.bonusSeconds >= 60 ? `${Math.floor(promoResult.bonusSeconds / 60)}m` : `${promoResult.bonusSeconds}s`}</span>
+                  <span className="text-emerald-600">Bonus Time</span>
+                  <span className="text-emerald-600">+{promoResult.bonusSeconds >= 60 ? `${Math.floor(promoResult.bonusSeconds / 60)}m` : `${promoResult.bonusSeconds}s`}</span>
                 </div>
               ) : null}
 
               {(promoResult?.discountPercent || promoResult?.bonusSeconds) && (
-                <div className="border-t border-white/10 pt-2" />
+                <div className="border-t border-stone-200 pt-2" />
               )}
 
               <div className="flex items-center justify-between text-sm font-semibold">
-                <span className="text-white">You Pay</span>
+                <span className="text-stone-900">You Pay</span>
                 <div className="text-right">
                   {promoResult?.discountPercent ? (
                     <div className="flex items-center gap-2">
-                      <span className="text-neutral-500 line-through text-xs">GH {selectedPackData?.priceGHS.toLocaleString()}</span>
-                      <span className="text-indigo-400">GH {finalPrice.toFixed(0)}</span>
+                      <span className="text-stone-400 line-through text-xs">GH {selectedPackData?.priceGHS.toLocaleString()}</span>
+                      <span className="text-[#e84314]">GH {finalPrice.toFixed(0)}</span>
                     </div>
                   ) : (
-                    <span className="text-indigo-400">GH {finalPrice.toFixed(0)}</span>
+                    <span className="text-[#e84314]">GH {finalPrice.toFixed(0)}</span>
                   )}
                 </div>
               </div>
 
               {totalSeconds > (selectedPackData?.seconds || 0) && (
                 <div className="flex items-center justify-between text-xs">
-                  <span className="text-neutral-400">Total Time</span>
-                  <span className="text-emerald-400">{Math.floor(totalSeconds / 60)}m {totalSeconds % 60}s</span>
+                  <span className="text-stone-500">Total Time</span>
+                  <span className="text-emerald-600">{Math.floor(totalSeconds / 60)}m {totalSeconds % 60}s</span>
                 </div>
               )}
             </div>
@@ -287,7 +287,7 @@ function CreditsContent() {
             <button
               onClick={handlePurchase}
               disabled={!selectedPack || processing}
-              className="w-full py-3 bg-indigo-500 hover:bg-indigo-600 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium rounded-xl transition"
+              className="w-full py-3 bg-[#ff4a1d] hover:bg-[#e84314] disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium rounded-xl transition"
             >
               {processing ? "Opening Paystack..." : `Pay GH ${finalPrice.toFixed(0)} securely`}
             </button>
@@ -300,7 +300,7 @@ function CreditsContent() {
 
 export default function CreditsPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center"><div className="text-neutral-500 text-sm">Loading...</div></div>}>
+    <Suspense fallback={<div className="min-h-screen bg-[#faf9f7] flex items-center justify-center"><div className="text-stone-500 text-sm">Loading...</div></div>}>
       <CreditsContent />
     </Suspense>
   );

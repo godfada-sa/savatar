@@ -14,15 +14,15 @@ export default function PrivacyPage() {
       title="Privacy Policy"
       description="This policy explains how SaffulTech, also known as Safful, handles personal data when you visit or use Savatar."
     >
-      <div className="rounded-2xl border border-indigo-300/20 bg-indigo-400/8 p-6 text-sm leading-6 text-neutral-300">
+      <div className="rounded-2xl border border-[#ff4a1d]/20 bg-[#ff4a1d]/8 p-6 text-sm leading-6 text-stone-600">
         SaffulTech is the data controller for Savatar. We process personal data in accordance with Ghana&apos;s Data Protection Act, 2012 (Act 843) and other applicable requirements.
       </div>
 
       <LegalSection id="collect" title="1. Information we collect">
-        <p><strong className="font-semibold text-neutral-200">Account information.</strong> Your name, email address, profile image, account identifier, authentication provider, account creation date, and sign-in information. Passwords are handled by Firebase Authentication and are not visible to SaffulTech.</p>
-        <p><strong className="font-semibold text-neutral-200">Wallet and transaction information.</strong> Credit balance, time purchased and used, plan, promo-code usage, payment amount, payment channel, payment reference, provider response, and transaction status.</p>
-        <p><strong className="font-semibold text-neutral-200">Creation and live-session information.</strong> AI prompts, selected transformation mode, reference images you choose, camera and microphone streams, room identifiers, viewer counts, connection data, and live-chat messages.</p>
-        <p><strong className="font-semibold text-neutral-200">Device and service information.</strong> Browser and device information, IP address and approximate location derived from it, timestamps, diagnostic logs, security events, and service-performance data. Stream preferences such as resolution and frame rate may be stored locally in your browser.</p>
+        <p><strong className="font-semibold text-stone-800">Account information.</strong> Your name, email address, profile image, account identifier, authentication provider, account creation date, and sign-in information. Passwords are handled by Firebase Authentication and are not visible to SaffulTech.</p>
+        <p><strong className="font-semibold text-stone-800">Wallet and transaction information.</strong> Credit balance, time purchased and used, plan, promo-code usage, payment amount, payment channel, payment reference, provider response, and transaction status.</p>
+        <p><strong className="font-semibold text-stone-800">Creation and live-session information.</strong> AI prompts, selected transformation mode, reference images you choose, camera and microphone streams, room identifiers, viewer counts, connection data, and live-chat messages.</p>
+        <p><strong className="font-semibold text-stone-800">Device and service information.</strong> Browser and device information, IP address and approximate location derived from it, timestamps, diagnostic logs, security events, and service-performance data. Stream preferences such as resolution and frame rate may be stored locally in your browser.</p>
       </LegalSection>
 
       <LegalSection id="sources" title="2. How we collect information">
@@ -31,7 +31,7 @@ export default function PrivacyPage() {
       </LegalSection>
 
       <LegalSection id="use" title="3. How we use information">
-        <ul className="list-disc space-y-2 pl-5 marker:text-indigo-400">
+        <ul className="list-disc space-y-2 pl-5 marker:text-[#ff4a1d]">
           <li>Create and secure your account and provide authentication.</li>
           <li>Operate AI transformations, live rooms, WebRTC delivery, and viewer chat.</li>
           <li>Process payments, maintain credit balances, prevent duplicate credits, and keep transaction records.</li>
@@ -52,7 +52,7 @@ export default function PrivacyPage() {
 
       <LegalSection id="sharing" title="6. When we share information">
         <p>We disclose information only as needed to provide the service, protect users, complete transactions, or comply with law. Provider categories include:</p>
-        <ul className="list-disc space-y-2 pl-5 marker:text-indigo-400">
+        <ul className="list-disc space-y-2 pl-5 marker:text-[#ff4a1d]">
           <li>Google Firebase for authentication and cloud database services.</li>
           <li>Decart and related AI infrastructure for real-time media transformation.</li>
           <li>Moolre and participating mobile-money networks for payment processing and verification.</li>
@@ -89,8 +89,8 @@ export default function PrivacyPage() {
       </LegalSection>
 
       <LegalSection id="contact" title="13. Contact and complaints">
-        <p>SaffulTech (Safful), Ghana, is responsible for Savatar. Privacy questions, rights requests, and account-deletion requests may be sent to <a href="mailto:safful652@gmail.com" className="font-semibold text-indigo-300 hover:text-indigo-200">safful652@gmail.com</a>.</p>
-        <p>For more information about your statutory rights, visit the <a href="https://dataprotection.org.gh/for-individuals/" className="font-semibold text-indigo-300 hover:text-indigo-200" target="_blank" rel="noreferrer">Ghana Data Protection Commission</a>. Use of Savatar is also governed by our <Link href="/terms" className="font-semibold text-indigo-300 hover:text-indigo-200">Terms of Service</Link>.</p>
+        <p>SaffulTech (Safful), Ghana, is responsible for Savatar. Privacy questions, rights requests, and account-deletion requests may be sent to <a href="mailto:safful652@gmail.com" className="font-semibold text-[#e84314] hover:text-[#c73608]">safful652@gmail.com</a>.</p>
+        <p>For more information about your statutory rights, visit the <a href="https://dataprotection.org.gh/for-individuals/" className="font-semibold text-[#e84314] hover:text-[#c73608]" target="_blank" rel="noreferrer">Ghana Data Protection Commission</a>. Use of Savatar is also governed by our <Link href="/terms" className="font-semibold text-[#e84314] hover:text-[#c73608]">Terms of Service</Link>.</p>
       </LegalSection>
     </LegalPage>
   );

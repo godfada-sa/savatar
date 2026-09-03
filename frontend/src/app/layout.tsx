@@ -30,10 +30,22 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${bodyFont.variable} ${displayFont.variable}`}>
+    <html lang="en" className={`${bodyFont.variable} ${displayFont.variable}`} suppressHydrationWarning>
+      <head>
+        {/* Apply the saved/system theme before first paint to avoid a flash. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=localStorage.getItem("savatar-theme");var d=t?t==="dark":window.matchMedia("(prefers-color-scheme: dark)").matches;if(d)document.documentElement.classList.add("dark");}catch(e){}})();`,
+          }}
+        />
+      </head>
       <body className="antialiased">
-        <LoadingScreen />
-        <AuthProvider>{children}</AuthProvider>
+        {/* Full-viewport scroll container — required by the dark-mode
+            inversion theme so fixed navbars and modals stay put. */}
+        <div className="app-root">
+          <LoadingScreen />
+          <AuthProvider>{children}</AuthProvider>
+        </div>
       </body>
     </html>
   );

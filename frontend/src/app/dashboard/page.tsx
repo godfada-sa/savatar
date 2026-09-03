@@ -591,19 +591,19 @@ export default function Dashboard() {
       <div className="p-3 sm:p-6 space-y-4">
         {/* Error Banner */}
         {error && (
-          <div className="p-4 rounded-xl bg-red-950/30 border border-red-500/20">
-            <div className="text-sm font-semibold text-red-400">Session error</div>
-            <div className="text-xs text-red-300/70 mt-0.5">{error}</div>
+          <div className="p-4 rounded-xl bg-red-50 border border-red-200">
+            <div className="text-sm font-semibold text-red-600">Session error</div>
+            <div className="text-xs text-red-500 mt-0.5">{error}</div>
             <button
               onClick={() => setError("")}
-              className="mt-2 px-3 py-1 bg-white/5 hover:bg-white/10 border border-white/10 rounded text-[11px] text-neutral-300 transition"
+              className="mt-2 px-3 py-1 bg-white hover:bg-red-100 border border-red-200 rounded text-[11px] text-red-600 transition"
             >
               Dismiss
             </button>
           </div>
         )}
         {!error && startupStatus && (
-          <div className="rounded-xl border border-indigo-400/20 bg-indigo-400/10 px-4 py-3 text-xs text-indigo-100" role="status" aria-live="polite">
+          <div className="rounded-xl border border-[#ff4a1d]/25 bg-[#ff4a1d]/8 px-4 py-3 text-xs text-[#c73608]" role="status" aria-live="polite">
             {startupStatus}
           </div>
         )}
@@ -611,18 +611,18 @@ export default function Dashboard() {
         {/* Creator Studio Header */}
         <div className="flex items-start justify-between">
           <div>
-            <div className="text-[10px] text-indigo-400 font-semibold uppercase tracking-wider mb-1">
+            <div className="text-[10px] text-[#e84314] font-semibold uppercase tracking-wider mb-1">
               Creator Studio
             </div>
-            <h1 className="text-xl font-bold">Go live. Get watched. Chat in real time.</h1>
-            <p className="text-xs text-neutral-500 mt-1 max-w-lg">
+            <h1 className="text-xl font-bold text-stone-900">Go live. Get watched. Chat in real time.</h1>
+            <p className="text-xs text-stone-500 mt-1 max-w-lg">
               Broadcast with your camera — other creators find you in Feed, open your watch page,
               and interact live. Keep Studio open while broadcasting; OBS receives the same AI output and microphone audio.
             </p>
           </div>
-          <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-[11px]">
-            <span className={`w-2 h-2 rounded-full ${isStreaming ? "bg-emerald-500" : "bg-neutral-500"}`} />
-            <span className={isStreaming ? "text-emerald-400" : "text-neutral-400"}>
+          <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-stone-100 border border-stone-200 text-[11px] text-stone-600">
+            <span className={`w-2 h-2 rounded-full ${isStreaming ? "bg-emerald-500" : "bg-stone-400"}`} />
+            <span className={isStreaming ? "text-emerald-600" : "text-stone-500"}>
               {isStreaming ? "Live" : "Offline"}
             </span>
           </div>
@@ -632,14 +632,14 @@ export default function Dashboard() {
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
           {/* Left: Camera Preview */}
           <div className="xl:col-span-2 space-y-3">
-            <div className="overflow-hidden rounded-xl border border-blue-400/15 bg-[#111] shadow-[0_0_34px_rgba(37,99,235,0.09)]">
-              <div className="p-3 border-b border-white/5 flex items-center justify-between">
-                <span className="text-xs font-semibold">Camera preview</span>
-                <span className="text-[10px] text-neutral-500 px-2 py-0.5 rounded bg-white/5">
+            <div className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm">
+              <div className="p-3 border-b border-stone-200 flex items-center justify-between">
+                <span className="text-xs font-semibold text-stone-900">Camera preview</span>
+                <span className="text-[10px] text-stone-500 px-2 py-0.5 rounded bg-stone-100">
                   Preview
                 </span>
               </div>
-              <div className="relative aspect-[3/4] sm:aspect-video bg-[#0a0a0a]">
+              <div className="force-dark relative aspect-[3/4] sm:aspect-video bg-[#0a0a0a]">
                 <video
                   ref={localVideoRef}
                   autoPlay
@@ -689,15 +689,15 @@ export default function Dashboard() {
                 className={`px-4 py-2 rounded-lg text-xs font-medium transition ${
                   isStreaming
                     ? "bg-red-500 hover:bg-red-600 text-white"
-                    : "bg-indigo-500 hover:bg-indigo-600 text-white shadow-[0_0_18px_rgba(59,130,246,0.18)]"
+                    : "bg-[#ff4a1d] hover:bg-[#e84314] text-white shadow-[0_6px_16px_-8px_rgba(255,74,29,0.6)]"
                 }`}
               >
                 {isStreaming ? "Stop" : cameraActive ? "Go Live" : "Start camera"}
               </button>
-              <button onClick={cameraActive ? stopCamera : startCamera} className="px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-xs text-neutral-300 hover:bg-white/10 transition">
+              <button onClick={cameraActive ? stopCamera : startCamera} className="px-3 py-2 rounded-lg bg-white border border-stone-300 text-xs text-stone-700 hover:bg-stone-50 transition">
                 Camera
               </button>
-              <button onClick={() => { const next = !micEnabled; streamRef.current?.getAudioTracks().forEach((track) => { track.enabled = next; }); setMicEnabled(next); }} disabled={!cameraActive} className="px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-xs text-neutral-300 hover:bg-white/10 transition disabled:opacity-40">
+              <button onClick={() => { const next = !micEnabled; streamRef.current?.getAudioTracks().forEach((track) => { track.enabled = next; }); setMicEnabled(next); }} disabled={!cameraActive} className="px-3 py-2 rounded-lg bg-white border border-stone-300 text-xs text-stone-700 hover:bg-stone-50 transition disabled:opacity-40">
                 {micEnabled ? "Mic on" : "Mic off"}
               </button>
               {availableCameras.length > 0 && (
@@ -705,7 +705,7 @@ export default function Dashboard() {
                   value={cameraDevice}
                   onChange={(e) => changeCameraDevice(e.target.value)}
                   disabled={isStreaming}
-                  className="min-w-0 max-w-52 px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-xs text-white focus:outline-none disabled:opacity-50"
+                  className="min-w-0 max-w-52 px-3 py-2 bg-white border border-stone-300 rounded-lg text-xs text-stone-900 focus:outline-none focus:border-[#ff4a1d] disabled:opacity-50"
                 >
                   <option value="default">No camera detected</option>
                   {availableCameras.map((cam, i) => (
@@ -719,26 +719,26 @@ export default function Dashboard() {
                 value={resolution}
                 onChange={(e) => changeResolution(e.target.value)}
                 disabled={isStreaming}
-                className="px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-xs text-white focus:outline-none disabled:opacity-50"
+                className="px-3 py-2 bg-white border border-stone-300 rounded-lg text-xs text-stone-900 focus:outline-none focus:border-[#ff4a1d] disabled:opacity-50"
               >
                 <option value="720p">720p (AI optimized)</option>
               </select>
-              <button onClick={() => setLookModalOpen(true)} className="col-span-2 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-xs text-neutral-300 hover:bg-white/10 transition">
+              <button onClick={() => setLookModalOpen(true)} className="col-span-2 px-3 py-2 rounded-lg bg-white border border-stone-300 text-xs text-stone-700 hover:bg-stone-50 transition">
                 Switch look →
               </button>
             </div>
 
             {/* Live Chat */}
-            <div className="rounded-xl bg-[#111] border border-white/5 overflow-hidden">
-              <div className="p-3 border-b border-white/5 flex items-center justify-between">
-                <span className="text-xs font-semibold">Live chat</span>
-                <span className="text-[10px] text-neutral-500 px-2 py-0.5 rounded bg-white/5 flex items-center gap-1">
-                  <span className={`w-1.5 h-1.5 rounded-full ${isStreaming ? "bg-emerald-500" : "bg-neutral-500"}`} />
+            <div className="rounded-xl bg-white border border-stone-200 overflow-hidden">
+              <div className="p-3 border-b border-stone-200 flex items-center justify-between">
+                <span className="text-xs font-semibold text-stone-900">Live chat</span>
+                <span className="text-[10px] text-stone-500 px-2 py-0.5 rounded bg-stone-100 flex items-center gap-1">
+                  <span className={`w-1.5 h-1.5 rounded-full ${isStreaming ? "bg-emerald-500" : "bg-stone-400"}`} />
                   {isStreaming ? "Live" : "Offline"}
                 </span>
               </div>
               <div className="p-6 min-h-[200px] flex items-center justify-center">
-                <p className="text-xs text-neutral-500 text-center">
+                <p className="text-xs text-stone-500 text-center">
                   {isStreaming
                     ? "Chat is live. Share your watch link to get viewers."
                     : "Go live to open chat. Other creators will find you in Feed and can join your watch page."}
@@ -750,62 +750,62 @@ export default function Dashboard() {
           {/* Right Panel */}
           <div className="space-y-3">
             {/* Audience */}
-            <div className="p-4 rounded-xl bg-[#111] border border-white/5">
-              <h3 className="text-sm font-semibold mb-2">Audience</h3>
-              <p className="text-[11px] text-neutral-500 leading-relaxed mb-3">
+            <div className="p-4 rounded-xl bg-white border border-stone-200">
+              <h3 className="text-sm font-semibold text-stone-900 mb-2">Audience</h3>
+              <p className="text-[11px] text-stone-500 leading-relaxed mb-3">
                 When you go live, your stream appears in Feed and other creators can watch, chat, and
                 react in real time.
               </p>
-              <ul className="space-y-1 text-[11px] text-neutral-400 mb-3">
+              <ul className="space-y-1 text-[11px] text-stone-600 mb-3">
                 <li>Share your watch link from the chat panel</li>
                 <li>Switch look anytime for AI mode (uses credits)</li>
               </ul>
               <a
                 href="/feed"
-                className="block px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-xs text-center text-neutral-300 hover:bg-white/10 transition"
+                className="block px-3 py-2 rounded-lg bg-white border border-stone-300 text-xs text-center text-stone-700 hover:bg-stone-50 transition"
               >
                 Browse live creators
               </a>
             </div>
 
             {/* Stream Status */}
-            <div className="p-4 rounded-xl bg-[#111] border border-white/5">
-              <h3 className="text-sm font-semibold mb-3">Stream status</h3>
+            <div className="p-4 rounded-xl bg-white border border-stone-200">
+              <h3 className="text-sm font-semibold text-stone-900 mb-3">Stream status</h3>
               {isStreaming && reservedSeconds > 0 && (
                 <div className="mb-3">
-                  <div className="flex items-center justify-between text-[10px] text-neutral-500 mb-1">
+                  <div className="flex items-center justify-between text-[10px] text-stone-500 mb-1">
                     <span>Credits remaining</span>
                     <span>{formatTime(remainingSeconds)} / {formatTime(reservedSeconds)}</span>
                   </div>
-                  <div className="h-2 rounded-full bg-white/5 overflow-hidden">
+                  <div className="h-2 rounded-full bg-stone-200 overflow-hidden">
                     <div
                       className={`h-full rounded-full transition-all duration-1000 ${
-                        remainingSeconds <= 30 ? "bg-red-500" : remainingSeconds <= 60 ? "bg-amber-500" : "bg-indigo-500"
+                        remainingSeconds <= 30 ? "bg-red-500" : remainingSeconds <= 60 ? "bg-amber-500" : "bg-[#ff4a1d]"
                       }`}
                       style={{ width: `${reservedSeconds > 0 ? (remainingSeconds / reservedSeconds) * 100 : 0}%` }}
                     />
                   </div>
                   {remainingSeconds <= 30 && remainingSeconds > 0 && (
-                    <p className="text-[10px] text-red-400 mt-1">Stream will auto-end when credits run out</p>
+                    <p className="text-[10px] text-red-600 mt-1">Stream will auto-end when credits run out</p>
                   )}
                 </div>
               )}
               <div className="grid grid-cols-3 gap-2">
-                <div className="text-center p-2 rounded-lg bg-white/5">
-                  <div className="text-[10px] text-neutral-500 mb-0.5">AI Status</div>
+                <div className="text-center p-2 rounded-lg bg-stone-100">
+                  <div className="text-[10px] text-stone-500 mb-0.5">AI Status</div>
                   <div className={`text-xs font-semibold ${
-                    isDecartActiveRef.current ? "text-emerald-400" : isStreaming ? "text-amber-400" : "text-neutral-400"
+                    isDecartActiveRef.current ? "text-emerald-600" : isStreaming ? "text-amber-600" : "text-stone-500"
                   }`}>
                     {isDecartActiveRef.current ? "Generating" : isStreaming ? "Connecting" : "Offline"}
                   </div>
                 </div>
-                <div className="text-center p-2 rounded-lg bg-white/5">
-                  <div className="text-[10px] text-neutral-500 mb-0.5">Elapsed</div>
-                  <div className="text-xs font-semibold text-white">{formatTime(streamDuration)}</div>
+                <div className="text-center p-2 rounded-lg bg-stone-100">
+                  <div className="text-[10px] text-stone-500 mb-0.5">Elapsed</div>
+                  <div className="text-xs font-semibold text-stone-900">{formatTime(streamDuration)}</div>
                 </div>
-                <div className="text-center p-2 rounded-lg bg-white/5">
-                  <div className="text-[10px] text-neutral-500 mb-0.5">Viewers</div>
-                  <div className="text-xs font-semibold text-white">{viewerCount || "—"}</div>
+                <div className="text-center p-2 rounded-lg bg-stone-100">
+                  <div className="text-[10px] text-stone-500 mb-0.5">Viewers</div>
+                  <div className="text-xs font-semibold text-stone-900">{viewerCount || "—"}</div>
                 </div>
               </div>
               <button
@@ -813,7 +813,7 @@ export default function Dashboard() {
                 className={`w-full mt-3 py-2.5 rounded-lg text-sm font-medium transition ${
                   isStreaming
                     ? "bg-red-500 hover:bg-red-600 text-white"
-                    : "bg-indigo-500 hover:bg-indigo-600 text-white shadow-[0_0_18px_rgba(59,130,246,0.18)]"
+                    : "bg-[#ff4a1d] hover:bg-[#e84314] text-white shadow-[0_6px_16px_-8px_rgba(255,74,29,0.6)]"
                 }`}
               >
                 {isStreaming ? "Stop" : cameraActive ? "Go Live" : "Start camera"}
@@ -821,13 +821,13 @@ export default function Dashboard() {
             </div>
 
             {/* AI Look */}
-            <div className="p-4 rounded-xl bg-[#111] border border-white/5">
-              <h3 className="text-sm font-semibold mb-2">AI look</h3>
+            <div className="p-4 rounded-xl bg-white border border-stone-200">
+              <h3 className="text-sm font-semibold text-stone-900 mb-2">AI look</h3>
               <div className="flex items-center gap-2 mb-3">
-                <span className="px-2 py-0.5 rounded bg-white/5 text-[11px] text-neutral-300 border border-white/10">
+                <span className="px-2 py-0.5 rounded bg-stone-100 text-[11px] text-stone-600 border border-stone-200">
                   {MODES.find((m) => m.id === activeMode)?.label || "Natural"}
                 </span>
-                <span className="text-[11px] text-neutral-500">
+                <span className="text-[11px] text-stone-500">
                   {isStreaming ? "AI active — uses credits" : "Real camera — no credits used"}
                 </span>
               </div>
@@ -839,8 +839,8 @@ export default function Dashboard() {
                     disabled={isStreaming}
                     className={`w-full text-left px-3 py-1.5 rounded text-xs transition ${
                       activeMode === m.id
-                        ? "bg-indigo-500/15 text-indigo-400"
-                        : "text-neutral-400 hover:text-white hover:bg-white/5"
+                        ? "bg-[#ff4a1d]/10 text-[#e84314] font-medium"
+                        : "text-stone-500 hover:text-stone-900 hover:bg-stone-100"
                     } disabled:cursor-not-allowed disabled:opacity-50`}
                   >
                     {m.label}
@@ -850,14 +850,14 @@ export default function Dashboard() {
             </div>
 
             {/* OBS Output */}
-            <div className="p-4 rounded-xl bg-[#111] border border-white/5">
-              <h3 className="text-sm font-semibold mb-2">OBS output</h3>
-              <p className="text-[11px] text-neutral-500 mb-3">
+            <div className="p-4 rounded-xl bg-white border border-stone-200">
+              <h3 className="text-sm font-semibold text-stone-900 mb-2">OBS output</h3>
+              <p className="text-[11px] text-stone-500 mb-3">
                 Send your AI program into OBS, Zoom, or Meet via Browser Source.
               </p>
               <a
                 href="/ai-obs"
-                className="block px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-xs text-center text-neutral-300 hover:bg-white/10 transition"
+                className="block px-3 py-2 rounded-lg bg-white border border-stone-300 text-xs text-center text-stone-700 hover:bg-stone-50 transition"
               >
                 Open AI & OBS →
               </a>
@@ -866,25 +866,25 @@ export default function Dashboard() {
         </div>
 
         {/* Live Now (bottom) */}
-        <div className="rounded-xl bg-[#111] border border-white/5 overflow-hidden">
-          <div className="p-3 border-b border-white/5 flex items-center justify-between">
-            <span className="text-xs font-semibold">Live now</span>
-            <a href="/feed" className="text-[11px] text-indigo-400 hover:text-indigo-300">View feed</a>
+        <div className="rounded-xl bg-white border border-stone-200 overflow-hidden">
+          <div className="p-3 border-b border-stone-200 flex items-center justify-between">
+            <span className="text-xs font-semibold text-stone-900">Live now</span>
+            <a href="/feed" className="text-[11px] text-[#e84314] hover:text-[#c73608] font-medium">View feed</a>
           </div>
           <div className="p-6">
-            <p className="text-xs text-neutral-500 mb-2">
+            <p className="text-xs text-stone-500 mb-2">
               Watch and chat with creators streaming on Savatar right now.
             </p>
-            <p className="text-xs text-neutral-600 mb-3">No other creators are live. Go live and appear here for others.</p>
+            <p className="text-xs text-stone-500 mb-3">No other creators are live. Go live and appear here for others.</p>
             <a
               href="/feed"
-              className="block px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-xs text-center text-neutral-300 hover:bg-white/10 transition"
+              className="block px-3 py-2 rounded-lg bg-white border border-stone-300 text-xs text-center text-stone-700 hover:bg-stone-50 transition"
             >
               Open Feed for more →
             </a>
           </div>
         </div>
-        {lookModalOpen && <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4 backdrop-blur-sm"><div className="w-full max-w-md rounded-2xl border border-indigo-400/30 bg-[#111827] p-5"><div className="flex justify-between"><h2 className="font-semibold">Your saved looks</h2><button onClick={() => setLookModalOpen(false)}>×</button></div><p className="mt-1 text-xs text-neutral-400">Saved only in this browser.</p>{referenceImage && <div className="relative mt-4 h-28 w-28"><img src={referenceImage} alt="Saved look" className="h-full w-full rounded-lg object-cover"/><button onClick={removeReferenceImage} aria-label="Delete saved image" className="absolute -right-2 -top-2 grid h-6 w-6 place-items-center rounded-full bg-red-500 text-xs font-bold text-white shadow-lg">×</button></div>}<input ref={lookInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => saveReferenceImage(e.target.files?.[0])}/><button onClick={() => lookInputRef.current?.click()} className="mt-4 rounded-lg bg-indigo-500 px-4 py-2 text-sm">{referenceImage ? "Upload another image" : "Upload image"}</button></div></div>}
+        {lookModalOpen && <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4 backdrop-blur-sm"><div className="w-full max-w-md rounded-2xl border border-stone-200 bg-white p-5 shadow-xl"><div className="flex justify-between"><h2 className="font-semibold text-stone-900">Your saved looks</h2><button onClick={() => setLookModalOpen(false)} className="text-stone-500 hover:text-stone-900 text-lg leading-none">×</button></div><p className="mt-1 text-xs text-stone-500">Saved only in this browser.</p>{referenceImage && <div className="relative mt-4 h-28 w-28"><img src={referenceImage} alt="Saved look" className="h-full w-full rounded-lg object-cover"/><button onClick={removeReferenceImage} aria-label="Delete saved image" className="absolute -right-2 -top-2 grid h-6 w-6 place-items-center rounded-full bg-red-500 text-xs font-bold text-white shadow-lg">×</button></div>}<input ref={lookInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => saveReferenceImage(e.target.files?.[0])}/><button onClick={() => lookInputRef.current?.click()} className="mt-4 rounded-lg bg-[#ff4a1d] hover:bg-[#e84314] px-4 py-2 text-sm text-white">{referenceImage ? "Upload another image" : "Upload image"}</button></div></div>}
       </div>
     </DashboardLayout>
   );

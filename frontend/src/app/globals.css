@@ -1,14 +1,14 @@
 @import "tailwindcss";
 
 :root {
-  --background: #0a0a0a;
-  --foreground: #fafafa;
-  --accent: #6366f1;
-  --accent-hover: #4f46e5;
-  --surface: #141414;
-  --surface-hover: #1c1c1c;
-  --border: #262626;
-  --text-muted: #737373;
+  --background: #faf9f7;
+  --foreground: #1c1917;
+  --accent: #ff4a1d;
+  --accent-hover: #e84314;
+  --surface: #ffffff;
+  --surface-hover: #f4f1ed;
+  --border: #e7e5e4;
+  --text-muted: #78716c;
 }
 
 * {
@@ -26,12 +26,12 @@ body {
 }
 
 select {
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 select option {
-  background: #111;
-  color: #fff;
+  background: #fff;
+  color: #1c1917;
 }
 
 .font-display {
@@ -41,7 +41,7 @@ select option {
 /* Scrollbar */
 ::-webkit-scrollbar { width: 5px; }
 ::-webkit-scrollbar-track { background: var(--background); }
-::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+::-webkit-scrollbar-thumb { background: #d6d3d1; border-radius: 3px; }
 
 /* Camera feed styles */
 .video-feed {
@@ -65,12 +65,75 @@ select option {
   animation: pulse-live 1.5s ease-in-out infinite;
 }
 
-/* Subtle glow for active elements */
+/* Subtle accent for active elements */
 .glow {
-  box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.2), 0 4px 24px rgba(99, 102, 241, 0.08);
+  box-shadow: 0 0 0 1px rgba(255, 74, 29, 0.25), 0 4px 20px rgba(255, 74, 29, 0.1);
 }
 
 /* Safe area for iPhone notch */
 .safe-area-bottom {
   padding-bottom: env(safe-area-inset-bottom, 0);
+}
+
+/* Hide scrollbars on horizontally scrolling tab strips while keeping them swipeable */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* ── Dark mode (smart inversion theme) ──────────────────────────
+   The app uses hardcoded light colors, so dark mode inverts the whole
+   canvas. `.app-root` is a fixed, full-viewport scroll container: applying
+   the filter there keeps position:fixed children (navbars, modals, menus)
+   anchored to the viewport instead of the tall document. */
+.app-root {
+  position: fixed;
+  inset: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+html.dark {
+  color-scheme: dark;
+  background: #0d0c0a;
+}
+
+html.dark body {
+  background: #0d0c0a;
+}
+
+html.dark .app-root {
+  filter: invert(1) hue-rotate(180deg);
+}
+
+/* Media and inherently-dark surfaces are inverted a second time so they
+   keep their true colors inside the dark theme. */
+html.dark .app-root :is(img, video, iframe, canvas) {
+  filter: invert(1) hue-rotate(180deg);
+}
+
+/* Video stages, full-screen player pages and the splash are deliberately
+   dark in BOTH themes — undo the inversion for those subtrees. */
+html.dark .force-dark {
+  filter: invert(1) hue-rotate(180deg);
+}
+
+html.dark .force-dark :is(img, video, iframe, canvas) {
+  filter: none;
+}
+
+html.dark select option {
+  background: #1c1a17;
+  color: #f5f2ef;
+}
+
+html.dark ::-webkit-scrollbar-track {
+  background: #0d0c0a;
+}
+
+html.dark ::-webkit-scrollbar-thumb {
+  background: #3a3531;
 }

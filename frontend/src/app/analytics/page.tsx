@@ -23,15 +23,15 @@ export default function AnalyticsPage() {
         {/* Stats Cards */}
         <div className="grid grid-cols-2 gap-2 mb-5 sm:gap-3 md:grid-cols-4">
           {[
-            { label: "Credits purchased", value: totalPurchased + "m", sub: "All time", color: "text-white" },
-            { label: "AI usage", value: totalUsed + "m", sub: "All time", color: "text-white" },
-            { label: "Sessions", value: String(usage.length), sub: "Recorded", color: "text-emerald-400" },
-            { label: "Credits Left", value: balanceMinutes + "m", sub: "Available", color: "text-white" },
+            { label: "Credits purchased", value: totalPurchased + "m", sub: "All time", color: "text-stone-900" },
+            { label: "AI usage", value: totalUsed + "m", sub: "All time", color: "text-stone-900" },
+            { label: "Sessions", value: String(usage.length), sub: "Recorded", color: "text-emerald-600" },
+            { label: "Credits Left", value: balanceMinutes + "m", sub: "Available", color: "text-stone-900" },
           ].map((stat) => (
-            <div key={stat.label} className="min-w-0 p-3 sm:p-4 rounded-xl bg-[#111] border border-white/5">
-              <div className="text-[10px] text-neutral-500 uppercase tracking-wider leading-none mb-2">{stat.label}</div>
+            <div key={stat.label} className="min-w-0 p-3 sm:p-4 rounded-xl bg-white border border-stone-200">
+              <div className="text-[10px] text-stone-500 uppercase tracking-wider leading-none mb-2">{stat.label}</div>
               <div className={`font-display text-xl font-bold ${stat.color}`}>{stat.value}</div>
-              <div className="text-[11px] text-neutral-500 mt-0.5">{stat.sub}</div>
+              <div className="text-[11px] text-stone-500 mt-0.5">{stat.sub}</div>
             </div>
           ))}
         </div>
@@ -39,15 +39,15 @@ export default function AnalyticsPage() {
         {/* Charts */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Viewers over time */}
-          <div className="p-5 rounded-xl bg-[#111] border border-white/5">
+          <div className="p-5 rounded-xl bg-white border border-stone-200">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-semibold">Recent AI usage</h3>
+              <h3 className="text-sm font-semibold text-stone-900">Recent AI usage</h3>
             </div>
             <div className="flex items-end gap-1.5 h-40">
               {(usage.length ? usage : [0]).map((v, i) => (
                 <div
                   key={i}
-                  className="flex-1 bg-indigo-500/40 rounded-t"
+                  className="flex-1 bg-[#ff4a1d]/50 rounded-t"
                   style={{ height: `${(v / maxUsage) * 100}%`, minHeight: "4px" }}
                 />
               ))}
@@ -55,15 +55,15 @@ export default function AnalyticsPage() {
           </div>
 
           {/* AI usage (last 12 streams) */}
-          <div className="p-5 rounded-xl bg-[#111] border border-white/5">
+          <div className="p-5 rounded-xl bg-white border border-stone-200">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-semibold">Wallet summary</h3>
+              <h3 className="text-sm font-semibold text-stone-900">Wallet summary</h3>
             </div>
-            <div className="grid grid-cols-2 gap-3 text-sm text-neutral-300"><div>Purchased <strong className="block text-xl text-white">{totalPurchased}m</strong></div><div>Used <strong className="block text-xl text-white">{totalUsed}m</strong></div><div>Available <strong className="block text-xl text-indigo-400">{balanceMinutes}m</strong></div></div>
+            <div className="grid grid-cols-2 gap-3 text-sm text-stone-600"><div>Purchased <strong className="block text-xl text-stone-900">{totalPurchased}m</strong></div><div>Used <strong className="block text-xl text-stone-900">{totalUsed}m</strong></div><div>Available <strong className="block text-xl text-[#e84314]">{balanceMinutes}m</strong></div></div>
           </div>
         </div>
 
-        <p className="text-[11px] text-neutral-600 mt-4">
+        <p className="text-[11px] text-stone-500 mt-4">
           Analytics are based on your wallet and recorded AI sessions. Audience metrics appear when viewer tracking is available.
         </p>
       </div>

@@ -14,9 +14,9 @@ export default function TermsPage() {
       title="Terms of Service"
       description="These terms govern your access to Savatar, an AI live-creation service operated by SaffulTech, also referred to as Safful in these terms."
     >
-      <div className="rounded-2xl border border-indigo-300/20 bg-indigo-400/8 p-6 text-sm leading-6 text-neutral-300">
+      <div className="rounded-2xl border border-[#ff4a1d]/20 bg-[#ff4a1d]/8 p-6 text-sm leading-6 text-stone-600">
         By creating an account, buying credits, or using Savatar, you agree to these Terms of Service and our{" "}
-        <Link href="/privacy" className="font-semibold text-indigo-300 hover:text-indigo-200">Privacy Policy</Link>.
+        <Link href="/privacy" className="font-semibold text-[#e84314] hover:text-[#c73608]">Privacy Policy</Link>.
       </div>
 
       <LegalSection id="service" title="1. The service">
@@ -80,7 +80,7 @@ export default function TermsPage() {
       </LegalSection>
 
       <LegalSection id="contact" title="14. Contact">
-        <p>Savatar is operated by SaffulTech (Safful), Ghana. Questions, account-deletion requests, payment disputes, and legal notices may be sent to <a href="mailto:safful652@gmail.com" className="font-semibold text-indigo-300 hover:text-indigo-200">safful652@gmail.com</a>.</p>
+        <p>Savatar is operated by SaffulTech (Safful), Ghana. Questions, account-deletion requests, payment disputes, and legal notices may be sent to <a href="mailto:safful652@gmail.com" className="font-semibold text-[#e84314] hover:text-[#c73608]">safful652@gmail.com</a>.</p>
       </LegalSection>
     </LegalPage>
   );

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
+import ThemeToggle from "@/components/ThemeToggle";
 
 const NAV_ITEMS = [
   {
@@ -97,23 +98,26 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   if (authLoading || !user) {
     return (
-      <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
-        <div className="text-neutral-500 text-sm">Loading...</div>
+      <div className="min-h-screen bg-[#faf9f7] flex items-center justify-center">
+        <div className="text-stone-500 text-sm">Loading...</div>
       </div>
     );
   }
 
   const balanceMinutes = ((userData?.wallet?.balanceSeconds || 0) / 60).toFixed(1);
   const plan = userData?.plan || "Standard";
+  const currentSection = NAV_ITEMS.find((item) => item.href === pathname)?.label ?? "";
+  const userInitial = (user.email?.[0] || "S").toUpperCase();
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-white flex flex-col">
+    <div className="min-h-screen bg-[#f4f1ed] text-stone-900 flex flex-col">
       {/* Top Status Bar */}
-      <header className="flex items-stretch gap-2 px-2 sm:px-4 py-2 border-b border-white/5 bg-[#0a0a0a]">
+      <header className="flex items-center gap-2 sm:gap-3 px-2 sm:px-4 py-2 border-b border-stone-200 bg-white">
         {/* Mobile hamburger */}
         <button
           onClick={() => setSidebarOpen(!sidebarOpen)}
-          className="lg:hidden flex items-center justify-center w-10 h-10 rounded-xl bg-[#111] border border-white/5 text-neutral-400 hover:text-white transition flex-shrink-0"
+          aria-label="Toggle navigation"
+          className="lg:hidden flex items-center justify-center w-9 h-9 rounded-lg bg-white border border-stone-200 text-stone-600 hover:text-stone-900 transition flex-shrink-0"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             {sidebarOpen ? (
@@ -124,26 +128,47 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </svg>
         </button>
 
-        {/* Status cards - responsive grid */}
-        <div className="ml-auto flex items-stretch gap-2 sm:ml-0 sm:flex-1 sm:grid sm:grid-cols-2 lg:grid-cols-4">
-          <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-[#111] border border-white/5 min-w-0">
-            <span className="text-[9px] sm:text-[10px] text-neutral-500 uppercase tracking-wider leading-none whitespace-nowrap">Credits</span>
-            <span className="font-display text-sm sm:text-lg font-bold leading-none truncate">{balanceMinutes}m</span>
-          </div>
-          <div className="hidden sm:flex items-center gap-2 px-3 py-2 rounded-xl bg-[#111] border border-white/5 min-w-0">
-            <span className="text-[9px] sm:text-[10px] text-neutral-500 uppercase tracking-wider leading-none whitespace-nowrap">Plan</span>
-            <span className="font-display text-sm sm:text-lg font-bold leading-none truncate">{plan}</span>
-          </div>
-          <div className="hidden sm:flex items-center gap-2 px-3 py-2 rounded-xl bg-[#111] border border-white/5 min-w-0">
-            <span className="text-[9px] sm:text-[10px] text-neutral-500 uppercase tracking-wider leading-none whitespace-nowrap">System</span>
-            <div className="flex items-center gap-1">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0" />
-              <span className="font-display text-sm sm:text-lg font-bold leading-none">Ready</span>
+        <ThemeToggle className="border border-stone-200 bg-white text-stone-600 hover:text-stone-900 flex-shrink-0" />
+
+        {/* Current section eyebrow */}
+        <div className="hidden md:flex items-center gap-2 min-w-0 flex-shrink-0">
+          <span className="w-1.5 h-1.5 rounded-[3px] bg-[#ff4a1d]" />
+          <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-stone-400 truncate">{currentSection}</span>
+        </div>
+
+        {/* Status deck — one ink console strip instead of scattered pills */}
+        <div className="ml-auto flex items-stretch min-w-0 overflow-hidden rounded-xl bg-[#1c1917] text-white shadow-[0_4px_18px_-10px_rgba(28,25,23,0.55)]">
+          {/* Credits — always visible */}
+          <div className="flex items-center gap-2.5 px-3 sm:px-3.5 py-1.5 whitespace-nowrap">
+            <div className="flex flex-col gap-0.5 leading-none">
+              <span className="text-[8px] font-bold uppercase tracking-[0.2em] text-stone-400">Credits</span>
+              <span className="font-display text-sm sm:text-base font-extrabold leading-none tracking-tight">{balanceMinutes}m</span>
             </div>
           </div>
-          <div className="hidden md:flex items-center gap-2 px-3 py-2 rounded-xl bg-[#111] border border-white/5 min-w-0">
-            <span className="text-[10px] text-neutral-500 uppercase tracking-wider leading-none whitespace-nowrap">User</span>
-            <span className="text-sm font-medium truncate">{user.email}</span>
+
+          {/* Plan — sm+ */}
+          <div className="hidden sm:flex items-center px-3.5 py-1.5 border-l border-white/10 whitespace-nowrap">
+            <div className="flex flex-col gap-0.5 leading-none">
+              <span className="text-[8px] font-bold uppercase tracking-[0.2em] text-stone-400">Plan</span>
+              <span className="text-[13px] font-bold leading-none capitalize">{plan}</span>
+            </div>
+          </div>
+
+          {/* System — md+ */}
+          <div className="hidden md:flex items-center px-3.5 py-1.5 border-l border-white/10 whitespace-nowrap">
+            <div className="flex flex-col gap-1 leading-none">
+              <span className="text-[8px] font-bold uppercase tracking-[0.2em] text-stone-400">System</span>
+              <span className="flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 live-pulse" />
+                <span className="text-[9px] font-bold uppercase tracking-[0.16em] text-emerald-300">Ready</span>
+              </span>
+            </div>
+          </div>
+
+          {/* User — lg+ */}
+          <div className="hidden lg:flex items-center gap-2.5 px-3.5 py-1.5 border-l border-white/10 min-w-0">
+            <span className="grid place-items-center w-6 h-6 rounded-full bg-[#ff4a1d]/20 text-[#ff8a68] text-[11px] font-bold uppercase flex-shrink-0">{userInitial}</span>
+            <span className="text-[11px] font-medium text-stone-200 truncate max-w-[150px]">{user.email}</span>
           </div>
         </div>
       </header>
@@ -160,19 +185,19 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         {/* Left Sidebar */}
         <aside
-          className={`fixed lg:static inset-y-0 left-0 z-40 w-56 flex-shrink-0 border-r border-white/5 bg-[#0a0a0a] flex flex-col transition-transform duration-200 ${
+          className={`fixed lg:static inset-y-0 left-0 z-40 w-56 flex-shrink-0 border-r border-stone-200 bg-white flex flex-col transition-transform duration-200 ${
             sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
           }`}
         >
           {/* Logo */}
-          <div className="px-4 py-3 border-b border-white/5 flex items-center justify-between">
+          <div className="px-4 py-3 border-b border-stone-200 flex items-center justify-between">
             <Link href="/" className="flex items-center gap-2">
               <img src="/logo.svg" alt="Savatar" className="w-7 h-7" />
-              <span className="font-semibold text-sm">Savatar</span>
+              <span className="font-semibold text-sm text-stone-900">Savatar</span>
             </Link>
             <button
               onClick={() => setSidebarOpen(false)}
-              className="lg:hidden p-1 rounded text-neutral-400 hover:text-white"
+              className="lg:hidden p-1 rounded text-neutral-400 hover:text-stone-900"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -190,8 +215,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   href={item.href}
                   className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition ${
                     isActive
-                      ? "bg-white/10 text-white font-medium"
-                      : "text-neutral-400 hover:bg-white/5 hover:text-white"
+                      ? "bg-[#ff4a1d]/10 text-[#e84314] font-semibold"
+                      : "text-stone-500 hover:bg-stone-100 hover:text-stone-900"
                   }`}
                 >
                   <span className="flex-shrink-0">{item.icon}</span>
@@ -202,9 +227,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </nav>
 
           {/* Community */}
-          <div className="px-3 py-3 border-t border-white/5 hidden sm:block">
-            <div className="text-xs font-semibold text-white mb-1">Community</div>
-            <p className="text-[10px] text-neutral-500 mb-2">Join our groups for updates and support.</p>
+          <div className="px-3 py-3 border-t border-stone-200 hidden sm:block">
+            <div className="text-xs font-semibold text-stone-900 mb-1">Community</div>
+            <p className="text-[10px] text-stone-500 mb-2">Join our groups for updates and support.</p>
             <div className="space-y-1.5">
               <a href="https://t.me/saf_ful" target="_blank" rel="noreferrer" className="block px-3 py-2 rounded-lg bg-blue-500 hover:bg-blue-600 text-white text-[11px] font-medium text-center transition">
                 Message on Telegram
@@ -222,7 +247,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 logout();
                 router.push("/login");
               }}
-              className="w-full px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-neutral-300 text-xs font-medium text-center transition"
+              className="w-full px-3 py-2 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-medium text-center transition"
             >
               Log out
             </button>

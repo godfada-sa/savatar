@@ -131,9 +131,9 @@ export default function AiObsPage() {
       <div className="p-3 sm:p-6 space-y-4">
         {/* Error banner */}
         {(error || !cameraActive) && (
-          <div className="mb-4 p-4 rounded-xl bg-red-950/30 border border-red-500/20">
-            <div className="text-sm font-semibold text-red-400">Streaming error</div>
-            <div className="text-xs text-red-300/70 mt-0.5">
+          <div className="mb-4 p-4 rounded-xl bg-red-50 border border-red-200">
+            <div className="text-sm font-semibold text-red-600">Streaming error</div>
+            <div className="text-xs text-red-500 mt-0.5">
               {error || "Start your camera to preview and stream."}
             </div>
           </div>
@@ -145,12 +145,12 @@ export default function AiObsPage() {
             {/* Video Feeds */}
             <div className="grid grid-cols-1 items-center gap-4 xl:grid-cols-[minmax(260px,0.65fr)_44px_minmax(0,1.65fr)]">
               {/* Camera Input */}
-              <div className="rounded-xl bg-[#111] border border-white/5 overflow-hidden">
-                <div className="p-3 border-b border-white/5 flex items-center justify-between">
-                  <span className="text-xs font-semibold">Camera Input</span>
-                  <span className="text-[10px] text-neutral-500 px-2 py-0.5 rounded bg-white/5">Private</span>
+              <div className="rounded-xl bg-white border border-stone-200 overflow-hidden">
+                <div className="p-3 border-b border-stone-200 flex items-center justify-between">
+                  <span className="text-xs font-semibold text-stone-900">Camera Input</span>
+                  <span className="text-[10px] text-stone-500 px-2 py-0.5 rounded bg-stone-100">Private</span>
                 </div>
-                <div className="relative aspect-[4/3] sm:aspect-video bg-[#0a0a0a]">
+                <div className="force-dark relative aspect-[4/3] sm:aspect-video bg-[#0a0a0a]">
                   <video ref={videoRef} autoPlay muted playsInline className="w-full h-full object-cover" />
                   {!cameraActive && (
                     <div className="absolute inset-0 flex flex-col items-center justify-center text-neutral-600">
@@ -164,49 +164,49 @@ export default function AiObsPage() {
                     Your camera
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-2 p-2 border-t border-white/5">
-                  <button onClick={cameraActive ? stopCamera : startCamera} className="px-3 py-2.5 rounded-lg bg-white/5 border border-indigo-500/50 text-xs text-neutral-200">{cameraActive ? "Stop camera" : "Camera"}</button>
-                  <button onClick={toggleMic} disabled={!cameraActive} className="px-3 py-2.5 rounded-lg bg-white/5 border border-indigo-500/50 text-xs text-neutral-200 disabled:opacity-40">Mic</button>
+                <div className="grid grid-cols-2 gap-2 p-2 border-t border-stone-200">
+                  <button onClick={cameraActive ? stopCamera : startCamera} className="px-3 py-2.5 rounded-lg bg-white border border-stone-300 text-xs text-stone-700 hover:bg-stone-50">{cameraActive ? "Stop camera" : "Camera"}</button>
+                  <button onClick={toggleMic} disabled={!cameraActive} className="px-3 py-2.5 rounded-lg bg-white border border-stone-300 text-xs text-stone-700 hover:bg-stone-50 disabled:opacity-40">Mic</button>
                 </div>
               </div>
 
-              <div className="flex items-center justify-center text-indigo-400">
+              <div className="flex items-center justify-center text-[#e84314]">
                 <div className="flex items-center gap-2 xl:flex-col xl:gap-1">
-                  <div className="h-px w-12 bg-indigo-400/30 xl:hidden" />
-                  <svg className="h-6 w-6 drop-shadow-[0_0_8px_rgba(96,165,250,0.45)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div className="h-px w-12 bg-[#ff4a1d]/30 xl:hidden" />
+                  <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
                   </svg>
-                  <span className="text-[9px] uppercase tracking-wider text-blue-300/70">Stream</span>
-                  <div className="h-px w-12 bg-indigo-400/30 xl:hidden" />
+                  <span className="text-[9px] uppercase tracking-wider text-stone-400">Stream</span>
+                  <div className="h-px w-12 bg-[#ff4a1d]/30 xl:hidden" />
                 </div>
               </div>
 
               {/* AI Output */}
-              <div className="overflow-hidden rounded-xl border border-blue-400/20 bg-[#111] shadow-[0_0_38px_rgba(37,99,235,0.10)]">
-                <div className="p-3 border-b border-white/5 flex items-center justify-between">
-                  <span className="text-xs font-semibold">AI program output</span>
-                  <span className="text-[10px] px-2 py-0.5 rounded text-neutral-500 bg-white/5">
+              <div className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm">
+                <div className="p-3 border-b border-stone-200 flex items-center justify-between">
+                  <span className="text-xs font-semibold text-stone-900">AI program output</span>
+                  <span className="text-[10px] px-2 py-0.5 rounded text-stone-500 bg-stone-100">
                     OBS monitor
                   </span>
                 </div>
-                <div className="relative aspect-[4/3] min-h-[280px] bg-gradient-to-br from-[#0c1d3b] via-[#08213b] to-[#030811] sm:aspect-video xl:min-h-[440px]">
+                <div className="force-dark relative aspect-[4/3] min-h-[280px] bg-gradient-to-br from-[#0c1d3b] via-[#08213b] to-[#030811] sm:aspect-video xl:min-h-[440px]">
                   {obsUrl && <iframe title="AI program output monitor" src={`${obsUrl}?muted=1`} className="absolute inset-0 h-full w-full border-0" allow="autoplay" />}
                 </div>
-                <div className="grid grid-cols-[1fr_auto] gap-2 p-2 border-t border-white/5">
+                <div className="grid grid-cols-[1fr_auto] gap-2 p-2 border-t border-stone-200">
                   <button
                     onClick={() => {
                       if ((userData?.wallet?.balanceSeconds ?? 0) < 60) { window.location.href = "/credits"; return; }
                       stopCamera();
                       window.open("/dashboard?start=1", "savatar-studio");
                     }}
-                    className="px-4 py-1.5 rounded-lg text-xs font-medium transition bg-indigo-500 hover:bg-indigo-600 text-white"
+                    className="px-4 py-1.5 rounded-lg text-xs font-medium transition bg-[#ff4a1d] hover:bg-[#e84314] text-white"
                   >
                     {(userData?.wallet?.balanceSeconds ?? 0) < 60 ? "Buy credits" : "Start Stream"}
                   </button>
                   <select
                     value={resolution}
                     onChange={(e) => changeResolution(e.target.value)}
-                    className="px-3 py-1.5 bg-white/5 border border-white/10 rounded-lg text-xs text-white focus:outline-none"
+                    className="px-3 py-1.5 bg-white border border-stone-300 rounded-lg text-xs text-stone-900 focus:outline-none"
                   >
                     <option value="720p">720p</option>
                     <option value="1080p">1080p</option>
@@ -216,9 +216,9 @@ export default function AiObsPage() {
             </div>
 
             {/* Backgrounds */}
-            <div className="p-4 rounded-xl bg-[#111] border border-white/5">
-              <h3 className="text-sm font-semibold mb-1">Backgrounds</h3>
-              <p className="text-[11px] text-neutral-500 mb-3">
+            <div className="p-4 rounded-xl bg-white border border-stone-200">
+              <h3 className="text-sm font-semibold text-stone-900 mb-1">Backgrounds</h3>
+              <p className="text-[11px] text-stone-500 mb-3">
                 Choose a scene here, then select Start Stream to launch the AI output.
               </p>
               <div className="-mx-1 mb-4 flex gap-2 overflow-x-auto px-1 pb-1 scrollbar-none">
@@ -227,7 +227,7 @@ export default function AiObsPage() {
                     key={cat}
                     onClick={() => setBgCategory(cat)}
                     className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition ${
-                      bgCategory === cat ? "bg-indigo-500 text-white" : "bg-white/5 text-neutral-400 hover:text-white"
+                      bgCategory === cat ? "bg-[#ff4a1d] text-white" : "bg-stone-100 text-stone-500 hover:text-stone-900"
                     }`}
                   >
                     {cat.charAt(0).toUpperCase() + cat.slice(1)}
@@ -241,28 +241,28 @@ export default function AiObsPage() {
                     onClick={() => selectBackground(bg)}
                     className={`group relative aspect-[4/3] overflow-hidden rounded-xl border text-left transition ${
                       selectedBg === bg.id
-                        ? "border-indigo-400 ring-2 ring-indigo-500/30"
-                        : "border-white/10 bg-white/5 hover:-translate-y-0.5 hover:border-white/25"
+                        ? "border-[#ff4a1d] ring-2 ring-[#ff4a1d]/30"
+                        : "border-stone-200 bg-white hover:-translate-y-0.5 hover:border-stone-400"
                     }`}
                   >
                     {bg.image ? (
                       <img src={bg.image} alt={bg.name} loading="lazy" className="h-full w-full object-cover transition duration-300 group-hover:scale-105" />
                     ) : (
-                      <div className="grid h-full w-full place-items-center bg-gradient-to-br from-slate-800 to-slate-950 text-xs text-neutral-400">Your camera</div>
+                      <div className="grid h-full w-full place-items-center bg-stone-200 text-xs text-stone-400">Your camera</div>
                     )}
                     <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black via-black/70 to-transparent px-3 pb-2 pt-8">
                       <span className="block text-[11px] font-medium leading-tight text-white">{bg.name}</span>
-                      <span className="text-[9px] capitalize text-neutral-400">{bg.id === "original" ? "Camera" : bg.category}</span>
+                      <span className="text-[9px] capitalize text-neutral-300">{bg.id === "original" ? "Camera" : bg.category}</span>
                     </div>
-                    {selectedBg === bg.id && <span className="absolute right-2 top-2 grid h-6 w-6 place-items-center rounded-full bg-indigo-500 text-xs text-white shadow-lg">✓</span>}
+                    {selectedBg === bg.id && <span className="absolute right-2 top-2 grid h-6 w-6 place-items-center rounded-full bg-[#ff4a1d] text-xs text-white shadow-lg">✓</span>}
                   </button>
                 ))}
               </div>
             </div>
 
             {/* Choose Your Look */}
-            <div className="p-4 rounded-xl bg-[#111] border border-white/5">
-              <h3 className="text-sm font-semibold mb-3">Choose your look</h3>
+            <div className="p-4 rounded-xl bg-white border border-stone-200">
+              <h3 className="text-sm font-semibold text-stone-900 mb-3">Choose your look</h3>
               <div className="flex flex-col sm:flex-row sm:items-center gap-4">
                 <div className="flex gap-2">
                   {["default", "anime", "cyberpunk", "ghibli"].map((look) => (
@@ -271,16 +271,16 @@ export default function AiObsPage() {
                       onClick={() => selectLook(look)}
                       className={`w-16 h-16 rounded-lg border text-center flex flex-col items-center justify-center gap-1 transition ${
                         selectedLook === look
-                          ? "border-indigo-500 bg-indigo-500/10"
-                          : "border-white/5 bg-white/5 hover:border-white/10"
+                          ? "border-[#ff4a1d] bg-[#ff4a1d]/10"
+                          : "border-stone-200 bg-stone-50 hover:border-stone-400"
                       }`}
                     >
-                      <span className="text-lg">{look === "default" ? "DF" : look[0].toUpperCase()}</span>
-                      <span className="text-[9px] text-neutral-400 capitalize">{look}</span>
+                      <span className="text-lg text-stone-900">{look === "default" ? "DF" : look[0].toUpperCase()}</span>
+                      <span className="text-[9px] text-stone-500 capitalize">{look}</span>
                     </button>
                   ))}
                 </div>
-                <button onClick={() => setLookModalOpen(true)} className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-sm text-neutral-200 transition">
+                <button onClick={() => setLookModalOpen(true)} className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-3 bg-white hover:bg-stone-50 border border-stone-300 rounded-lg text-sm text-stone-700 transition">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                   </svg>
@@ -293,50 +293,50 @@ export default function AiObsPage() {
           {/* Sidebar */}
           <div className="grid gap-4 lg:grid-cols-2">
             {/* OBS Browser Source */}
-            <div className="p-4 rounded-xl bg-[#111] border border-white/5">
-              <h3 className="text-sm font-semibold mb-2">OBS Browser Source</h3>
-              <p className="text-[11px] text-neutral-500 mb-3">
+            <div className="p-4 rounded-xl bg-white border border-stone-200">
+              <h3 className="text-sm font-semibold text-stone-900 mb-2">OBS Browser Source</h3>
+              <p className="text-[11px] text-stone-500 mb-3">
                 Add this URL as a Browser Source in OBS (1280×720). Start Stream opens the camera and connects this output automatically.
               </p>
-              <div className="p-3 rounded-lg bg-black border border-white/10 mb-3">
-                <code className="text-[10px] text-indigo-400 break-all">{obsUrl}</code>
+              <div className="force-dark p-3 rounded-lg bg-stone-900 border border-stone-700 mb-3">
+                <code className="text-[10px] text-[#ff8a68] break-all">{obsUrl}</code>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <button
                   onClick={() => { navigator.clipboard.writeText(obsUrl); alert("OBS URL copied!"); }}
-                  className="px-3 py-3 bg-indigo-500 hover:bg-indigo-600 border border-indigo-400 rounded-lg text-sm text-white font-medium transition"
+                  className="px-3 py-3 bg-[#ff4a1d] hover:bg-[#e84314] rounded-lg text-sm text-white font-medium transition"
                 >
                   Copy URL
                 </button>
-                <a href={obsUrl} target="_blank" rel="noreferrer" className="px-3 py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-sm text-white font-medium transition text-center">
+                <a href={obsUrl} target="_blank" rel="noreferrer" className="px-3 py-3 bg-white hover:bg-stone-50 border border-stone-300 rounded-lg text-sm text-stone-700 font-medium transition text-center">
                   Open preview
                 </a>
               </div>
             </div>
 
             {/* Stream Status */}
-            <div className="p-4 rounded-xl bg-[#111] border border-white/5">
-              <h3 className="text-sm font-semibold mb-3">Stream Status</h3>
+            <div className="p-4 rounded-xl bg-white border border-stone-200">
+              <h3 className="text-sm font-semibold text-stone-900 mb-3">Stream Status</h3>
               <div className="grid grid-cols-3 gap-2">
-                <div className="text-center p-2 rounded-lg bg-white/5">
-                  <div className="text-[10px] text-neutral-500">Status</div>
-                  <div className="text-xs font-medium mt-0.5 text-neutral-400">
+                <div className="text-center p-2 rounded-lg bg-stone-100">
+                  <div className="text-[10px] text-stone-500">Status</div>
+                  <div className="text-xs font-medium mt-0.5 text-stone-500">
                     Studio controls this
                   </div>
                 </div>
-                <div className="text-center p-2 rounded-lg bg-white/5">
-                  <div className="text-[10px] text-neutral-500">Resolution</div>
-                  <div className="text-xs font-medium text-white mt-0.5">{resolution}</div>
+                <div className="text-center p-2 rounded-lg bg-stone-100">
+                  <div className="text-[10px] text-stone-500">Resolution</div>
+                  <div className="text-xs font-medium text-stone-900 mt-0.5">{resolution}</div>
                 </div>
-                <div className="text-center p-2 rounded-lg bg-white/5">
-                  <div className="text-[10px] text-neutral-500">FPS</div>
-                  <div className="text-xs font-medium text-white mt-0.5">30</div>
+                <div className="text-center p-2 rounded-lg bg-stone-100">
+                  <div className="text-[10px] text-stone-500">FPS</div>
+                  <div className="text-xs font-medium text-stone-900 mt-0.5">30</div>
                 </div>
               </div>
             </div>
           </div>
         </div>
-        {lookModalOpen && <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4 backdrop-blur-sm"><div className="w-full max-w-md rounded-2xl border border-indigo-400/30 bg-[#111827] p-5 shadow-2xl"><div className="flex items-center justify-between"><h2 className="font-semibold">Choose your look</h2><button onClick={() => setLookModalOpen(false)} className="rounded border border-white/10 px-2">×</button></div><p className="mt-1 text-xs text-neutral-400">Stored only in this browser until its site data is cleared.</p>{referenceImage && <div className="relative mt-4 h-28 w-28"><img src={referenceImage} alt="Saved reference" className="h-full w-full rounded-lg object-cover"/><button onClick={removeReference} aria-label="Delete saved image" className="absolute -right-2 -top-2 grid h-6 w-6 place-items-center rounded-full bg-red-500 text-xs font-bold text-white shadow-lg">×</button></div>}<input ref={fileInputRef} onChange={(event) => uploadReference(event.target.files?.[0])} type="file" accept="image/*" className="hidden"/><button onClick={() => fileInputRef.current?.click()} className="mt-4 rounded-lg bg-indigo-500 px-4 py-2 text-sm font-medium text-white">{referenceImage ? "Upload another image" : "Upload reference image"}</button></div></div>}
+        {lookModalOpen && <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4 backdrop-blur-sm"><div className="w-full max-w-md rounded-2xl border border-stone-200 bg-white p-5 shadow-2xl"><div className="flex items-center justify-between"><h2 className="font-semibold text-stone-900">Choose your look</h2><button onClick={() => setLookModalOpen(false)} className="rounded border border-stone-300 px-2 text-stone-500 hover:text-stone-900">×</button></div><p className="mt-1 text-xs text-stone-500">Stored only in this browser until its site data is cleared.</p>{referenceImage && <div className="relative mt-4 h-28 w-28"><img src={referenceImage} alt="Saved reference" className="h-full w-full rounded-lg object-cover"/><button onClick={removeReference} aria-label="Delete saved image" className="absolute -right-2 -top-2 grid h-6 w-6 place-items-center rounded-full bg-red-500 text-xs font-bold text-white shadow-lg">×</button></div>}<input ref={fileInputRef} onChange={(event) => uploadReference(event.target.files?.[0])} type="file" accept="image/*" className="hidden"/><button onClick={() => fileInputRef.current?.click()} className="mt-4 rounded-lg bg-[#ff4a1d] hover:bg-[#e84314] px-4 py-2 text-sm font-medium text-white">{referenceImage ? "Upload another image" : "Upload reference image"}</button></div></div>}
       </div>
     </DashboardLayout>
   );

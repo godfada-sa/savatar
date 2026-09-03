@@ -169,7 +169,7 @@ export default function WatchPage() {
   const watchUrl = typeof window !== "undefined" ? `${window.location.origin}/watch/${streamId}` : "";
 
   return (
-    <div className="min-h-screen bg-black text-white">
+    <div className="force-dark min-h-screen bg-black text-white">
       {/* Header */}
       <header className="h-14 border-b border-white/5 bg-black/80 backdrop-blur-xl flex items-center justify-between px-3 sm:px-6">
         <div className="flex items-center gap-2">
@@ -215,8 +215,8 @@ export default function WatchPage() {
 
             {!isConnected && (
               <div className="text-center">
-                <div className="w-20 h-20 rounded-full bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center mx-auto mb-5">
-                  <svg className="w-10 h-10 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="w-20 h-20 rounded-full bg-[#ff4a1d]/10 border border-[#ff4a1d]/20 flex items-center justify-center mx-auto mb-5">
+                  <svg className="w-10 h-10 text-[#ff8a68]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
                   </svg>
                 </div>
@@ -285,7 +285,7 @@ export default function WatchPage() {
             )}
             {chatMessages.map((msg, i) => (
               <div key={i} className="text-xs">
-                <span className={`font-semibold ${msg.user === "You" ? "text-indigo-400" : "text-neutral-300"}`}>
+                <span className={`font-semibold ${msg.user === "You" ? "text-[#ff8a68]" : "text-neutral-300"}`}>
                   {msg.user}
                 </span>
                 <span className="text-neutral-500 ml-2">{msg.text}</span>
@@ -300,11 +300,11 @@ export default function WatchPage() {
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}
                 placeholder="Send a message..."
-                className="min-w-0 flex-1 px-3 py-2 bg-black border border-white/10 rounded-lg text-xs text-white placeholder-neutral-600 focus:outline-none focus:border-indigo-500 transition"
+                className="min-w-0 flex-1 px-3 py-2 bg-black border border-white/10 rounded-lg text-xs text-white placeholder-neutral-600 focus:outline-none focus:border-[#ff4a1d] transition"
               />
               <button
                 type="submit"
-                className="px-4 py-2 bg-indigo-500 hover:bg-indigo-600 text-white text-xs font-medium rounded-lg transition"
+                className="px-4 py-2 bg-[#ff4a1d] hover:bg-[#e84314] text-white text-xs font-medium rounded-lg transition"
               >
                 Send
               </button>
