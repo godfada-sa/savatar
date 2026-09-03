@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
 
 /**
  * LoadingScreen — full-screen splash with SVG logo draw, particles,
@@ -9,15 +10,59 @@ import { useEffect, useRef, useState } from "react";
  * Drop <LoadingScreen /> into layout.tsx and it handles everything.
  */
 const SPLASH_KEY = "savatar-splash-seen";
+const INTRO_COOKIE = "savatar_intro_seen";
 
-export default function LoadingScreen() {
-  // Start hidden; decide visibility after mount to avoid SSR hydration mismatch.
-  const [visible, setVisible] = useState(false);
+/** Mark the intro as seen for this browser session (server-readable). */
+function markIntroSeen() {
+  try {
+    document.cookie = `${INTRO_COOKIE}=1; path=/; SameSite=Lax`;
+  } catch {
+    // Storage may be unavailable (private mode) — the sessionStorage flag still applies.
+  }
+}
+
+// Watch rooms and OBS browser sources are media surfaces (an OBS capture would
+// record the splash over the stream) — they never show the brand intro.
+function isMediaPath(pathname: string | null) {
+  return !!pathname && (pathname.startsWith("/watch/") || pathname.startsWith("/obs/"));
+}
+
+export default function LoadingScreen({ introSeen = false }: { introSeen?: boolean }) {
   const masterTLRef = useRef<any>(null);
+  const pathname = usePathname();
 
-  // Decide on first mount whether to show the splash
+  // Include the splash in the initial server-rendered HTML so the first paint
+  // IS the dark splash — no flash of the page underneath. Landing replays on
+  // every full load; every other page only before the intro has played once
+  // this browser session. The mount effect below governs the client-side cases
+  // the server couldn't predict.
+  const [visible, setVisible] = useState(() => {
+    if (pathname === "/") return true;
+    if (isMediaPath(pathname)) return false;
+    return !introSeen;
+  });
+
+  // Runs once per full page load (SPA navigations don't remount this component,
+  // so client-side route changes never re-trigger the splash).
   useEffect(() => {
-    if (sessionStorage.getItem(SPLASH_KEY)) return;
+    if (isMediaPath(pathname)) return;
+    if (pathname === "/") {
+      markIntroSeen();
+      setVisible(true);
+      return;
+    }
+    // SSR already painted the intro — it is showing right now, so record it
+    // (covers first loads this tab missed the flag for).
+    if (visible) {
+      markIntroSeen();
+      sessionStorage.setItem(SPLASH_KEY, "1");
+      return;
+    }
+    // Intro wasn't in the first paint (media pages excluded above, or a
+    // response the server rendered without it): show it once per browser
+    // session. Skip if already shown in this tab or elsewhere.
+    if (introSeen || sessionStorage.getItem(SPLASH_KEY)) return;
+    markIntroSeen();
     sessionStorage.setItem(SPLASH_KEY, "1");
     setVisible(true);
   }, []);

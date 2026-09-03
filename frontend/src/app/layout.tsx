@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import { DM_Sans, Manrope } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth-context";
@@ -24,18 +25,31 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Whether the brand-intro splash already played this browser session. The
+  // server can't read sessionStorage, so the splash mirrors its flag in a
+  // session cookie; this lets auth pages render the splash in their very
+  // first server response instead of flashing the page first.
+  let introSeen = false;
+  try {
+    const jar = await cookies();
+    introSeen = jar.get("savatar_intro_seen")?.value === "1";
+  } catch {
+    // Cookies unavailable (e.g. prerendering) — splash falls back to client logic.
+  }
+
   return (
     <html lang="en" className={`${bodyFont.variable} ${displayFont.variable}`} suppressHydrationWarning>
       <head>
-        {/* Apply the saved/system theme before first paint to avoid a flash. */}
+        {/* Apply the saved theme before first paint to avoid a flash.
+            New visitors get light mode by default; the saved choice always wins. */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var t=localStorage.getItem("savatar-theme");var d=t?t==="dark":window.matchMedia("(prefers-color-scheme: dark)").matches;if(d)document.documentElement.classList.add("dark");}catch(e){}})();`,
+            __html: `(function(){try{var t=localStorage.getItem("savatar-theme");if(t==="dark")document.documentElement.classList.add("dark");}catch(e){}})();`,
           }}
         />
       </head>
@@ -43,7 +57,7 @@ export default function RootLayout({
         {/* Full-viewport scroll container — required by the dark-mode
             inversion theme so fixed navbars and modals stay put. */}
         <div className="app-root">
-          <LoadingScreen />
+          <LoadingScreen introSeen={introSeen} />
           <AuthProvider>{children}</AuthProvider>
         </div>
       </body>
