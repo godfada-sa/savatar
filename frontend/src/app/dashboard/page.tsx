@@ -51,6 +51,27 @@ export default function Dashboard() {
   // Tracks whether Decart is actively generating output ("generating" state).
   // Countdown only ticks when this is true — user doesn't pay during connect/queue/reconnect.
   const isDecartActiveRef = useRef(false);
+  // Crash-fair refund bookkeeping: latest SDK generationTick seconds and a
+  // throttle timestamp so heartbeat POSTs stay well under the route rate limit.
+  const lastTickSecondsRef = useRef(0);
+  const lastHeartbeatSentAtRef = useRef(0);
+
+  // Report liveness + generation seconds to the server so a crashed session
+  // (no /api/streaming/end) is refunded for time that wasn't generated instead
+  // of forfeiting the whole reservation. Best-effort: failures are ignored.
+  const sendStreamHeartbeat = useCallback((generationSeconds: number) => {
+    const sid = sessionIdRef.current;
+    const token = idTokenRef.current;
+    if (!sid || !token) return;
+    const now = Date.now();
+    if (now - lastHeartbeatSentAtRef.current < 8_000) return; // throttle ~7/min
+    lastHeartbeatSentAtRef.current = now;
+    void fetch("/api/streaming/heartbeat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ sessionId: sid, generationSeconds: Math.max(0, Math.floor(generationSeconds)) }),
+    }).catch(() => {});
+  }, []);
 
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -154,8 +175,9 @@ export default function Dashboard() {
       .catch(() => {});
   }, [user]);
 
-  // While live, periodically ask the server to finalize any session that passed
-  // its server-side deadline (e.g. Decart died and the "end" call was lost).
+  // While live, periodically ask the server to finalize any session whose
+  // client is gone (deadline passed or heartbeats stale), and refresh our own
+  // presence heartbeat so the sweep never finalizes a live session.
   useEffect(() => {
     if (!isStreaming) return;
     const sweep = () => {
@@ -166,11 +188,12 @@ export default function Dashboard() {
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({}),
       }).catch(() => {});
+      sendStreamHeartbeat(lastTickSecondsRef.current);
     };
     sweep();
     const timer = setInterval(sweep, 30_000);
     return () => clearInterval(timer);
-  }, [isStreaming]);
+  }, [isStreaming, sendStreamHeartbeat]);
 
   // Notify server on tab close / navigation so unused credits are refunded.
   useEffect(() => {
@@ -348,6 +371,8 @@ export default function Dashboard() {
       const sessionSeconds = tokenResult.maxSessionDuration ?? 0;
       setReservedSeconds(sessionSeconds);
       setRemainingSeconds(sessionSeconds);
+      lastTickSecondsRef.current = 0;
+      lastHeartbeatSentAtRef.current = 0;
 
       const model = models.realtime(modelId as Parameters<typeof models.realtime>[0]);
       const client = createDecartClient({ apiKey: tokenResult.apiKey });
@@ -368,6 +393,13 @@ export default function Dashboard() {
 
           // Only count down credits when Decart is actively generating
           isDecartActiveRef.current = state === "generating";
+
+          // Presence heartbeat: from "connected" onward (covers queue time when
+          // there are no generation ticks yet) the server knows the client is
+          // alive, so the sweep never mistakes a queued session for a crash.
+          if (state === "connected" || state === "generating") {
+            sendStreamHeartbeat(lastTickSecondsRef.current);
+          }
 
           // Auto-end stream if Decart disconnects (user doesn't pay for dead sessions)
           if (state === "disconnected") {
@@ -410,6 +442,14 @@ export default function Dashboard() {
         setStartupStatus("AI connection failed");
         // Auto-stop: refund unused credits
         setTimeout(() => stopStream(), 0);
+      });
+
+      // Track actual Decart generation seconds (SDK generationTick) and report
+      // them so an abandoned session is charged for real generation, not the
+      // full reservation. Throttled inside sendStreamHeartbeat.
+      realtimeClient.on("generationTick", ({ seconds }: { seconds: number }) => {
+        lastTickSecondsRef.current = Math.max(lastTickSecondsRef.current, Math.floor(Number(seconds) || 0));
+        sendStreamHeartbeat(lastTickSecondsRef.current);
       });
 
       clientRef.current = realtimeClient;

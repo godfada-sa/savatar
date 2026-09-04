@@ -12,15 +12,38 @@ import { finalizeSessionInTransaction, sessionDeadlineMs } from "@/lib/stream-se
 
 export const runtime = "nodejs";
 
+// A live client heartbeats every few seconds. If none arrived for longer than
+// this, the browser (and its WebRTC feed) is gone — finalize and refund now
+// instead of making the user wait out the whole reserved window.
+const HEARTBEAT_STALE_MS = 60_000;
+// Sessions that never delivered a single heartbeat were either crashed before
+// the first tick or never connected. Give them a generous grace, then treat
+// them as abandoned too (charged only the tail grace, never the full reserve).
+const NO_HEARTBEAT_GRACE_MS = 90_000;
+
+function toDate(value: unknown): Date | null {
+  if (!value) return null;
+  if (value instanceof Date) return value;
+  const firestoreValue = value as { toDate?: () => Date };
+  return typeof firestoreValue.toDate === "function" ? firestoreValue.toDate() : null;
+}
+
 /**
- * Server-side hard deadline enforcement. Finalizes every active session of the
- * caller whose reserved window (activatedAt + reservedSeconds) has elapsed —
- * including sessions whose client vanished without calling /api/streaming/end.
+ * Server-side abandonment enforcement for stream sessions.
  *
- * At (or past) the deadline, usedSeconds == reservedSeconds, so no credits are
- * refunded and the user can never consume more AI time than they prepaid. The
- * provider's maxSessionDuration cap already stops the stream server-side; this
- * route reconciles the ledger and the session record to match.
+ * Finalizes every active session of the caller whose client is gone:
+ *
+ *   - the reserved window (activatedAt + reservedSeconds) elapsed, or
+ *   - its last heartbeat is stale (> HEARTBEAT_STALE_MS old) — the browser
+ *     crashed or closed without calling /api/streaming/end, or
+ *   - it never heartbeat at all and has been active past NO_HEARTBEAT_GRACE_MS.
+ *
+ * Unlike the previous behavior (which forfeited the full reservation at the
+ * deadline), sessions are finalized with the "report" basis: the user pays for
+ * the generation seconds the client actually reported plus a bounded tail, so
+ * a crash refunds the rest instead of burning it. Overuse stays impossible —
+ * the reservation still caps everything, and the provider's maxSessionDuration
+ * already stopped the stream the moment the feed died.
  */
 export async function POST(req: NextRequest) {
   try {
@@ -44,9 +67,22 @@ export async function POST(req: NextRequest) {
       const reservedSeconds = Math.floor(Number(data.reservedSeconds ?? 0));
       if (!Number.isSafeInteger(reservedSeconds) || reservedSeconds <= 0) continue;
 
-      const activated = (data.activatedAt ?? data.createdAt) as { toDate?: () => Date } | undefined;
-      const activatedAt = activated?.toDate?.() ?? new Date();
-      if (sessionDeadlineMs(activatedAt, reservedSeconds) > nowMs) continue;
+      const activatedAt = toDate(data.activatedAt ?? data.createdAt);
+      if (!activatedAt) continue;
+
+      const elapsedMs = nowMs - activatedAt.getTime();
+      const pastDeadline = sessionDeadlineMs(activatedAt, reservedSeconds) <= nowMs;
+
+      let clientGone = pastDeadline;
+      if (!clientGone) {
+        const lastHeartbeatAt = toDate(data.lastHeartbeatAt);
+        if (lastHeartbeatAt) {
+          clientGone = nowMs - lastHeartbeatAt.getTime() > HEARTBEAT_STALE_MS;
+        } else {
+          clientGone = elapsedMs > NO_HEARTBEAT_GRACE_MS;
+        }
+      }
+      if (!clientGone) continue;
 
       await db.runTransaction(async (transaction) => {
         // Re-check inside the transaction: a concurrent /api/streaming/end may
@@ -61,7 +97,7 @@ export async function POST(req: NextRequest) {
           db.collection("users").doc(user.uid),
           db.collection("transactions").doc(`stream-${doc.id}`),
           session,
-          nowMs
+          { asOfMs: nowMs, basis: "report" }
         );
         finalized += 1;
         refunded += result.unusedSeconds;
