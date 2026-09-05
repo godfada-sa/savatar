@@ -59,7 +59,7 @@ export default function SettingsPage() {
     <DashboardLayout>
       <div className="p-3 sm:p-6">
         {/* Preferences Header */}
-        <div className="p-5 sm:p-6 rounded-xl bg-[#ff4a1d]/6 border border-[#ff4a1d]/15 mb-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="p-5 sm:p-6 rounded-xl bg-[#e84314]/6 border border-[#e84314]/15 mb-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <div className="text-[10px] text-[#e84314] font-semibold uppercase tracking-wider mb-1">Preferences</div>
             <h1 className="text-xl font-bold text-stone-900">Settings</h1>
@@ -68,7 +68,7 @@ export default function SettingsPage() {
             </p>
           </div>
           <div className="flex min-w-0 items-center gap-3 px-4 py-2 rounded-xl bg-white border border-stone-200">
-            <div className="w-8 h-8 rounded-full bg-[#ff4a1d]/10 flex items-center justify-center text-[#e84314] text-xs font-semibold">
+            <div className="w-8 h-8 rounded-full bg-[#e84314]/10 flex items-center justify-center text-[#e84314] text-xs font-semibold">
               {(user?.displayName || user?.email || "U")[0].toUpperCase()}
             </div>
             <div className="min-w-0">
@@ -90,7 +90,7 @@ export default function SettingsPage() {
                 <select
                   value={resolution}
                   onChange={(e) => setResolution(e.target.value)}
-                  className="w-full px-3 py-2 bg-white border border-stone-300 rounded-lg text-sm text-stone-900 focus:outline-none focus:border-[#ff4a1d]"
+                  className="w-full px-3 py-2 bg-white border border-stone-300 rounded-lg text-sm text-stone-900 focus:outline-none focus:border-[#e84314]"
                 >
                   <option value="720p">720p</option>
                   <option value="1080p">1080p</option>
@@ -101,7 +101,7 @@ export default function SettingsPage() {
                 <select
                   value={frameRate}
                   onChange={(e) => setFrameRate(e.target.value)}
-                  className="w-full px-3 py-2 bg-white border border-stone-300 rounded-lg text-sm text-stone-900 focus:outline-none focus:border-[#ff4a1d]"
+                  className="w-full px-3 py-2 bg-white border border-stone-300 rounded-lg text-sm text-stone-900 focus:outline-none focus:border-[#e84314]"
                 >
                   <option value="24">24 FPS</option>
                   <option value="30">30 FPS</option>
@@ -113,7 +113,7 @@ export default function SettingsPage() {
                 <select
                   value={bitrate}
                   onChange={(e) => setBitrate(e.target.value)}
-                  className="w-full px-3 py-2 bg-white border border-stone-300 rounded-lg text-sm text-stone-900 focus:outline-none focus:border-[#ff4a1d]"
+                  className="w-full px-3 py-2 bg-white border border-stone-300 rounded-lg text-sm text-stone-900 focus:outline-none focus:border-[#e84314]"
                 >
                   <option value="2500">2500 kbps</option>
                   <option value="4500">4500 kbps</option>
@@ -125,7 +125,7 @@ export default function SettingsPage() {
 
             <div className="grid grid-cols-2 gap-3 mb-4">
               <div className="p-3 rounded-lg bg-stone-50 border border-stone-200 flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-[#ff4a1d]/10 flex items-center justify-center text-[#e84314]">
+                <div className="w-8 h-8 rounded-lg bg-[#e84314]/10 flex items-center justify-center text-[#e84314]">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
                   </svg>
@@ -136,7 +136,7 @@ export default function SettingsPage() {
                 </div>
               </div>
               <div className="p-3 rounded-lg bg-stone-50 border border-stone-200 flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-[#ff4a1d]/10 flex items-center justify-center text-[#e84314]">
+                <div className="w-8 h-8 rounded-lg bg-[#e84314]/10 flex items-center justify-center text-[#e84314]">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
                   </svg>
@@ -151,7 +151,7 @@ export default function SettingsPage() {
             <p className="text-[11px] text-stone-500 mb-3">These defaults apply to your next Studio or AI streaming session.</p>
 
             <div className="flex items-center gap-3">
-              <button onClick={handleSaveStreamSettings} className="px-4 py-2 bg-[#ff4a1d] hover:bg-[#e84314] text-white text-xs font-medium rounded-lg transition">
+              <button onClick={handleSaveStreamSettings} className="px-4 py-2 bg-[#e84314] hover:bg-[#c73608] text-white text-xs font-medium rounded-lg transition">
                 Save Settings
               </button>
               {saveMsg && <span className="text-xs text-emerald-600">{saveMsg}</span>}
@@ -183,7 +183,7 @@ export default function SettingsPage() {
             </div>
 
             <div className="flex gap-2 mt-4">
-              <a href="/credits" className="flex-1 py-2 bg-[#ff4a1d] hover:bg-[#e84314] text-white text-xs font-medium rounded-lg text-center transition">
+              <a href="/credits" className="flex-1 py-2 bg-[#e84314] hover:bg-[#c73608] text-white text-xs font-medium rounded-lg text-center transition">
                 Buy credits
               </a>
               <a href="/transactions" className="flex-1 py-2 bg-white hover:bg-stone-50 border border-stone-300 text-stone-700 text-xs font-medium rounded-lg text-center transition">
@@ -211,7 +211,7 @@ export default function SettingsPage() {
                 type="password"
                 value={currentPassword}
                 onChange={(e) => setCurrentPassword(e.target.value)}
-                className="w-full px-3 py-2 bg-white border border-stone-300 rounded-lg text-sm text-stone-900 focus:outline-none focus:border-[#ff4a1d]"
+                className="w-full px-3 py-2 bg-white border border-stone-300 rounded-lg text-sm text-stone-900 focus:outline-none focus:border-[#e84314]"
               />
             </div>
             <div className="flex-1">
@@ -221,7 +221,7 @@ export default function SettingsPage() {
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 minLength={6}
-                className="w-full px-3 py-2 bg-white border border-stone-300 rounded-lg text-sm text-stone-900 focus:outline-none focus:border-[#ff4a1d]"
+                className="w-full px-3 py-2 bg-white border border-stone-300 rounded-lg text-sm text-stone-900 focus:outline-none focus:border-[#e84314]"
               />
             </div>
             <button type="submit" className="px-4 py-2 bg-stone-100 hover:bg-stone-200 border border-stone-300 text-stone-700 text-xs font-medium rounded-lg transition">

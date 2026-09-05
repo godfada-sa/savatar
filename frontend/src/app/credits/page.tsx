@@ -40,7 +40,7 @@ function PromoCodeField({
           onChange={(e) => onPromoCodeChange(e.target.value.toUpperCase())}
           placeholder="Enter promo code"
           disabled={!!promoResult}
-          className="flex-1 px-3 py-2 bg-white border border-stone-300 rounded-lg text-sm text-stone-900 placeholder-stone-400 focus:outline-none focus:border-[#ff4a1d] transition font-mono uppercase disabled:opacity-50"
+          className="flex-1 px-3 py-2 bg-white border border-stone-300 rounded-lg text-sm text-stone-900 placeholder-stone-400 focus:outline-none focus:border-[#e84314] transition font-mono uppercase disabled:opacity-50"
         />
         {promoResult ? (
           <button
@@ -208,7 +208,7 @@ function CreditsContent() {
     <DashboardLayout>
       <div className="p-3 sm:p-6">
         {/* Credits & Billing Header */}
-        <div className="p-5 sm:p-6 rounded-xl bg-[#ff4a1d]/6 border border-[#ff4a1d]/15 mb-5 flex flex-col items-stretch gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="p-5 sm:p-6 rounded-xl bg-[#e84314]/6 border border-[#e84314]/15 mb-5 flex flex-col items-stretch gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <div className="text-[10px] text-[#e84314] font-semibold uppercase tracking-wider mb-1">Credits & Billing</div>
             <h1 className="text-xl font-bold text-stone-900">Buy Credits, Unlock Possibilities</h1>
@@ -242,7 +242,7 @@ function CreditsContent() {
                   featured ? "bg-stone-900 text-white shadow-[0_24px_50px_-24px_rgba(28,25,23,0.5)]" : "bg-white"
                 } ${
                   selected
-                    ? "border-[#ff4a1d] ring-1 ring-[#ff4a1d]"
+                    ? "border-[#e84314] ring-1 ring-[#e84314]"
                     : featured
                       ? "border-stone-900"
                       : "border-stone-300 hover:border-stone-400"
@@ -253,7 +253,7 @@ function CreditsContent() {
                     {pack.name}
                   </h3>
                   {featured && (
-                    <span className="rounded-full bg-[#ff4a1d] px-2 py-1 text-[9px] font-bold uppercase tracking-[0.14em] text-white">
+                    <span className="rounded-full bg-[#e84314] px-2 py-1 text-[9px] font-bold uppercase tracking-[0.14em] text-white">
                       Most popular
                     </span>
                   )}
@@ -262,7 +262,7 @@ function CreditsContent() {
                   <p className={`font-display text-3xl font-extrabold tracking-[-0.035em] ${featured ? "text-white" : "text-stone-900"}`}>
                     GH {pack.priceGHS.toLocaleString()}
                   </p>
-                  <p className={`mt-1 text-xs font-semibold ${featured ? "text-[#ff8a68]" : "text-[#e84314]"}`}>
+                  <p className={`mt-1 text-xs font-semibold ${featured ? "text-[#f07a55]" : "text-[#e84314]"}`}>
                     {pack.credits.toLocaleString()} credits
                   </p>
                   <p className={`mt-0.5 text-[11px] ${featured ? "text-stone-400" : "text-stone-500"}`}>
@@ -273,7 +273,7 @@ function CreditsContent() {
                   {["Instant wallet top-up", "Use on Studio & OBS", "Pay by mobile money or card"].map((feature) => (
                     <li key={feature} className="flex items-center gap-2.5">
                       <svg
-                        className={`h-3.5 w-3.5 shrink-0 ${featured ? "text-[#ff8a68]" : "text-[#ff4a1d]"}`}
+                        className={`h-3.5 w-3.5 shrink-0 ${featured ? "text-[#f07a55]" : "text-[#e84314]"}`}
                         fill="none"
                         stroke="currentColor"
                         viewBox="0 0 24 24"
@@ -293,7 +293,7 @@ function CreditsContent() {
                   }}
                   className={`mt-6 flex cursor-pointer items-center justify-center rounded-md px-4 py-3 text-sm font-semibold transition ${
                     featured || selected
-                      ? "bg-[#ff4a1d] text-white"
+                      ? "bg-[#e84314] text-white"
                       : "border border-stone-300 bg-white text-stone-800 hover:border-stone-900"
                   }`}
                 >
@@ -379,7 +379,7 @@ function CreditsContent() {
                 <button
                   onClick={handlePurchase}
                   disabled={processing}
-                  className="w-full py-3 bg-[#ff4a1d] hover:bg-[#e84314] disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium rounded-xl transition"
+                  className="w-full py-3 bg-[#e84314] hover:bg-[#c73608] disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium rounded-xl transition"
                 >
                   {processing ? "Opening Paystack..." : `Continue to Paystack · GH ${finalPrice.toFixed(0)}`}
                 </button>

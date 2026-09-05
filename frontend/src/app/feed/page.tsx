@@ -44,7 +44,7 @@ function Avatar({
   }
   return (
     <div
-      className={`${sizeClass} grid flex-shrink-0 place-items-center rounded-full bg-[#ff4a1d]/10 font-semibold text-[#e84314] ${className}`}
+      className={`${sizeClass} grid flex-shrink-0 place-items-center rounded-full bg-[#e84314]/10 font-semibold text-[#e84314] ${className}`}
       aria-hidden="true"
     >
       {initial}
@@ -150,13 +150,13 @@ function CommentThread({
           }}
           placeholder="Write a reply…"
           maxLength={COMMENT_MAX}
-          className="flex-1 bg-white border border-stone-300 rounded-lg px-3 py-2 text-xs text-stone-900 placeholder-stone-400 focus:outline-none focus:border-[#ff4a1d] focus:ring-1 focus:ring-[#ff4a1d]/30 transition"
+          className="flex-1 bg-white border border-stone-300 rounded-lg px-3 py-2 text-xs text-stone-900 placeholder-stone-400 focus:outline-none focus:border-[#e84314] focus:ring-1 focus:ring-[#e84314]/30 transition"
         />
         <button
           type="button"
           onClick={submit}
           disabled={!draft.trim() || sending}
-          className="shrink-0 px-3 py-2 rounded-lg bg-[#ff4a1d] hover:bg-[#e84314] disabled:opacity-40 text-white text-xs font-medium transition"
+          className="shrink-0 px-3 py-2 rounded-lg bg-[#e84314] hover:bg-[#c73608] disabled:opacity-40 text-white text-xs font-medium transition"
         >
           Reply
         </button>
@@ -318,7 +318,7 @@ function FeedContent() {
     <div className="p-3 sm:p-6">
       <div className="mx-auto w-full max-w-2xl">
         {/* Header */}
-        <div className="rounded-xl border border-[#ff4a1d]/15 bg-[#ff4a1d]/6 p-5 sm:p-6">
+        <div className="rounded-xl border border-[#e84314]/15 bg-[#e84314]/6 p-5 sm:p-6">
           <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#e84314]">
             Community
           </div>
@@ -345,7 +345,7 @@ function FeedContent() {
                 placeholder="What's on your mind?"
                 rows={3}
                 maxLength={POST_MAX}
-                className="w-full resize-none bg-white px-3 py-2 text-sm text-stone-900 placeholder-stone-400 focus:outline-none focus:border-[#ff4a1d] focus:ring-1 focus:ring-[#ff4a1d]/30 rounded-lg border border-stone-300 transition"
+                className="w-full resize-none bg-white px-3 py-2 text-sm text-stone-900 placeholder-stone-400 focus:outline-none focus:border-[#e84314] focus:ring-1 focus:ring-[#e84314]/30 rounded-lg border border-stone-300 transition"
               />
               <div className="mt-2 flex items-center justify-between">
                 <span className="text-[11px] text-stone-400">
@@ -355,7 +355,7 @@ function FeedContent() {
                   type="button"
                   onClick={submitPost}
                   disabled={!draft.trim() || posting}
-                  className="rounded-lg bg-[#ff4a1d] px-4 py-2 text-xs font-semibold text-white transition hover:bg-[#e84314] disabled:opacity-40"
+                  className="rounded-lg bg-[#e84314] px-4 py-2 text-xs font-semibold text-white transition hover:bg-[#c73608] disabled:opacity-40"
                 >
                   {posting ? "Posting…" : "Post"}
                 </button>

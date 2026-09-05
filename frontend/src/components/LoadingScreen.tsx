@@ -228,7 +228,7 @@ export default function LoadingScreen({ introSeen = false }: { introSeen?: boole
           --splash-bg: #faf9f7;
           --splash-ink: #1c1917;
           --splash-track: #e7e2da;
-          --splash-accent: #ff4a1d;
+          --splash-accent: #e84314;
           position: fixed; inset: 0; background: var(--splash-bg);
           display: flex; flex-direction: column;
           align-items: center; justify-content: center;
@@ -282,12 +282,12 @@ export default function LoadingScreen({ introSeen = false }: { introSeen?: boole
             <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
               <rect
                 id="logoBg" x="1" y="1" width="46" height="46" rx="12"
-                stroke="#ff4a1d" strokeWidth="2" fill="none"
+                stroke="#e84314" strokeWidth="2" fill="none"
                 strokeDasharray="172" strokeDashoffset="172"
               />
               <rect
                 id="logoFill" x="1" y="1" width="46" height="46" rx="12"
-                fill="#ff4a1d" opacity="0"
+                fill="#e84314" opacity="0"
               />
               <path
                 id="sPath"

@@ -132,7 +132,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         {/* Current section eyebrow */}
         <div className="hidden md:flex items-center gap-2 min-w-0 flex-shrink-0">
-          <span className="w-1.5 h-1.5 rounded-[3px] bg-[#ff4a1d]" />
+          <span className="w-1.5 h-1.5 rounded-[3px] bg-[#e84314]" />
           <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-stone-400 truncate">{currentSection}</span>
         </div>
 
@@ -167,7 +167,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
           {/* User — lg+ */}
           <div className="hidden lg:flex items-center gap-2.5 px-3.5 py-1.5 border-l border-white/10 min-w-0">
-            <span className="grid place-items-center w-6 h-6 rounded-full bg-[#ff4a1d]/20 text-[#ff8a68] text-[11px] font-bold uppercase flex-shrink-0">{userInitial}</span>
+            <span className="grid place-items-center w-6 h-6 rounded-full bg-[#e84314]/20 text-[#f07a55] text-[11px] font-bold uppercase flex-shrink-0">{userInitial}</span>
             <span className="text-[11px] font-medium text-stone-200 truncate max-w-[150px]">{user.email}</span>
           </div>
         </div>
@@ -215,7 +215,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   href={item.href}
                   className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition ${
                     isActive
-                      ? "bg-[#ff4a1d]/10 text-[#e84314] font-semibold"
+                      ? "bg-[#e84314]/10 text-[#e84314] font-semibold"
                       : "text-stone-500 hover:bg-stone-100 hover:text-stone-900"
                   }`}
                 >

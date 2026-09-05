@@ -89,7 +89,7 @@ export default function SiteNavbar({ links = [], splashHandoff = false }: SiteNa
           </Link>
           <Link
             href="/signup"
-            className="hidden rounded-md bg-[#ff4a1d] px-4 py-2.5 text-[13px] font-semibold text-white transition-colors hover:bg-[#e84314] sm:inline-flex"
+            className="hidden rounded-md bg-[#e84314] px-4 py-2.5 text-[13px] font-semibold text-white transition-colors hover:bg-[#c73608] sm:inline-flex"
           >
             Get started
           </Link>
@@ -132,7 +132,7 @@ export default function SiteNavbar({ links = [], splashHandoff = false }: SiteNa
             <Link
               href="/signup"
               onClick={() => setMobileOpen(false)}
-              className="rounded-md bg-[#ff4a1d] px-4 py-3 text-center font-semibold text-white"
+              className="rounded-md bg-[#e84314] px-4 py-3 text-center font-semibold text-white"
             >
               Get started
             </Link>

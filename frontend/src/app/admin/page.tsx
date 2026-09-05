@@ -340,7 +340,7 @@ export default function AdminPage() {
     return (
       <div className="min-h-screen bg-[#faf9f7] flex items-center justify-center">
         <div className="flex items-center gap-2 text-stone-500 text-sm">
-          <span className="w-4 h-4 rounded-full border-2 border-stone-200 border-t-[#ff4a1d] animate-spin" />
+          <span className="w-4 h-4 rounded-full border-2 border-stone-200 border-t-[#e84314] animate-spin" />
           Loading…
         </div>
       </div>
@@ -358,7 +358,7 @@ export default function AdminPage() {
           </div>
           <h1 className="font-display text-lg font-bold text-stone-900">Access denied</h1>
           <p className="text-xs text-stone-500 mt-1">You don&apos;t have admin access to this panel.</p>
-          <Link href="/dashboard" className="inline-block mt-4 px-4 py-2 bg-[#ff4a1d] hover:bg-[#e84314] text-white text-xs font-medium rounded-lg transition">
+          <Link href="/dashboard" className="inline-block mt-4 px-4 py-2 bg-[#e84314] hover:bg-[#c73608] text-white text-xs font-medium rounded-lg transition">
             Go to Dashboard
           </Link>
         </div>
@@ -371,7 +371,7 @@ export default function AdminPage() {
       {/* Top Bar */}
       <header className="sticky top-0 z-30 h-12 bg-white border-b border-stone-200 flex items-center gap-3 px-3 sm:px-6">
         <div className="flex items-center gap-2.5 min-w-0">
-          <span className="w-6 h-6 rounded-md bg-[#ff4a1d] text-white grid place-items-center font-display text-[10px] font-extrabold flex-shrink-0">S</span>
+          <span className="w-6 h-6 rounded-md bg-[#e84314] text-white grid place-items-center font-display text-[10px] font-extrabold flex-shrink-0">S</span>
           <span className="font-display text-sm font-extrabold tracking-tight">Admin</span>
           <span className="hidden md:inline text-[10px] font-bold uppercase tracking-[0.18em] text-stone-400 border-l border-stone-200 pl-3 ml-0.5 truncate">
             Control room
@@ -409,12 +409,12 @@ export default function AdminPage() {
               <span>{item.label}</span>
               {count !== undefined && (
                 <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold ${
-                  isActive ? "bg-[#ff4a1d]/10 text-[#e84314]" : "bg-stone-200/70 text-stone-500"
+                  isActive ? "bg-[#e84314]/10 text-[#e84314]" : "bg-stone-200/70 text-stone-500"
                 }`}>
                   {count}
                 </span>
               )}
-              {isActive && <span className="absolute inset-x-2 bottom-0 h-0.5 rounded-full bg-[#ff4a1d]" />}
+              {isActive && <span className="absolute inset-x-2 bottom-0 h-0.5 rounded-full bg-[#e84314]" />}
             </button>
           );
         })}
@@ -430,7 +430,7 @@ export default function AdminPage() {
 
         {loading ? (
           <div className="flex items-center gap-2 text-stone-500 text-sm py-16 justify-center">
-            <span className="w-4 h-4 rounded-full border-2 border-stone-200 border-t-[#ff4a1d] animate-spin" />
+            <span className="w-4 h-4 rounded-full border-2 border-stone-200 border-t-[#e84314] animate-spin" />
             Loading…
           </div>
         ) : (
@@ -471,7 +471,7 @@ export default function AdminPage() {
                       <div className="text-[10px] text-stone-400 uppercase tracking-wider">Utilization</div>
                       <div className="font-display text-lg font-extrabold mt-1">{utilization}%</div>
                       <div className="h-1 rounded-full bg-stone-100 mt-2 overflow-hidden">
-                        <div className="h-full bg-[#ff4a1d] rounded-full" style={{ width: `${Math.min(utilization, 100)}%` }} />
+                        <div className="h-full bg-[#e84314] rounded-full" style={{ width: `${Math.min(utilization, 100)}%` }} />
                       </div>
                     </div>
                     <div className="px-5 py-4">
@@ -494,7 +494,7 @@ export default function AdminPage() {
                         <div key={log.id} className="flex items-center gap-3 px-5 py-2.5">
                           <span className={`w-6 h-6 rounded-md grid place-items-center text-[10px] font-bold flex-shrink-0 ${
                             log.action === "credit_user" || log.action === "buy_for_user" ? "bg-emerald-50 text-emerald-600" :
-                            log.action === "create_promo" ? "bg-[#ff4a1d]/10 text-[#e84314]" :
+                            log.action === "create_promo" ? "bg-[#e84314]/10 text-[#e84314]" :
                             "bg-stone-100 text-stone-500"
                           }`}>
                             {log.action === "credit_user" || log.action === "buy_for_user" ? "+" : log.action === "create_promo" ? "P" : "A"}
@@ -524,7 +524,7 @@ export default function AdminPage() {
                     value={userSearch}
                     onChange={(e) => setUserSearch(e.target.value)}
                     placeholder="Search by name or email…"
-                    className="px-3 py-2 bg-white border border-stone-300 rounded-lg text-xs text-stone-900 placeholder-stone-400 focus:outline-none focus:border-[#ff4a1d] focus:ring-2 focus:ring-[#ff4a1d]/10 w-52 sm:w-64 transition"
+                    className="px-3 py-2 bg-white border border-stone-300 rounded-lg text-xs text-stone-900 placeholder-stone-400 focus:outline-none focus:border-[#e84314] focus:ring-2 focus:ring-[#e84314]/10 w-52 sm:w-64 transition"
                   />
                 </div>
 
@@ -544,20 +544,20 @@ export default function AdminPage() {
                     <div className="flex-1 min-w-[200px]">
                       <label className="block text-[10px] font-bold text-stone-400 uppercase tracking-[0.14em] mb-1">Email</label>
                       <input type="email" value={creditEmail} onChange={(e) => setCreditEmail(e.target.value)} placeholder="user@example.com" required
-                        className="w-full px-3 py-2 bg-white border border-stone-300 rounded-lg text-sm text-stone-900 placeholder-stone-400 focus:outline-none focus:border-[#ff4a1d] focus:ring-2 focus:ring-[#ff4a1d]/10 transition" />
+                        className="w-full px-3 py-2 bg-white border border-stone-300 rounded-lg text-sm text-stone-900 placeholder-stone-400 focus:outline-none focus:border-[#e84314] focus:ring-2 focus:ring-[#e84314]/10 transition" />
                     </div>
                     <div className="w-32">
                       <label className="block text-[10px] font-bold text-stone-400 uppercase tracking-[0.14em] mb-1">Seconds</label>
                       <input type="number" value={creditSeconds} onChange={(e) => setCreditSeconds(e.target.value)} placeholder="500" required
-                        className="w-full px-3 py-2 bg-white border border-stone-300 rounded-lg text-sm text-stone-900 placeholder-stone-400 focus:outline-none focus:border-[#ff4a1d] focus:ring-2 focus:ring-[#ff4a1d]/10 transition" />
+                        className="w-full px-3 py-2 bg-white border border-stone-300 rounded-lg text-sm text-stone-900 placeholder-stone-400 focus:outline-none focus:border-[#e84314] focus:ring-2 focus:ring-[#e84314]/10 transition" />
                     </div>
                     <div className="flex-1 min-w-[160px]">
                       <label className="block text-[10px] font-bold text-stone-400 uppercase tracking-[0.14em] mb-1">Reason</label>
                       <input type="text" value={creditReason} onChange={(e) => setCreditReason(e.target.value)} placeholder="Promo / bonus" required
-                        className="w-full px-3 py-2 bg-white border border-stone-300 rounded-lg text-sm text-stone-900 placeholder-stone-400 focus:outline-none focus:border-[#ff4a1d] focus:ring-2 focus:ring-[#ff4a1d]/10 transition" />
+                        className="w-full px-3 py-2 bg-white border border-stone-300 rounded-lg text-sm text-stone-900 placeholder-stone-400 focus:outline-none focus:border-[#e84314] focus:ring-2 focus:ring-[#e84314]/10 transition" />
                     </div>
                     <button type="submit" disabled={creditLoading}
-                      className="px-5 py-2 bg-[#ff4a1d] hover:bg-[#e84314] disabled:opacity-50 text-white text-xs font-semibold rounded-lg transition">
+                      className="px-5 py-2 bg-[#e84314] hover:bg-[#c73608] disabled:opacity-50 text-white text-xs font-semibold rounded-lg transition">
                       {creditLoading ? "…" : "Credit user"}
                     </button>
                   </form>
@@ -583,7 +583,7 @@ export default function AdminPage() {
                           <tr key={u.id} className="border-t border-stone-100 hover:bg-stone-50/60 transition">
                             <td className="px-4 py-3">
                               <div className="flex items-center gap-2.5">
-                                <div className="w-7 h-7 rounded-full bg-[#ff4a1d]/10 flex items-center justify-center text-[#e84314] text-[10px] font-bold flex-shrink-0">
+                                <div className="w-7 h-7 rounded-full bg-[#e84314]/10 flex items-center justify-center text-[#e84314] text-[10px] font-bold flex-shrink-0">
                                   {(u.displayName || u.email || "U")[0].toUpperCase()}
                                 </div>
                                 <div className="min-w-0">
@@ -635,26 +635,26 @@ export default function AdminPage() {
                     <div>
                       <label className="block text-[10px] font-bold text-stone-400 uppercase tracking-[0.14em] mb-1">Code</label>
                       <input type="text" value={promoCode} onChange={(e) => setPromoCode(e.target.value.toUpperCase())} placeholder="SUMMER2026" required
-                        className="w-full px-3 py-2 bg-white border border-stone-300 rounded-lg text-xs text-stone-900 font-mono uppercase placeholder-stone-300 focus:outline-none focus:border-[#ff4a1d] focus:ring-2 focus:ring-[#ff4a1d]/10 transition" />
+                        className="w-full px-3 py-2 bg-white border border-stone-300 rounded-lg text-xs text-stone-900 font-mono uppercase placeholder-stone-300 focus:outline-none focus:border-[#e84314] focus:ring-2 focus:ring-[#e84314]/10 transition" />
                     </div>
                     <div>
                       <label className="block text-[10px] font-bold text-stone-400 uppercase tracking-[0.14em] mb-1">Bonus (sec)</label>
                       <input type="number" value={promoBonus} onChange={(e) => setPromoBonus(e.target.value)} placeholder="60"
-                        className="w-full px-3 py-2 bg-white border border-stone-300 rounded-lg text-xs text-stone-900 focus:outline-none focus:border-[#ff4a1d] focus:ring-2 focus:ring-[#ff4a1d]/10 transition" />
+                        className="w-full px-3 py-2 bg-white border border-stone-300 rounded-lg text-xs text-stone-900 focus:outline-none focus:border-[#e84314] focus:ring-2 focus:ring-[#e84314]/10 transition" />
                     </div>
                     <div>
                       <label className="block text-[10px] font-bold text-stone-400 uppercase tracking-[0.14em] mb-1">Discount %</label>
                       <input type="number" value={promoDiscount} onChange={(e) => setPromoDiscount(e.target.value)} placeholder="10"
-                        className="w-full px-3 py-2 bg-white border border-stone-300 rounded-lg text-xs text-stone-900 focus:outline-none focus:border-[#ff4a1d] focus:ring-2 focus:ring-[#ff4a1d]/10 transition" />
+                        className="w-full px-3 py-2 bg-white border border-stone-300 rounded-lg text-xs text-stone-900 focus:outline-none focus:border-[#e84314] focus:ring-2 focus:ring-[#e84314]/10 transition" />
                     </div>
                     <div>
                       <label className="block text-[10px] font-bold text-stone-400 uppercase tracking-[0.14em] mb-1">Max uses</label>
                       <input type="number" value={promoMaxUses} onChange={(e) => setPromoMaxUses(e.target.value)} placeholder="Unlimited"
-                        className="w-full px-3 py-2 bg-white border border-stone-300 rounded-lg text-xs text-stone-900 focus:outline-none focus:border-[#ff4a1d] focus:ring-2 focus:ring-[#ff4a1d]/10 transition" />
+                        className="w-full px-3 py-2 bg-white border border-stone-300 rounded-lg text-xs text-stone-900 focus:outline-none focus:border-[#e84314] focus:ring-2 focus:ring-[#e84314]/10 transition" />
                     </div>
                     <div className="flex items-end">
                       <button type="submit" disabled={promoLoading}
-                        className="w-full px-4 py-2 bg-[#ff4a1d] hover:bg-[#e84314] disabled:opacity-50 text-white text-xs font-semibold rounded-lg transition">
+                        className="w-full px-4 py-2 bg-[#e84314] hover:bg-[#c73608] disabled:opacity-50 text-white text-xs font-semibold rounded-lg transition">
                         {promoLoading ? "…" : "Create"}
                       </button>
                     </div>
@@ -737,7 +737,7 @@ export default function AdminPage() {
                         onChange={(e) => setBuyEmail(e.target.value)}
                         placeholder="user@example.com"
                         required
-                        className="w-full max-w-md px-3 py-2 bg-white border border-stone-300 rounded-lg text-sm text-stone-900 placeholder-stone-400 focus:outline-none focus:border-[#ff4a1d] focus:ring-2 focus:ring-[#ff4a1d]/10 transition"
+                        className="w-full max-w-md px-3 py-2 bg-white border border-stone-300 rounded-lg text-sm text-stone-900 placeholder-stone-400 focus:outline-none focus:border-[#e84314] focus:ring-2 focus:ring-[#e84314]/10 transition"
                       />
                     </div>
 
@@ -751,7 +751,7 @@ export default function AdminPage() {
                             onClick={() => setBuyPackId(pack.id)}
                             className={`p-3 rounded-lg border text-left transition ${
                               buyPackId === pack.id
-                                ? "bg-[#ff4a1d]/5 border-[#ff4a1d]/50 ring-1 ring-[#ff4a1d]/20"
+                                ? "bg-[#e84314]/5 border-[#e84314]/50 ring-1 ring-[#e84314]/20"
                                 : "bg-white border-stone-200 hover:border-stone-300"
                             }`}
                           >
@@ -901,7 +901,7 @@ export default function AdminPage() {
                         <div key={log.id} className="px-4 sm:px-5 py-3 flex items-start gap-3">
                           <span className={`w-7 h-7 rounded-md grid place-items-center text-[10px] font-bold flex-shrink-0 ${
                             log.action === "credit_user" || log.action === "buy_for_user" ? "bg-emerald-50 text-emerald-600" :
-                            log.action === "create_promo" ? "bg-[#ff4a1d]/10 text-[#e84314]" :
+                            log.action === "create_promo" ? "bg-[#e84314]/10 text-[#e84314]" :
                             log.action?.includes("deactivate") ? "bg-red-50 text-red-600" :
                             "bg-stone-100 text-stone-500"
                           }`}>

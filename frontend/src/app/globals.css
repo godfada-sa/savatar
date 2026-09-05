@@ -3,8 +3,8 @@
 :root {
   --background: #faf9f7;
   --foreground: #1c1917;
-  --accent: #ff4a1d;
-  --accent-hover: #e84314;
+  --accent: #e84314;
+  --accent-hover: #c73608;
   --surface: #ffffff;
   --surface-hover: #f4f1ed;
   --border: #e7e5e4;
@@ -67,7 +67,7 @@ select option {
 
 /* Subtle accent for active elements */
 .glow {
-  box-shadow: 0 0 0 1px rgba(255, 74, 29, 0.25), 0 4px 20px rgba(255, 74, 29, 0.1);
+  box-shadow: 0 0 0 1px rgba(232, 67, 20, 0.25), 0 4px 20px rgba(232, 67, 20, 0.1);
 }
 
 /* Safe area for iPhone notch */

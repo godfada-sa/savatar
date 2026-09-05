@@ -57,7 +57,7 @@ export default function TransactionsPage() {
     switch (type) {
       case "purchase": return "text-emerald-700 bg-emerald-50";
       case "usage": return "text-red-700 bg-red-50";
-      case "promo": return "text-[#e84314] bg-[#ff4a1d]/10";
+      case "promo": return "text-[#e84314] bg-[#e84314]/10";
       case "admin": return "text-amber-700 bg-amber-50";
       default: return "text-stone-500 bg-stone-100";
     }
@@ -67,7 +67,7 @@ export default function TransactionsPage() {
     <DashboardLayout>
       <div className="p-3 sm:p-6">
         {/* Header */}
-        <div className="p-5 sm:p-6 rounded-xl bg-[#ff4a1d]/6 border border-[#ff4a1d]/15 mb-5 flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+        <div className="p-5 sm:p-6 rounded-xl bg-[#e84314]/6 border border-[#e84314]/15 mb-5 flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
           <div className="min-w-0">
             <div className="text-[10px] text-[#e84314] font-semibold uppercase tracking-wider mb-1">Wallet & Activity</div>
             <h1 className="text-xl font-bold text-stone-900">Transactions</h1>
@@ -102,7 +102,7 @@ export default function TransactionsPage() {
             </div>
             <div className="text-center py-8">
               <div className="text-stone-500 text-sm">{paymentCount ? `${paymentCount} payment${paymentCount === 1 ? "" : "s"} recorded` : "No payments yet"}</div>
-              {!paymentCount && <Link href="/credits" className="inline-block mt-3 px-4 py-2 bg-[#ff4a1d] hover:bg-[#e84314] text-white text-xs font-medium rounded-lg transition">Buy credits</Link>}
+              {!paymentCount && <Link href="/credits" className="inline-block mt-3 px-4 py-2 bg-[#e84314] hover:bg-[#c73608] text-white text-xs font-medium rounded-lg transition">Buy credits</Link>}
             </div>
           </div>
 

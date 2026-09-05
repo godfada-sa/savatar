@@ -113,7 +113,7 @@ export default function SignupPage() {
               onChange={(e) => setName(e.target.value)}
               placeholder="Your name"
               required
-              className="w-full px-3 py-2.5 bg-white border border-stone-300 rounded-lg text-sm text-stone-900 placeholder-stone-400 focus:outline-none focus:border-[#ff4a1d] focus:ring-1 focus:ring-[#ff4a1d]/30 transition"
+              className="w-full px-3 py-2.5 bg-white border border-stone-300 rounded-lg text-sm text-stone-900 placeholder-stone-400 focus:outline-none focus:border-[#e84314] focus:ring-1 focus:ring-[#e84314]/30 transition"
             />
           </div>
           <div>
@@ -124,7 +124,7 @@ export default function SignupPage() {
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@example.com"
               required
-              className="w-full px-3 py-2.5 bg-white border border-stone-300 rounded-lg text-sm text-stone-900 placeholder-stone-400 focus:outline-none focus:border-[#ff4a1d] focus:ring-1 focus:ring-[#ff4a1d]/30 transition"
+              className="w-full px-3 py-2.5 bg-white border border-stone-300 rounded-lg text-sm text-stone-900 placeholder-stone-400 focus:outline-none focus:border-[#e84314] focus:ring-1 focus:ring-[#e84314]/30 transition"
             />
           </div>
           <div>
@@ -136,14 +136,14 @@ export default function SignupPage() {
               placeholder="At least 10 characters"
               required
               minLength={10}
-              className="w-full px-3 py-2.5 bg-white border border-stone-300 rounded-lg text-sm text-stone-900 placeholder-stone-400 focus:outline-none focus:border-[#ff4a1d] focus:ring-1 focus:ring-[#ff4a1d]/30 transition"
+              className="w-full px-3 py-2.5 bg-white border border-stone-300 rounded-lg text-sm text-stone-900 placeholder-stone-400 focus:outline-none focus:border-[#e84314] focus:ring-1 focus:ring-[#e84314]/30 transition"
             />
           </div>
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-2.5 bg-[#ff4a1d] hover:bg-[#e84314] disabled:opacity-50 text-white text-sm font-medium rounded-lg transition"
+            className="w-full py-2.5 bg-[#e84314] hover:bg-[#c73608] disabled:opacity-50 text-white text-sm font-medium rounded-lg transition"
           >
             {loading ? "Creating account..." : "Create Account"}
           </button>

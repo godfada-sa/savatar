@@ -14,7 +14,7 @@ export default function PrivacyPage() {
       title="Privacy Policy"
       description="This policy explains how SaffulTech, also known as Safful, handles personal data when you visit or use Savatar."
     >
-      <div className="rounded-2xl border border-[#ff4a1d]/20 bg-[#ff4a1d]/8 p-6 text-sm leading-6 text-stone-600">
+      <div className="rounded-2xl border border-[#e84314]/20 bg-[#e84314]/8 p-6 text-sm leading-6 text-stone-600">
         SaffulTech is the data controller for Savatar. We process personal data in accordance with Ghana&apos;s Data Protection Act, 2012 (Act 843) and other applicable requirements.
       </div>
 
@@ -31,7 +31,7 @@ export default function PrivacyPage() {
       </LegalSection>
 
       <LegalSection id="use" title="3. How we use information">
-        <ul className="list-disc space-y-2 pl-5 marker:text-[#ff4a1d]">
+        <ul className="list-disc space-y-2 pl-5 marker:text-[#e84314]">
           <li>Create and secure your account and provide authentication.</li>
           <li>Operate AI transformations, live rooms, WebRTC delivery, and viewer chat.</li>
           <li>Process payments, maintain credit balances, prevent duplicate credits, and keep transaction records.</li>
@@ -52,10 +52,10 @@ export default function PrivacyPage() {
 
       <LegalSection id="sharing" title="6. When we share information">
         <p>We disclose information only as needed to provide the service, protect users, complete transactions, or comply with law. Provider categories include:</p>
-        <ul className="list-disc space-y-2 pl-5 marker:text-[#ff4a1d]">
+        <ul className="list-disc space-y-2 pl-5 marker:text-[#e84314]">
           <li>Google Firebase for authentication and cloud database services.</li>
           <li>Decart and related AI infrastructure for real-time media transformation.</li>
-          <li>Moolre and participating mobile-money networks for payment processing and verification.</li>
+          <li>Paystack and participating card and mobile-money networks for payment processing and verification.</li>
           <li>Vercel and other hosting, networking, signaling, monitoring, and security providers.</li>
           <li>Professional advisers, regulators, courts, or law-enforcement authorities where legally required.</li>
         </ul>
