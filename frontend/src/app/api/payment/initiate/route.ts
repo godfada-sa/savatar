@@ -60,27 +60,39 @@ export async function POST(req: NextRequest) {
     const redemptionRef = promoCode ? db.collection("promoRedemptions").doc(createHash("sha256").update(`${user.uid}:${promoCode}`).digest("hex")) : null;
     const existingCheckout = await db.runTransaction(async (tx) => {
       if (redemptionRef) {
+        // ── All reads first (Firestore requires reads before writes) ──
         const redemption = await tx.get(redemptionRef);
-        if (redemption.exists) {
-          const existing = (await tx.get(db.collection("payments").doc(redemption.data()!.reference))).data();
-          // A live checkout for the same pack: send the user back to it.
-          if (existing?.authorizationUrl && existing.packId === pack.id && existing.status === "pending") return existing;
-          // A dead checkout (canceled/abandoned/failed initiation) or one for a
-          // different pack: free the promo slot and start a fresh checkout.
-          const dead = !existing || existing.status !== "pending" || existing.packId !== pack.id;
-          const awaitingProvider = existing?.status === "verification_pending";
-          if (dead && !awaitingProvider) {
-            tx.delete(redemptionRef);
-            tx.update(db.collection("promos").doc(promoDocId), { reservedCount: FieldValue.increment(-1) });
-          } else {
-            throw new RequestError(409, awaitingProvider
-              ? "A payment with this promo is being verified. Try again in a moment."
-              : "This promo is already attached to an active checkout. Complete it or wait for it to expire.");
-          }
-        }
+        const existingDoc = redemption.exists
+          ? await tx.get(db.collection("payments").doc(redemption.data()!.reference))
+          : null;
+        const existing = existingDoc?.data() ?? null;
         const promoRef = db.collection("promos").doc(promoDocId);
         const promo = (await tx.get(promoRef)).data();
         const profile = (await tx.get(db.collection("users").doc(user.uid))).data();
+
+        if (redemption.exists) {
+          // A live checkout for the same pack: send the user back to it.
+          if (existing?.authorizationUrl && existing.packId === pack.id && existing.status === "pending") return existing;
+          // A checkout being verified (money may be moving): hold the slot.
+          if (existing?.status === "verification_pending") {
+            throw new RequestError(409, "A payment with this promo is being verified. Try again in a moment.");
+          }
+          // Dead checkouts (canceled/failed/no Paystack URL) release the slot
+          // only when they belong to the same pack — a different-pack checkout
+          // is a parallel attempt in another tab and must not steal the slot.
+          if (existing && existing.packId !== pack.id) {
+            throw new RequestError(409, "This promo already has a checkout for a different credit pack. Complete or cancel it first.");
+          }
+          const dead = !existing || existing.status !== "pending" || !existing.authorizationUrl;
+          if (!dead) {
+            throw new RequestError(409, "This promo is already attached to an active checkout. Complete it or wait for it to expire.");
+          }
+        }
+        // ── All writes after reads ──
+        if (redemption.exists) {
+          tx.delete(redemptionRef);
+          tx.update(promoRef, { reservedCount: FieldValue.increment(-1) });
+        }
         if (!promo?.active || profile?.promoUsed?.includes(promoCode)
           || (promo.maxUses && Number(promo.usedCount ?? 0) + Number(promo.reservedCount ?? 0) >= Number(promo.maxUses))
           || Number(promo.discountPercent ?? 0) !== discountPercent || Number(promo.bonusSeconds ?? 0) !== bonusSeconds) {
