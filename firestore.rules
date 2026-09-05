@@ -71,6 +71,92 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // ── Community feed ──────────────────────────────────────────────
+    // Shared text feed: any signed-in user can read everything, create posts,
+    // like/unlike any post, and comment. Author identity is stamped from the
+    // poster's own users/{uid} doc (read server-side in the rule) so no one can
+    // spoof another person's display name or photo.
+
+    function profileOf(userId) {
+      return get(/databases/$(database)/documents/users/$(userId));
+    }
+
+    function stampedAsSelf() {
+      return request.auth != null
+        && request.resource.data.authorName == profileOf(request.auth.uid).data.displayName
+        && request.resource.data.authorPhoto == profileOf(request.auth.uid).data.photoURL;
+    }
+
+    match /posts/{postId} {
+      allow read: if signedIn();
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly([
+            "authorId", "authorName", "authorPhoto", "content",
+            "createdAt", "likedBy", "likeCount", "commentCount",
+          ])
+        && request.resource.data.authorId == request.auth.uid
+        && request.resource.data.authorName is string
+        && request.resource.data.authorName.size() >= 1
+        && request.resource.data.authorName.size() <= 80
+        && request.resource.data.authorPhoto is string
+        && request.resource.data.authorPhoto.size() <= 2048
+        && stampedAsSelf()
+        && request.resource.data.content is string
+        && request.resource.data.content.size() >= 1
+        && request.resource.data.content.size() <= 1000
+        && request.resource.data.createdAt is string
+        && request.resource.data.likedBy.keys().size() == 0
+        && request.resource.data.likeCount == 0
+        && request.resource.data.commentCount == 0;
+      // Likes and comments only: post text, author, and timestamps are
+      // immutable. A user may add/remove exactly their own uid in likedBy and
+      // likeCount must track that key count; commentCount may only move up by
+      // one (the comment that was just written).
+      allow update: if signedIn()
+        && request.resource.data.authorId == resource.data.authorId
+        && request.resource.data.authorName == resource.data.authorName
+        && request.resource.data.authorPhoto == resource.data.authorPhoto
+        && request.resource.data.content == resource.data.content
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            "likedBy", "likeCount", "commentCount",
+          ])
+        && request.resource.data.likedBy is map
+        && request.resource.data.likedBy.diff(resource.data.likedBy).addedKeys().hasOnly([request.auth.uid])
+        && resource.data.likedBy.diff(request.resource.data.likedBy).removedKeys().hasOnly([request.auth.uid])
+        && request.resource.data.likeCount
+            == resource.data.likeCount
+              + request.resource.data.likedBy.keys().size()
+              - resource.data.likedBy.keys().size()
+        && request.resource.data.commentCount >= resource.data.commentCount
+        && request.resource.data.commentCount <= resource.data.commentCount + 1;
+      allow delete: if signedIn() && resource.data.authorId == request.auth.uid;
+    }
+
+    match /posts/{postId}/comments/{commentId} {
+      allow read: if signedIn();
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly([
+            "authorId", "authorName", "authorPhoto", "content", "createdAt",
+          ])
+        && request.resource.data.authorId == request.auth.uid
+        && request.resource.data.authorName is string
+        && request.resource.data.authorName.size() >= 1
+        && request.resource.data.authorName.size() <= 80
+        && request.resource.data.authorPhoto is string
+        && request.resource.data.authorPhoto.size() <= 2048
+        && stampedAsSelf()
+        && request.resource.data.content is string
+        && request.resource.data.content.size() >= 1
+        && request.resource.data.content.size() <= 500
+        && request.resource.data.createdAt is string;
+      // Comment authors may delete their own; once the parent post is gone,
+      // any signed-in user may clean up the orphaned comments.
+      allow delete: if signedIn()
+        && (resource.data.authorId == request.auth.uid
+          || !exists(/databases/$(database)/documents/posts/$(postId)));
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }
