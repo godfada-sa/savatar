@@ -19,15 +19,14 @@ async function claimTicket(db, ticket, origin) {
     const supplied = Buffer.from(createHash("sha256").update(ticket).digest("hex"));
     const expected = Buffer.from(data?.ticketHash ?? "");
     if (!data || data.transport !== "proxy-v1" || data.status !== "active" || data.stopRequestedAt
-      || data.ticketExpiresAt?.toMillis() <= Date.now() || data.allowedOrigin !== origin
+      || !(data.ticketExpiresAt?.toMillis() > Date.now())
+      || !(data.deadlineAt?.toMillis() > Date.now()) || data.allowedOrigin !== origin
       || expected.length !== supplied.length || !timingSafeEqual(expected, supplied)
       || typeof data.providerToken !== "string" || !Number.isSafeInteger(data.reservedSeconds)
       || data.reservedSeconds < 1 || data.reservedSeconds > 300) throw new Error("Ticket unavailable");
-    // Refresh the ticket window on every claim so a reconnect late in a long
-    // session is not rejected by the original 90s expiry. The hard session
-    // deadline (deadlineAt + sweep) still bounds total lifetime.
-    tx.update(ref, { claimedAt: FieldValue.serverTimestamp(),
-      ticketExpiresAt: new Date(Date.now() + 90_000) });
+    // Keep reconnect credentials valid only within the original paid window.
+    tx.update(ref, { claimedAt: data.claimedAt ?? FieldValue.serverTimestamp(),
+      ticketExpiresAt: new Date(data.deadlineAt.toMillis()) });
     return data;
   });
   return { ref, session };
@@ -128,7 +127,7 @@ function attachDecartProxy(server, { allowedOrigins, getDb }) {
         else if (upstream.readyState === WebSocket.OPEN) upstream.close(1000, "Session ended");
         if (client.readyState === WebSocket.OPEN) client.close(1000, "Session ended");
       };
-      const deadline = setTimeout(close, (session.reservedSeconds + 30) * 1000);
+      const deadline = setTimeout(close, Math.max(0, session.deadlineAt.toMillis() - Date.now()));
       const finish = async (code) => {
         if (finished) return;
         finished = true;

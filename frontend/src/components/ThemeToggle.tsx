@@ -1,19 +1,22 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
+
+function subscribeTheme(callback: () => void) {
+  const observer = new MutationObserver(callback);
+  observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+  return () => observer.disconnect();
+}
+const getTheme = () => document.documentElement.classList.contains("dark");
+const getServerTheme = () => false;
 
 const STORAGE_KEY = "savatar-theme";
 
 export default function ThemeToggle({ className = "" }: { className?: string }) {
-  const [dark, setDark] = useState(false);
-
-  useEffect(() => {
-    setDark(document.documentElement.classList.contains("dark"));
-  }, []);
+  const dark = useSyncExternalStore(subscribeTheme, getTheme, getServerTheme);
 
   const toggle = () => {
-    const next = !dark;
-    setDark(next);
+    const next = !getTheme();
     document.documentElement.classList.toggle("dark", next);
     try {
       localStorage.setItem(STORAGE_KEY, next ? "dark" : "light");

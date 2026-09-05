@@ -32,7 +32,7 @@ function isMediaPath(pathname: string | null) {
 }
 
 export default function LoadingScreen({ introSeen = false }: { introSeen?: boolean }) {
-  const masterTLRef = useRef<any>(null);
+  const masterTLRef = useRef<ReturnType<typeof import("gsap").default.timeline> | null>(null);
   const pathname = usePathname();
 
   // Include the splash in the initial server-rendered HTML so the first paint
@@ -46,30 +46,13 @@ export default function LoadingScreen({ introSeen = false }: { introSeen?: boole
     return !introSeen;
   });
 
-  // Runs once per full page load (SPA navigations don't remount this component,
-  // so client-side route changes never re-trigger the splash).
+  // Record only the intro included in the initial render; navigation never replays it.
+  const [initialIntro] = useState(() => ({ pathname, visible }));
   useEffect(() => {
-    if (isMediaPath(pathname)) return;
-    if (pathname === "/") {
-      markIntroSeen();
-      setVisible(true);
-      return;
-    }
-    // SSR already painted the intro — it is showing right now, so record it
-    // (covers first loads this tab missed the flag for).
-    if (visible) {
-      markIntroSeen();
-      sessionStorage.setItem(SPLASH_KEY, "1");
-      return;
-    }
-    // Intro wasn't in the first paint (media pages excluded above, or a
-    // response the server rendered without it): show it once per browser
-    // session. Skip if already shown in this tab or elsewhere.
-    if (introSeen || sessionStorage.getItem(SPLASH_KEY)) return;
+    if (isMediaPath(initialIntro.pathname) || !initialIntro.visible) return;
     markIntroSeen();
-    sessionStorage.setItem(SPLASH_KEY, "1");
-    setVisible(true);
-  }, []);
+    try { sessionStorage.setItem(SPLASH_KEY, "1"); } catch { /* Storage unavailable. */ }
+  }, [initialIntro]);
 
   // The splash follows the active theme (paper in light, ink in dark), so
   // while it is on screen the root background must match — otherwise Safari
@@ -86,9 +69,16 @@ export default function LoadingScreen({ introSeen = false }: { introSeen?: boole
   useEffect(() => {
     if (!visible) return;
 
+    let cancelled = false;
+    const watchdog = window.setTimeout(() => {
+      masterTLRef.current?.kill();
+      window.dispatchEvent(new Event("splash-logo-arrived"));
+      setVisible(false);
+    }, 7000);
     // Dynamic import GSAP (client-only)
     const init = async () => {
       const gsapModule = await import("gsap");
+      if (cancelled) return;
       const gsap = gsapModule.default;
 
       // ── Generate title letters ──
@@ -200,17 +190,18 @@ export default function LoadingScreen({ introSeen = false }: { introSeen?: boole
         },
       }, 5.05);
 
-      // Hard fallback: never let the splash linger past ~7s no matter what.
-      const watchdog = window.setTimeout(() => {
-        masterTLRef.current?.kill();
-        window.dispatchEvent(new Event("splash-logo-arrived"));
-        setVisible(false);
-      }, 7000);
     };
 
-    init();
+    void init().catch(() => {
+      if (!cancelled) {
+        window.dispatchEvent(new Event("splash-logo-arrived"));
+        setVisible(false);
+      }
+    });
 
     return () => {
+      cancelled = true;
+      clearTimeout(watchdog);
       masterTLRef.current?.kill();
     };
   }, [visible]);

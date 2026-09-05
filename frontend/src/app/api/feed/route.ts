@@ -51,6 +51,20 @@ export async function POST(req: NextRequest) {
           if (post.exists) tx.update(postRef, { commentCount: Math.max(0, Number(post.data()?.commentCount ?? 0) - 1) });
         });
       }
+    } else if (action === "like") {
+      if (!validId(body.postId)) throw new RequestError(400, "Invalid post");
+      const postRef = db.collection("posts").doc(body.postId);
+      await db.runTransaction(async (tx) => {
+        const snap = await tx.get(postRef);
+        if (!snap.exists) throw new RequestError(404, "Post not found");
+        const likedBy = (snap.data()?.likedBy || {}) as Record<string, true>;
+        const liked = likedBy[user.uid];
+        if (liked) {
+          tx.update(postRef, { [`likedBy.${user.uid}`]: FieldValue.delete(), likeCount: FieldValue.increment(-1) });
+        } else {
+          tx.update(postRef, { [`likedBy.${user.uid}`]: true, likeCount: FieldValue.increment(1) });
+        }
+      });
     } else throw new RequestError(400, "Invalid feed action");
     return privateJson({ success: true });
   } catch (error) { return errorJson(error); }

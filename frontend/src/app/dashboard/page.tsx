@@ -22,6 +22,7 @@ type DecartModelId = "lucy-2.5" | "lucy-restyle-2" | "lucy-vton-3.5";
 export default function Dashboard() {
   const { user, userData } = useAuth();
   const [, setIsConnected] = useState(false);
+  const [isDecartActive, setIsDecartActive] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const [activeMode, setActiveMode] = useState<Mode>("character");
   const [prompt, setPrompt] = useState("");
@@ -86,7 +87,7 @@ export default function Dashboard() {
   const startingRef = useRef(false);
 
   const stopStream = useCallback(async () => {
-    isDecartActiveRef.current = false;
+    isDecartActiveRef.current = false; setIsDecartActive(false);
     const activeClient = clientRef.current;
     clientRef.current = null;
     activeClient?.disconnect();
@@ -493,7 +494,7 @@ export default function Dashboard() {
 
       realtimeClient.on("error", (err: { message: string }) => {
         console.error("Decart error:", err);
-        isDecartActiveRef.current = false;
+        isDecartActiveRef.current = false; setIsDecartActive(false);
         setError(err.message || "The AI stream disconnected unexpectedly.");
         setStartupStatus("AI connection failed");
         // Auto-stop: refund unused credits
@@ -718,7 +719,7 @@ export default function Dashboard() {
                       remainingSeconds <= 30 ? "border border-red-500/40" : remainingSeconds <= 60 ? "border border-amber-500/30" : "border border-white/10"
                     }`}>
                       <span className={`w-1.5 h-1.5 rounded-full ${
-                        isDecartActiveRef.current
+                        isDecartActive
                           ? remainingSeconds <= 30 ? "bg-red-400 animate-pulse" : "bg-emerald-400"
                           : "bg-amber-400 animate-pulse"
                       }`} />
@@ -727,7 +728,7 @@ export default function Dashboard() {
                       }`}>
                         {formatTime(remainingSeconds)}
                       </span>
-                      {!isDecartActiveRef.current && startupStatus && (
+                      {!isDecartActive && startupStatus && (
                         <span className="text-[9px] text-neutral-400 ml-0.5">waiting</span>
                       )}
                     </div>
@@ -848,9 +849,9 @@ export default function Dashboard() {
                 <div className="text-center p-2 rounded-lg bg-stone-100">
                   <div className="text-[10px] text-stone-500 mb-0.5">AI Status</div>
                   <div className={`text-xs font-semibold ${
-                    isDecartActiveRef.current ? "text-emerald-600" : isStreaming ? "text-amber-600" : "text-stone-500"
+                    isDecartActive ? "text-emerald-600" : isStreaming ? "text-amber-600" : "text-stone-500"
                   }`}>
-                    {isDecartActiveRef.current ? "Generating" : isStreaming ? "Connecting" : "Offline"}
+                    {isDecartActive ? "Generating" : isStreaming ? "Connecting" : "Offline"}
                   </div>
                 </div>
                 <div className="text-center p-2 rounded-lg bg-stone-100">

@@ -1,13 +1,9 @@
 import {
   collection,
-  deleteField,
-  doc,
-  increment,
   limit,
   onSnapshot,
   orderBy,
   query,
-  runTransaction,
   type Unsubscribe,
 } from "firebase/firestore";
 import { getAuthInstance, getDb } from "./firebase";
@@ -79,26 +75,21 @@ export async function createPost(_author: AuthorInfo, content: string): Promise<
 }
 
 /** Toggle the current user's like on a post. Resolves to the new liked state. */
-export async function toggleLike(postId: string, uid: string): Promise<boolean> {
-  const postRef = doc(getDb(), "posts", postId);
-  return runTransaction(getDb(), async (tx) => {
-    const snap = await tx.get(postRef);
-    if (!snap.exists()) throw new Error("This post no longer exists.");
-    const likedBy = (snap.data().likedBy || {}) as Record<string, true>;
-    const liked = uid in likedBy;
-    if (liked) {
-      tx.update(postRef, {
-        [`likedBy.${uid}`]: deleteField(),
-        likeCount: increment(-1),
-      });
-    } else {
-      tx.update(postRef, {
-        [`likedBy.${uid}`]: true,
-        likeCount: increment(1),
-      });
-    }
-    return !liked;
+export async function toggleLike(postId: string, _uid: string): Promise<boolean> {
+  const user = getAuthInstance().currentUser;
+  if (!user) throw new Error("Sign in to continue");
+  const token = await user.getIdToken();
+  const response = await fetch("/api/feed", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ action: "like", postId }),
   });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.error || "Failed to update like");
+
+  // The real liked state snaps in via the onSnapshot subscription
+  // immediately after the server write completes.
+  return true;
 }
 
 export async function addComment(postId: string, _author: AuthorInfo, content: string): Promise<void> {

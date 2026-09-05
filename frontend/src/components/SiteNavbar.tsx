@@ -41,10 +41,15 @@ export default function SiteNavbar({ links = [], splashHandoff = false }: SiteNa
     // When the splash plays, the LoadingScreen fires splash-logo-arrived once
     // its logo lands in the navbar position, so we keep the logo hidden until
     // then.
-    if (sessionStorage.getItem("savatar-splash-seen")) {
-      setLogoVisible(true);
-    }
-    return () => window.removeEventListener("splash-logo-arrived", onArrived);
+    const frame = requestAnimationFrame(() => {
+      try {
+        if (sessionStorage.getItem("savatar-splash-seen")) onArrived();
+      } catch { onArrived(); }
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("splash-logo-arrived", onArrived);
+    };
   }, [splashHandoff]);
 
   return (
