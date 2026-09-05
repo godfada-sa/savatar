@@ -1,5 +1,6 @@
 import "server-only";
-import { FieldValue } from "firebase-admin/firestore";
+import { createHash } from "node:crypto";
+import { FieldValue, type Transaction } from "firebase-admin/firestore";
 import { getCreditPack } from "@/lib/credit-packs";
 import { getAdminServices } from "@/lib/firebase-admin";
 import { RequestError } from "@/lib/server-security";
@@ -14,6 +15,28 @@ export function getPaystackSecret(): string {
 
 export function assertPaymentReference(reference: string) {
   if (!REFERENCE_PATTERN.test(reference)) throw new RequestError(400, "Invalid payment reference");
+}
+
+// Free the per-user promo slot held by a dead checkout so the code becomes
+// usable again. Only releases when the redemption doc still points at this
+// payment — a newer checkout may already have taken over the slot.
+async function releasePromoReservation(
+  transaction: Transaction,
+  db: ReturnType<typeof getAdminServices>["db"],
+  payment: Record<string, unknown>,
+  reference: string,
+) {
+  if (payment.promoReserved !== true) return;
+  const promoCode = typeof payment.promoCode === "string" ? payment.promoCode : "";
+  const promoDocId = typeof payment.promoDocId === "string" ? payment.promoDocId : "";
+  const userId = typeof payment.userId === "string" ? payment.userId : "";
+  if (!promoCode || !promoDocId || !userId) return;
+  const redemptionRef = db.collection("promoRedemptions")
+    .doc(createHash("sha256").update(`${userId}:${promoCode}`).digest("hex"));
+  const redemption = await transaction.get(redemptionRef);
+  if (!redemption.exists || redemption.data()?.reference !== reference) return;
+  transaction.delete(redemptionRef);
+  transaction.update(db.collection("promos").doc(promoDocId), { reservedCount: FieldValue.increment(-1) });
 }
 
 export async function verifyAndFulfillPaystackPayment(reference: string) {
@@ -33,10 +56,20 @@ export async function verifyAndFulfillPaystackPayment(reference: string) {
     result.data.currency === "GHS" && Number(result.data.amount) === Number(order.amountSubunit) &&
     result.data.metadata?.userId === order.userId && result.data.metadata?.packId === order.packId;
   if (!verified) {
+    const providerStatus = String(result.data?.status ?? "").toLowerCase();
+    const dead = providerStatus === "failed" || providerStatus === "abandoned";
     await db.runTransaction(async (transaction) => {
       const fresh = await transaction.get(paymentRef);
-      if (fresh.data()?.status === "completed") return;
-      transaction.update(paymentRef, { status: "verification_pending", providerMessage: result.message?.slice(0, 300) ?? null, verificationCheckedAt: FieldValue.serverTimestamp() });
+      const current = fresh.data();
+      if (!current || current.status === "completed") return;
+      if (dead) {
+        // User canceled or abandoned the checkout at Paystack: mark it failed
+        // and free the promo slot immediately so a retry starts fresh.
+        transaction.update(paymentRef, { status: "failed", providerMessage: result.message?.slice(0, 300) ?? null, verificationCheckedAt: FieldValue.serverTimestamp() });
+        await releasePromoReservation(transaction, db, current, reference);
+      } else {
+        transaction.update(paymentRef, { status: "verification_pending", providerMessage: result.message?.slice(0, 300) ?? null, verificationCheckedAt: FieldValue.serverTimestamp() });
+      }
     });
     return { verified: false, alreadyProcessed: false };
   }

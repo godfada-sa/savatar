@@ -63,8 +63,20 @@ export async function POST(req: NextRequest) {
         const redemption = await tx.get(redemptionRef);
         if (redemption.exists) {
           const existing = (await tx.get(db.collection("payments").doc(redemption.data()!.reference))).data();
-          if (existing?.authorizationUrl && existing.packId === pack.id && existing.status !== "completed") return existing;
-          throw new RequestError(409, "This promo is already attached to a checkout. Complete that checkout or contact support.");
+          // A live checkout for the same pack: send the user back to it.
+          if (existing?.authorizationUrl && existing.packId === pack.id && existing.status === "pending") return existing;
+          // A dead checkout (canceled/abandoned/failed initiation) or one for a
+          // different pack: free the promo slot and start a fresh checkout.
+          const dead = !existing || existing.status !== "pending" || existing.packId !== pack.id;
+          const awaitingProvider = existing?.status === "verification_pending";
+          if (dead && !awaitingProvider) {
+            tx.delete(redemptionRef);
+            tx.update(db.collection("promos").doc(promoDocId), { reservedCount: FieldValue.increment(-1) });
+          } else {
+            throw new RequestError(409, awaitingProvider
+              ? "A payment with this promo is being verified. Try again in a moment."
+              : "This promo is already attached to an active checkout. Complete it or wait for it to expire.");
+          }
         }
         const promoRef = db.collection("promos").doc(promoDocId);
         const promo = (await tx.get(promoRef)).data();
