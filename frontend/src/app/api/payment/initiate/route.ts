@@ -77,11 +77,14 @@ export async function POST(req: NextRequest) {
           if (existing?.status === "verification_pending") {
             throw new RequestError(409, "A payment with this promo is being verified. Try again in a moment.");
           }
-          // Dead checkouts (canceled/failed/no Paystack URL) release the slot
-          // only when they belong to the same pack — a different-pack checkout
-          // is a parallel attempt in another tab and must not steal the slot.
+          // A different-pack checkout only conflicts if it's still live. A dead
+          // checkout for another pack means the slot is available — release it
+          // and start a fresh checkout for the pack the user actually chose now.
           if (existing && existing.packId !== pack.id) {
-            throw new RequestError(409, "This promo already has a checkout for a different credit pack. Complete or cancel it first.");
+            const dead = !existing.authorizationUrl || existing.status !== "pending";
+            if (!dead) {
+              throw new RequestError(409, "This promo already has an active checkout for a different credit pack. Complete or cancel that one first.");
+            }
           }
           const dead = !existing || existing.status !== "pending" || !existing.authorizationUrl;
           if (!dead) {
