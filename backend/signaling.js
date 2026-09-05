@@ -7,6 +7,8 @@ const { Server } = require("socket.io");
 const http = require("http");
 const { cert, getApps, initializeApp } = require("firebase-admin/app");
 const { getAuth } = require("firebase-admin/auth");
+const { getFirestore } = require("firebase-admin/firestore");
+const { attachDecartProxy } = require("./decart-proxy");
 
 const PORT = Number(process.env.PORT || process.env.SIGNALING_PORT || 4000);
 const MAX_VIEWERS_PER_ROOM = 100;
@@ -99,20 +101,31 @@ const io = new Server(server, {
   perMessageDeflate: false,
   pingInterval: 25_000,
   pingTimeout: 20_000,
+  destroyUpgrade: false,
+  allowRequest: (req, callback) => allowOrigin(req.headers.origin, (error) => callback(error?.message ?? null, !error)),
 });
+
+attachDecartProxy(server, { allowedOrigins, getDb: () => { firebaseAuth(); return getFirestore(); } });
 
 io.on("connection", (socket) => {
   socket.rateLimits = new Map();
 
   socket.on("join-room", async (payload) => {
-    if (!withinRateLimit(socket, "join", 10, 60_000) || !isObject(payload)) return;
+    if (socket.joinPending || !withinRateLimit(socket, "join", 10, 60_000) || !isObject(payload)) return;
     const { roomId, role } = payload;
     if (!isRoomId(roomId) || (role !== "broadcaster" && role !== "viewer")) return;
 
     let userId = null;
     if (role === "broadcaster") {
+      socket.joinPending = true;
       userId = await authenticatedBroadcaster(socket);
-      if (!userId) {
+      let ownsRoom = false;
+      try {
+        ownsRoom = userId && (await getFirestore().collection("users").doc(userId).get()).data()?.streamRoomId === roomId;
+      } catch { ownsRoom = false; }
+      socket.joinPending = false;
+      if (!socket.connected) return;
+      if (!userId || !ownsRoom) {
         socket.emit("authorization-error", "Sign in with a verified account to broadcast.");
         socket.disconnect(true);
         return;
@@ -145,6 +158,10 @@ io.on("connection", (socket) => {
       room.broadcasterUserId = userId;
       room.streamActive = true;
       socket.to(roomId).emit("broadcaster-joined");
+      for (const viewerId of room.viewers) {
+        io.to(viewerId).emit("broadcaster-exists");
+        socket.emit("viewer-joined", { viewerId });
+      }
     } else {
       room.viewers.add(socket.id);
       if (room.streamActive && room.broadcaster) {

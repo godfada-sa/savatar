@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { FieldValue } from "firebase-admin/firestore";
 import { NextRequest } from "next/server";
 import { getCreditPack } from "@/lib/credit-packs";
@@ -57,12 +57,36 @@ export async function POST(req: NextRequest) {
     const totalSeconds = pack.seconds + bonusSeconds;
     const reference = `savatar-${randomUUID()}`;
     const paymentRef = db.collection("payments").doc(reference);
-    await paymentRef.set({
+    const redemptionRef = promoCode ? db.collection("promoRedemptions").doc(createHash("sha256").update(`${user.uid}:${promoCode}`).digest("hex")) : null;
+    const existingCheckout = await db.runTransaction(async (tx) => {
+      if (redemptionRef) {
+        const redemption = await tx.get(redemptionRef);
+        if (redemption.exists) {
+          const existing = (await tx.get(db.collection("payments").doc(redemption.data()!.reference))).data();
+          if (existing?.authorizationUrl && existing.packId === pack.id && existing.status !== "completed") return existing;
+          throw new RequestError(409, "This promo is already attached to a checkout. Complete that checkout or contact support.");
+        }
+        const promoRef = db.collection("promos").doc(promoDocId);
+        const promo = (await tx.get(promoRef)).data();
+        const profile = (await tx.get(db.collection("users").doc(user.uid))).data();
+        if (!promo?.active || profile?.promoUsed?.includes(promoCode)
+          || (promo.maxUses && Number(promo.usedCount ?? 0) + Number(promo.reservedCount ?? 0) >= Number(promo.maxUses))
+          || Number(promo.discountPercent ?? 0) !== discountPercent || Number(promo.bonusSeconds ?? 0) !== bonusSeconds) {
+          throw new RequestError(409, "This promo is no longer available. Refresh checkout.");
+        }
+        tx.set(redemptionRef, { reference, userId: user.uid, createdAt: FieldValue.serverTimestamp() });
+        tx.update(promoRef, { reservedCount: FieldValue.increment(1) });
+      }
+      tx.set(paymentRef, {
       reference, provider: "paystack", userId: user.uid, userEmail: user.email, packId: pack.id,
       seconds: totalSeconds, originalSeconds: pack.seconds, bonusSeconds, originalPrice: pack.priceGHS,
       discountPercent, amount, amountSubunit, currency: "GHS", promoCode: promoCode || null,
-      promoDocId: promoDocId || null, status: "pending", createdAt: FieldValue.serverTimestamp(),
+      promoDocId: promoDocId || null, promoReserved: Boolean(redemptionRef), status: "pending", createdAt: FieldValue.serverTimestamp(),
+      });
+      return null;
     });
+    if (existingCheckout) return privateJson({ success: true, reference: existingCheckout.reference,
+      authorizationUrl: existingCheckout.authorizationUrl, amount: existingCheckout.amount, totalSeconds: existingCheckout.seconds });
 
     const response = await fetch("https://api.paystack.co/transaction/initialize", {
       method: "POST",

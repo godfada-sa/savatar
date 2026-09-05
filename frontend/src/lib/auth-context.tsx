@@ -11,7 +11,7 @@ import {
   sendEmailVerification,
   User,
 } from "firebase/auth";
-import { doc, getDoc, setDoc, onSnapshot } from "firebase/firestore";
+import { doc, runTransaction, onSnapshot } from "firebase/firestore";
 import { getAuthInstance, getDb, googleProvider, appleProvider } from "./firebase";
 
 interface Wallet {
@@ -57,17 +57,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Listen to auth state
   useEffect(() => {
     let unsubscribeWallet: (() => void) | undefined;
+    let generation = 0;
     const unsubscribe = onAuthStateChanged(getAuthInstance(), async (firebaseUser) => {
+      const current = ++generation;
       unsubscribeWallet?.();
       unsubscribeWallet = undefined;
       setUser(firebaseUser);
+      setUserData(null);
 
       if (firebaseUser) {
+        try {
         // Get or create user document
         const userRef = doc(getDb(), "users", firebaseUser.uid);
-        const userSnap = await getDoc(userRef);
-
-        if (!userSnap.exists()) {            // Create new user document
+        await runTransaction(getDb(), async (tx) => {
+        const userSnap = await tx.get(userRef);
+        if (!userSnap.exists()) {
           const newUserData = {
             uid: firebaseUser.uid,
             email: firebaseUser.email || "",
@@ -82,17 +86,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             },
             promoUsed: [],
           };
-          await setDoc(userRef, newUserData);
+          tx.set(userRef, newUserData);
         }
+        });
+        if (current !== generation) return;
 
         // Listen to real-time wallet updates
         unsubscribeWallet = onSnapshot(userRef, (doc) => {
           if (doc.exists()) {
             setUserData(doc.data() as UserData);
           }
-        });
-
-        setLoading(false);
+        }, () => { if (current === generation) setLoading(false); });
+        } catch {
+          if (current === generation) setUserData(null);
+        } finally { if (current === generation) setLoading(false); }
       } else {
         setUserData(null);
         setLoading(false);
@@ -100,6 +107,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     return () => {
+      generation++;
       unsubscribeWallet?.();
       unsubscribe();
     };
@@ -112,10 +120,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signup = async (email: string, password: string, name: string) => {
     const result = await createUserWithEmailAndPassword(getAuthInstance(), email, password);      // Update display name
     if (result.user) {
-      await setDoc(doc(getDb(), "users", result.user.uid), {
+      const userRef = doc(getDb(), "users", result.user.uid);
+      await runTransaction(getDb(), async (tx) => {
+        const snapshot = await tx.get(userRef);
+        if (snapshot.exists()) { tx.update(userRef, { displayName: name.trim().slice(0, 80) }); return; }
+        tx.set(userRef, {
         uid: result.user.uid,
         email,
-        displayName: name,
+        displayName: name.trim().slice(0, 80),
         photoURL: "",
         createdAt: new Date().toISOString(),
         plan: "starter",
@@ -125,6 +137,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           totalUsed: 0,
         },
         promoUsed: [],
+      });
       });
       await sendEmailVerification(result.user);
     }
@@ -140,6 +153,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = async () => {
     await signOut(getAuthInstance());
+    for (const key of ["savatar-reference-image", "savatar-ai-prompt", "savatar-stream-key"]) localStorage.removeItem(key);
     setUserData(null);
   };
 

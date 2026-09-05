@@ -15,6 +15,7 @@ interface Background {
 export default function AiObsPage() {
   const { user, userData } = useAuth();
   const videoRef = useRef<HTMLVideoElement>(null);
+  const cameraStreamRef = useRef<MediaStream | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [cameraActive, setCameraActive] = useState(false);
   const [selectedBg, setSelectedBg] = useState("original");
@@ -51,12 +52,18 @@ export default function AiObsPage() {
   const filteredBgs = backgrounds.filter((bg) => bgCategory === "all" || bg.category === bgCategory);
 
   useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    void getOrCreateStreamRoomId(user).then((id) => {
+      if (!cancelled) setObsUrl(`${window.location.origin}/obs/${id}`);
+    }).catch(() => { if (!cancelled) setError("Unable to load your stream room."); });
     const frame = requestAnimationFrame(() => {
-      setObsUrl(`${window.location.origin}/obs/${getOrCreateStreamRoomId()}`);
       setReferenceImage(localStorage.getItem("savatar-reference-image"));
     });
-    return () => cancelAnimationFrame(frame);
+    return () => { cancelled = true; cancelAnimationFrame(frame); };
   }, [user]);
+
+  useEffect(() => () => { cameraStreamRef.current?.getTracks().forEach((track) => track.stop()); }, []);
 
   const openCamera = async (targetResolution: string) => {
     try {
@@ -65,6 +72,8 @@ export default function AiObsPage() {
         audio: true,
       });
       const previousStream = videoRef.current?.srcObject as MediaStream | null;
+      if (!videoRef.current) { stream.getTracks().forEach((track) => track.stop()); return; }
+      cameraStreamRef.current = stream;
       if (videoRef.current) videoRef.current.srcObject = stream;
       previousStream?.getTracks().forEach((track) => track.stop());
       setCameraActive(true);
@@ -122,6 +131,7 @@ export default function AiObsPage() {
       const stream = videoRef.current.srcObject as MediaStream;
       stream.getTracks().forEach((t) => t.stop());
       videoRef.current.srcObject = null;
+      cameraStreamRef.current = null;
     }
     setCameraActive(false);
   };
@@ -172,12 +182,12 @@ export default function AiObsPage() {
 
               <div className="flex items-center justify-center text-[#e84314]">
                 <div className="flex items-center gap-2 xl:flex-col xl:gap-1">
-                  <div className="h-px w-12 bg-[#ff4a1d]/30 xl:hidden" />
+                  <div className="h-px w-12 bg-[#e84314]/30 xl:hidden" />
                   <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
                   </svg>
                   <span className="text-[9px] uppercase tracking-wider text-stone-400">Stream</span>
-                  <div className="h-px w-12 bg-[#ff4a1d]/30 xl:hidden" />
+                  <div className="h-px w-12 bg-[#e84314]/30 xl:hidden" />
                 </div>
               </div>
 
@@ -199,7 +209,7 @@ export default function AiObsPage() {
                       stopCamera();
                       window.open("/dashboard?start=1", "savatar-studio");
                     }}
-                    className="px-4 py-1.5 rounded-lg text-xs font-medium transition bg-[#ff4a1d] hover:bg-[#e84314] text-white"
+                    className="px-4 py-1.5 rounded-lg text-xs font-medium transition bg-[#e84314] hover:bg-[#c73608] text-white"
                   >
                     {(userData?.wallet?.balanceSeconds ?? 0) < 60 ? "Buy credits" : "Start Stream"}
                   </button>
@@ -227,7 +237,7 @@ export default function AiObsPage() {
                     key={cat}
                     onClick={() => setBgCategory(cat)}
                     className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition ${
-                      bgCategory === cat ? "bg-[#ff4a1d] text-white" : "bg-stone-100 text-stone-500 hover:text-stone-900"
+                      bgCategory === cat ? "bg-[#e84314] text-white" : "bg-stone-100 text-stone-500 hover:text-stone-900"
                     }`}
                   >
                     {cat.charAt(0).toUpperCase() + cat.slice(1)}
@@ -241,7 +251,7 @@ export default function AiObsPage() {
                     onClick={() => selectBackground(bg)}
                     className={`group relative aspect-[4/3] overflow-hidden rounded-xl border text-left transition ${
                       selectedBg === bg.id
-                        ? "border-[#ff4a1d] ring-2 ring-[#ff4a1d]/30"
+                        ? "border-[#e84314] ring-2 ring-[#e84314]/30"
                         : "border-stone-200 bg-white hover:-translate-y-0.5 hover:border-stone-400"
                     }`}
                   >
@@ -254,7 +264,7 @@ export default function AiObsPage() {
                       <span className="block text-[11px] font-medium leading-tight text-white">{bg.name}</span>
                       <span className="text-[9px] capitalize text-neutral-300">{bg.id === "original" ? "Camera" : bg.category}</span>
                     </div>
-                    {selectedBg === bg.id && <span className="absolute right-2 top-2 grid h-6 w-6 place-items-center rounded-full bg-[#ff4a1d] text-xs text-white shadow-lg">✓</span>}
+                    {selectedBg === bg.id && <span className="absolute right-2 top-2 grid h-6 w-6 place-items-center rounded-full bg-[#e84314] text-xs text-white shadow-lg">✓</span>}
                   </button>
                 ))}
               </div>
@@ -271,7 +281,7 @@ export default function AiObsPage() {
                       onClick={() => selectLook(look)}
                       className={`w-16 h-16 rounded-lg border text-center flex flex-col items-center justify-center gap-1 transition ${
                         selectedLook === look
-                          ? "border-[#ff4a1d] bg-[#ff4a1d]/10"
+                          ? "border-[#e84314] bg-[#e84314]/10"
                           : "border-stone-200 bg-stone-50 hover:border-stone-400"
                       }`}
                     >
@@ -299,12 +309,12 @@ export default function AiObsPage() {
                 Add this URL as a Browser Source in OBS (1280×720). Start Stream opens the camera and connects this output automatically.
               </p>
               <div className="force-dark p-3 rounded-lg bg-stone-900 border border-stone-700 mb-3">
-                <code className="text-[10px] text-[#ff8a68] break-all">{obsUrl}</code>
+                <code className="text-[10px] text-[#f07a55] break-all">{obsUrl}</code>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <button
                   onClick={() => { navigator.clipboard.writeText(obsUrl); alert("OBS URL copied!"); }}
-                  className="px-3 py-3 bg-[#ff4a1d] hover:bg-[#e84314] rounded-lg text-sm text-white font-medium transition"
+                  className="px-3 py-3 bg-[#e84314] hover:bg-[#c73608] rounded-lg text-sm text-white font-medium transition"
                 >
                   Copy URL
                 </button>
@@ -336,7 +346,7 @@ export default function AiObsPage() {
             </div>
           </div>
         </div>
-        {lookModalOpen && <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4 backdrop-blur-sm"><div className="w-full max-w-md rounded-2xl border border-stone-200 bg-white p-5 shadow-2xl"><div className="flex items-center justify-between"><h2 className="font-semibold text-stone-900">Choose your look</h2><button onClick={() => setLookModalOpen(false)} className="rounded border border-stone-300 px-2 text-stone-500 hover:text-stone-900">×</button></div><p className="mt-1 text-xs text-stone-500">Stored only in this browser until its site data is cleared.</p>{referenceImage && <div className="relative mt-4 h-28 w-28"><img src={referenceImage} alt="Saved reference" className="h-full w-full rounded-lg object-cover"/><button onClick={removeReference} aria-label="Delete saved image" className="absolute -right-2 -top-2 grid h-6 w-6 place-items-center rounded-full bg-red-500 text-xs font-bold text-white shadow-lg">×</button></div>}<input ref={fileInputRef} onChange={(event) => uploadReference(event.target.files?.[0])} type="file" accept="image/*" className="hidden"/><button onClick={() => fileInputRef.current?.click()} className="mt-4 rounded-lg bg-[#ff4a1d] hover:bg-[#e84314] px-4 py-2 text-sm font-medium text-white">{referenceImage ? "Upload another image" : "Upload reference image"}</button></div></div>}
+        {lookModalOpen && <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4 backdrop-blur-sm"><div className="w-full max-w-md rounded-2xl border border-stone-200 bg-white p-5 shadow-2xl"><div className="flex items-center justify-between"><h2 className="font-semibold text-stone-900">Choose your look</h2><button onClick={() => setLookModalOpen(false)} className="rounded border border-stone-300 px-2 text-stone-500 hover:text-stone-900">×</button></div><p className="mt-1 text-xs text-stone-500">Stored only in this browser until its site data is cleared.</p>{referenceImage && <div className="relative mt-4 h-28 w-28"><img src={referenceImage} alt="Saved reference" className="h-full w-full rounded-lg object-cover"/><button onClick={removeReference} aria-label="Delete saved image" className="absolute -right-2 -top-2 grid h-6 w-6 place-items-center rounded-full bg-red-500 text-xs font-bold text-white shadow-lg">×</button></div>}<input ref={fileInputRef} onChange={(event) => uploadReference(event.target.files?.[0])} type="file" accept="image/*" className="hidden"/><button onClick={() => fileInputRef.current?.click()} className="mt-4 rounded-lg bg-[#e84314] hover:bg-[#c73608] px-4 py-2 text-sm font-medium text-white">{referenceImage ? "Upload another image" : "Upload reference image"}</button></div></div>}
       </div>
     </DashboardLayout>
   );

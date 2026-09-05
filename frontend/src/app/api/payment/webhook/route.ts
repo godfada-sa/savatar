@@ -27,7 +27,8 @@ export async function POST(req: NextRequest) {
     if (event.event !== "charge.success" || typeof event.data?.reference !== "string") {
       return privateJson({ received: true, ignored: true });
     }
-    await verifyAndFulfillPaystackPayment(event.data.reference);
+    const result = await verifyAndFulfillPaystackPayment(event.data.reference);
+    if (!result.verified) return privateJson({ error: "Verification pending; retry delivery" }, { status: 503 });
     return privateJson({ received: true });
   } catch (error) {
     console.error("Paystack webhook error:", error instanceof Error ? error.message : "unknown error");

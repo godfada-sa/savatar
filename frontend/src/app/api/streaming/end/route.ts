@@ -9,7 +9,7 @@ import {
   requireAuthenticatedUser,
   RequestError,
 } from "@/lib/server-security";
-import { finalizeSessionInTransaction } from "@/lib/stream-sessions";
+import { FieldValue } from "firebase-admin/firestore";
 
 export const runtime = "nodejs";
 
@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
       const session = sessionSnap.data()!;
 
       if (session.userId !== user.uid) throw new RequestError(403, "Not your session");
-      if (session.status === "completed" || session.status === "refunded") {
+      if (session.status !== "active") {
         return {
           refunded: 0,
           alreadyProcessed: true,
@@ -48,25 +48,19 @@ export async function POST(req: NextRequest) {
         return { refunded: 0, alreadyProcessed: false };
       }
 
-      // Shared finalization: clamps used time to the reserved window and
-      // refunds the unused remainder. Past the server-side deadline
-      // (activatedAt + reservedSeconds) usedSeconds == reservedSeconds, so a
-      // delayed "end" request can never claw back time the AI already burned.
-      const result = await finalizeSessionInTransaction(
-        transaction,
-        sessionRef,
-        userRef,
-        transactionRef,
-        session
-      );
-
-      return {
-        refunded: result.unusedSeconds,
-        alreadyProcessed: result.alreadyProcessed,
-        usedSeconds: result.usedSeconds,
-        reservedSeconds,
-        deadlineHit: result.deadlineHit,
-      };
+      if (session.transport === "proxy-v1" && !session.claimedAt) {
+        transaction.update(userRef, {
+          "wallet.balanceSeconds": FieldValue.increment(reservedSeconds),
+          "wallet.totalUsed": FieldValue.increment(-reservedSeconds),
+        });
+        const updates = { status: "completed", usedSeconds: 0, unusedSeconds: reservedSeconds, endedAt: FieldValue.serverTimestamp() };
+        transaction.update(sessionRef, { ...updates, providerToken: FieldValue.delete(), ticketHash: FieldValue.delete() });
+        transaction.update(transactionRef, updates);
+        return { refunded: reservedSeconds, alreadyProcessed: false, reservedSeconds };
+      }
+      // Only the proxy can confirm a provider disconnect and refundable usage.
+      transaction.update(sessionRef, { stopRequestedAt: FieldValue.serverTimestamp() });
+      return { refunded: 0, pending: true, alreadyProcessed: false, reservedSeconds };
     });
 
     return privateJson({

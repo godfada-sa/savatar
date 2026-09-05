@@ -21,7 +21,7 @@ type DecartModelId = "lucy-2.5" | "lucy-restyle-2" | "lucy-vton-3.5";
 
 export default function Dashboard() {
   const { user, userData } = useAuth();
-  const [isConnected, setIsConnected] = useState(false);
+  const [, setIsConnected] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const [activeMode, setActiveMode] = useState<Mode>("character");
   const [prompt, setPrompt] = useState("");
@@ -40,7 +40,6 @@ export default function Dashboard() {
   const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>([]);
   const [error, setError] = useState("");
   const [startupStatus, setStartupStatus] = useState("");
-  const [showLiveChat, setShowLiveChat] = useState(false);
   const [lookModalOpen, setLookModalOpen] = useState(false);
   const [referenceImage, setReferenceImage] = useState<string | null>(null);
   const lookInputRef = useRef<HTMLInputElement>(null);
@@ -81,6 +80,61 @@ export default function Dashboard() {
   const transformedStreamRef = useRef<MediaStream | null>(null);
   const peerConnectionsRef = useRef(new Map<string, RTCPeerConnection>());
   const pendingPeerCandidatesRef = useRef(new Map<string, RTCIceCandidateInit[]>());
+
+  const waitingViewersRef = useRef(new Set<string>());
+  const offerViewerRef = useRef<((viewerId: string) => Promise<void>) | null>(null);
+  const startingRef = useRef(false);
+
+  const stopStream = useCallback(async () => {
+    isDecartActiveRef.current = false;
+    const activeClient = clientRef.current;
+    clientRef.current = null;
+    activeClient?.disconnect();
+
+    // Notify server to refund unused reserved time
+    const currentSessionId = sessionIdRef.current;
+    const currentToken = idTokenRef.current;
+    if (currentSessionId && currentToken) {
+      try {
+        await fetch("/api/streaming/end", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${currentToken}` },
+          body: JSON.stringify({ sessionId: currentSessionId }),
+        });
+      } catch {
+        // Best-effort: if the refund call fails, the session will still time
+        // out server-side and the user can retry from the same browser.
+        console.error("Failed to notify server of stream end");
+      }
+      sessionIdRef.current = null;
+      idTokenRef.current = null;
+    }
+
+    if (clientRef.current) {
+      clientRef.current.disconnect();
+      clientRef.current = null;
+    }
+    if (socketRef.current) {
+      socketRef.current.emit("broadcaster-stopped", { roomId });
+      socketRef.current.disconnect();
+      socketRef.current = null;
+    }
+    for (const connection of peerConnectionsRef.current.values()) connection.close();
+    peerConnectionsRef.current.clear();
+    pendingPeerCandidatesRef.current.clear();
+    transformedStreamRef.current = null;
+    appliedReferenceRef.current = null;
+    if (localVideoRef.current && streamRef.current) {
+      localVideoRef.current.srcObject = streamRef.current;
+    }
+    setIsStreaming(false);
+    setIsConnected(false);
+    setStreamDuration(0);
+    setRemainingSeconds(0);
+    setReservedSeconds(0);
+    setViewerCount(0);
+    setStartupStatus("");
+  }, [roomId]);
 
   // List cameras
   useEffect(() => {
@@ -201,10 +255,7 @@ export default function Dashboard() {
       const sid = sessionIdRef.current;
       const token = idTokenRef.current;
       if (!sid || !token) return;
-      // Use sendBeacon for reliability during page unload
-      const blob = new Blob([JSON.stringify({ sessionId: sid })], { type: "application/json" });
-      navigator.sendBeacon("/api/streaming/end", blob);
-      // Also try a fetch for Authorization header (sendBeacon can't set headers)
+      // Authenticated keepalive; sendBeacon cannot carry the required token.
       void fetch("/api/streaming/end", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
@@ -346,6 +397,8 @@ export default function Dashboard() {
       return;
     }
 
+    if (startingRef.current || clientRef.current) return;
+    startingRef.current = true;
     try {
       setError("");
       setStartupStatus("Authorizing a secure AI session");
@@ -375,7 +428,8 @@ export default function Dashboard() {
       lastHeartbeatSentAtRef.current = 0;
 
       const model = models.realtime(modelId as Parameters<typeof models.realtime>[0]);
-      const client = createDecartClient({ apiKey: tokenResult.apiKey });
+      const client = createDecartClient({ apiKey: tokenResult.apiKey,
+        realtimeBaseUrl: signalingUrl.replace(/^http/, "ws"), telemetry: false });
       const initialImage = referenceImage ? await (await fetch(referenceImage)).blob() : undefined;
       appliedReferenceRef.current = referenceImage;
 
@@ -403,7 +457,7 @@ export default function Dashboard() {
 
           // Auto-end stream if Decart disconnects (user doesn't pay for dead sessions)
           if (state === "disconnected") {
-            setError("The AI session ended. Unused credits have been returned.");
+            setError("The AI session ended. Your balance will update after the server settles usage.");
             setTimeout(() => stopStream(), 0);
           }
         },
@@ -411,6 +465,8 @@ export default function Dashboard() {
         onRemoteStream: (transformedStream: MediaStream) => {
           const outputStream = new MediaStream([...transformedStream.getVideoTracks(), ...(streamRef.current?.getAudioTracks() ?? [])]);
           transformedStreamRef.current = outputStream;
+          for (const id of waitingViewersRef.current) void offerViewerRef.current?.(id);
+          waitingViewersRef.current.clear();
           if (localVideoRef.current) localVideoRef.current.srcObject = outputStream;
           setStartupStatus("AI output live");
           const transformedVideoTrack = transformedStream.getVideoTracks()[0];
@@ -453,7 +509,7 @@ export default function Dashboard() {
       });
 
       clientRef.current = realtimeClient;
-      isDecartActiveRef.current = false;
+      isDecartActiveRef.current = realtimeClient.getConnectionState() === "generating";
       setIsConnected(true);
       setStreamDuration(0);
       setIsStreaming(true);
@@ -461,7 +517,7 @@ export default function Dashboard() {
       // Signaling server for viewers
       // Stable per-creator room lets the OBS browser-source URL attach to the
       // same live output as viewers.
-      const newRoomId = getOrCreateStreamRoomId();
+      const newRoomId = await getOrCreateStreamRoomId(user);
       setRoomId(newRoomId);
 
       const socket = io(signalingUrl, {
@@ -493,9 +549,9 @@ export default function Dashboard() {
         setViewerCount(count);
       });
 
-      socket.on("viewer-joined", async ({ viewerId }: { viewerId: string }) => {
-        const aiStream = transformedStreamRef.current ?? streamRef.current;
-        if (!aiStream) return;
+      const offerViewer = async (viewerId: string) => {
+        const aiStream = transformedStreamRef.current;
+        if (!aiStream) { waitingViewersRef.current.add(viewerId); return; }
 
         peerConnectionsRef.current.get(viewerId)?.close();
         pendingPeerCandidatesRef.current.set(viewerId, []);
@@ -524,6 +580,10 @@ export default function Dashboard() {
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
         socket.emit("offer", { roomId: newRoomId, offer: pc.localDescription, viewerId });
+      };
+      offerViewerRef.current = offerViewer;
+      socket.on("viewer-joined", ({ viewerId }: { viewerId: string }) => {
+        void offerViewer(viewerId).catch(() => setError("A viewer could not connect."));
       });
 
       socket.on(
@@ -555,6 +615,7 @@ export default function Dashboard() {
       );
 
       socket.on("viewer-left", ({ viewerId }: { viewerId: string }) => {
+        waitingViewersRef.current.delete(viewerId);
         peerConnectionsRef.current.get(viewerId)?.close();
         peerConnectionsRef.current.delete(viewerId);
         pendingPeerCandidatesRef.current.delete(viewerId);
@@ -577,53 +638,6 @@ export default function Dashboard() {
     })();
   }, [cameraDevice, goLive, openCamera, resolution, user, userData]);
 
-  const stopStream = useCallback(async () => {
-    isDecartActiveRef.current = false;
-
-    // Notify server to refund unused reserved time
-    const currentSessionId = sessionIdRef.current;
-    const currentToken = idTokenRef.current;
-    if (currentSessionId && currentToken) {
-      try {
-        await fetch("/api/streaming/end", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${currentToken}` },
-          body: JSON.stringify({ sessionId: currentSessionId }),
-        });
-      } catch {
-        // Best-effort: if the refund call fails, the session will still time
-        // out server-side and the user can retry from the same browser.
-        console.error("Failed to notify server of stream end");
-      }
-      sessionIdRef.current = null;
-      idTokenRef.current = null;
-    }
-
-    if (clientRef.current) {
-      clientRef.current.disconnect();
-      clientRef.current = null;
-    }
-    if (socketRef.current) {
-      socketRef.current.emit("broadcaster-stopped", { roomId });
-      socketRef.current.disconnect();
-      socketRef.current = null;
-    }
-    for (const connection of peerConnectionsRef.current.values()) connection.close();
-    peerConnectionsRef.current.clear();
-    pendingPeerCandidatesRef.current.clear();
-    transformedStreamRef.current = null;
-    appliedReferenceRef.current = null;
-    if (localVideoRef.current && streamRef.current) {
-      localVideoRef.current.srcObject = streamRef.current;
-    }
-    setIsStreaming(false);
-    setIsConnected(false);
-    setStreamDuration(0);
-    setRemainingSeconds(0);
-    setReservedSeconds(0);
-    setViewerCount(0);
-    setStartupStatus("");
-  }, [roomId]);
 
   const balanceMinutes = ((userData?.wallet?.balanceSeconds || 0) / 60).toFixed(1);
   return (
@@ -643,7 +657,7 @@ export default function Dashboard() {
           </div>
         )}
         {!error && startupStatus && (
-          <div className="rounded-xl border border-[#ff4a1d]/25 bg-[#ff4a1d]/8 px-4 py-3 text-xs text-[#c73608]" role="status" aria-live="polite">
+          <div className="rounded-xl border border-[#e84314]/25 bg-[#e84314]/8 px-4 py-3 text-xs text-[#c73608]" role="status" aria-live="polite">
             {startupStatus}
           </div>
         )}
@@ -729,7 +743,7 @@ export default function Dashboard() {
                 className={`px-4 py-2 rounded-lg text-xs font-medium transition ${
                   isStreaming
                     ? "bg-red-500 hover:bg-red-600 text-white"
-                    : "bg-[#ff4a1d] hover:bg-[#e84314] text-white shadow-[0_6px_16px_-8px_rgba(255,74,29,0.6)]"
+                    : "bg-[#e84314] hover:bg-[#c73608] text-white shadow-[0_6px_16px_-8px_rgba(232,67,20,0.6)]"
                 }`}
               >
                 {isStreaming ? "Stop" : cameraActive ? "Go Live" : "Start camera"}
@@ -745,7 +759,7 @@ export default function Dashboard() {
                   value={cameraDevice}
                   onChange={(e) => changeCameraDevice(e.target.value)}
                   disabled={isStreaming}
-                  className="min-w-0 max-w-52 px-3 py-2 bg-white border border-stone-300 rounded-lg text-xs text-stone-900 focus:outline-none focus:border-[#ff4a1d] disabled:opacity-50"
+                  className="min-w-0 max-w-52 px-3 py-2 bg-white border border-stone-300 rounded-lg text-xs text-stone-900 focus:outline-none focus:border-[#e84314] disabled:opacity-50"
                 >
                   <option value="default">No camera detected</option>
                   {availableCameras.map((cam, i) => (
@@ -759,7 +773,7 @@ export default function Dashboard() {
                 value={resolution}
                 onChange={(e) => changeResolution(e.target.value)}
                 disabled={isStreaming}
-                className="px-3 py-2 bg-white border border-stone-300 rounded-lg text-xs text-stone-900 focus:outline-none focus:border-[#ff4a1d] disabled:opacity-50"
+                className="px-3 py-2 bg-white border border-stone-300 rounded-lg text-xs text-stone-900 focus:outline-none focus:border-[#e84314] disabled:opacity-50"
               >
                 <option value="720p">720p (AI optimized)</option>
               </select>
@@ -820,7 +834,7 @@ export default function Dashboard() {
                   <div className="h-2 rounded-full bg-stone-200 overflow-hidden">
                     <div
                       className={`h-full rounded-full transition-all duration-1000 ${
-                        remainingSeconds <= 30 ? "bg-red-500" : remainingSeconds <= 60 ? "bg-amber-500" : "bg-[#ff4a1d]"
+                        remainingSeconds <= 30 ? "bg-red-500" : remainingSeconds <= 60 ? "bg-amber-500" : "bg-[#e84314]"
                       }`}
                       style={{ width: `${reservedSeconds > 0 ? (remainingSeconds / reservedSeconds) * 100 : 0}%` }}
                     />
@@ -853,7 +867,7 @@ export default function Dashboard() {
                 className={`w-full mt-3 py-2.5 rounded-lg text-sm font-medium transition ${
                   isStreaming
                     ? "bg-red-500 hover:bg-red-600 text-white"
-                    : "bg-[#ff4a1d] hover:bg-[#e84314] text-white shadow-[0_6px_16px_-8px_rgba(255,74,29,0.6)]"
+                    : "bg-[#e84314] hover:bg-[#c73608] text-white shadow-[0_6px_16px_-8px_rgba(232,67,20,0.6)]"
                 }`}
               >
                 {isStreaming ? "Stop" : cameraActive ? "Go Live" : "Start camera"}
@@ -879,7 +893,7 @@ export default function Dashboard() {
                     disabled={isStreaming}
                     className={`w-full text-left px-3 py-1.5 rounded text-xs transition ${
                       activeMode === m.id
-                        ? "bg-[#ff4a1d]/10 text-[#e84314] font-medium"
+                        ? "bg-[#e84314]/10 text-[#e84314] font-medium"
                         : "text-stone-500 hover:text-stone-900 hover:bg-stone-100"
                     } disabled:cursor-not-allowed disabled:opacity-50`}
                   >
@@ -924,7 +938,7 @@ export default function Dashboard() {
             </a>
           </div>
         </div>
-        {lookModalOpen && <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4 backdrop-blur-sm"><div className="w-full max-w-md rounded-2xl border border-stone-200 bg-white p-5 shadow-xl"><div className="flex justify-between"><h2 className="font-semibold text-stone-900">Your saved looks</h2><button onClick={() => setLookModalOpen(false)} className="text-stone-500 hover:text-stone-900 text-lg leading-none">×</button></div><p className="mt-1 text-xs text-stone-500">Saved only in this browser.</p>{referenceImage && <div className="relative mt-4 h-28 w-28"><img src={referenceImage} alt="Saved look" className="h-full w-full rounded-lg object-cover"/><button onClick={removeReferenceImage} aria-label="Delete saved image" className="absolute -right-2 -top-2 grid h-6 w-6 place-items-center rounded-full bg-red-500 text-xs font-bold text-white shadow-lg">×</button></div>}<input ref={lookInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => saveReferenceImage(e.target.files?.[0])}/><button onClick={() => lookInputRef.current?.click()} className="mt-4 rounded-lg bg-[#ff4a1d] hover:bg-[#e84314] px-4 py-2 text-sm text-white">{referenceImage ? "Upload another image" : "Upload image"}</button></div></div>}
+        {lookModalOpen && <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4 backdrop-blur-sm"><div className="w-full max-w-md rounded-2xl border border-stone-200 bg-white p-5 shadow-xl"><div className="flex justify-between"><h2 className="font-semibold text-stone-900">Your saved looks</h2><button onClick={() => setLookModalOpen(false)} className="text-stone-500 hover:text-stone-900 text-lg leading-none">×</button></div><p className="mt-1 text-xs text-stone-500">Saved only in this browser.</p>{referenceImage && <div className="relative mt-4 h-28 w-28"><img src={referenceImage} alt="Saved look" className="h-full w-full rounded-lg object-cover"/><button onClick={removeReferenceImage} aria-label="Delete saved image" className="absolute -right-2 -top-2 grid h-6 w-6 place-items-center rounded-full bg-red-500 text-xs font-bold text-white shadow-lg">×</button></div>}<input ref={lookInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => saveReferenceImage(e.target.files?.[0])}/><button onClick={() => lookInputRef.current?.click()} className="mt-4 rounded-lg bg-[#e84314] hover:bg-[#c73608] px-4 py-2 text-sm text-white">{referenceImage ? "Upload another image" : "Upload image"}</button></div></div>}
       </div>
     </DashboardLayout>
   );

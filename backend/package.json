@@ -5,7 +5,7 @@
   "main": "signaling.js",
   "scripts": {
     "start": "node signaling.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node --test tests/*.test.cjs"
   },
   "engines": {
     "node": ">=20"
@@ -16,6 +16,7 @@
   "type": "commonjs",
   "dependencies": {
     "firebase-admin": "^14.3.0",
-    "socket.io": "^4.8.3"
+    "socket.io": "^4.8.3",
+    "ws": "^8.18.3"
   }
 }

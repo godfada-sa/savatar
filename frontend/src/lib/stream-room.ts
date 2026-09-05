@@ -1,11 +1,11 @@
-const STREAM_KEY_STORAGE = "savatar-stream-key";
-const STREAM_KEY_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+import type { User } from "firebase/auth";
 
-export function getOrCreateStreamRoomId() {
-  const existing = window.localStorage.getItem(STREAM_KEY_STORAGE);
-  if (existing && STREAM_KEY_PATTERN.test(existing)) return `stream-${existing}`;
-
-  const key = window.crypto.randomUUID();
-  window.localStorage.setItem(STREAM_KEY_STORAGE, key);
-  return `stream-${key}`;
+export async function getOrCreateStreamRoomId(user: User): Promise<string> {
+  const response = await fetch("/api/streaming/room", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${await user.getIdToken()}` },
+  });
+  const result = await response.json();
+  if (!response.ok || typeof result.roomId !== "string") throw new Error(result.error || "Unable to load your stream room");
+  return result.roomId;
 }

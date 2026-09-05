@@ -1,5 +1,5 @@
 import { createDecartClient } from "@decartai/sdk";
-import { randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { FieldValue } from "firebase-admin/firestore";
 import { NextRequest } from "next/server";
 import { getAdminServices } from "@/lib/firebase-admin";
@@ -40,6 +40,7 @@ export async function POST(req: NextRequest) {
 
     const userRef = db.collection("users").doc(user.uid);
     const sessionId = randomUUID();
+    const ticket = `${sessionId}.${randomBytes(32).toString("hex")}`;
     const sessionRef = db.collection("streamSessions").doc(sessionId);
     const transactionRef = db.collection("transactions").doc(`stream-${sessionId}`);
     const reservedSeconds = await db.runTransaction(async (transaction) => {
@@ -77,9 +78,10 @@ export async function POST(req: NextRequest) {
     const maxSessionDuration = reservedSeconds;
     const decart = createDecartClient({ apiKey: permanentApiKey() });
     const token = await decart.tokens.create({
-      // Token must outlive the reserved window so the provider-side cap
-      // (maxSessionDuration) is what ends the session, never a short token TTL.
-      expiresIn: Math.max(120, reservedSeconds + 60),
+      // Only the authenticated proxy receives this provider credential.
+      // Long enough to cover the full prepaid session plus reconnect margin,
+      // so a transport drop late in a long stream can still re-open upstream.
+      expiresIn: Math.max(120, reservedSeconds + 120),
       allowedModels: [model],
       allowedOrigins: [origin],
       constraints: { realtime: { maxSessionDuration } },
@@ -92,13 +94,18 @@ export async function POST(req: NextRequest) {
     // the same window the countdown shows, so overuse is impossible.
     await sessionRef.update({
       status: "active",
+      transport: "proxy-v1",
+      ticketHash: createHash("sha256").update(ticket).digest("hex"),
+      ticketExpiresAt: new Date(Date.now() + 90_000),
+      providerToken: token.apiKey,
+      allowedOrigin: origin,
       tokenExpiresAt: token.expiresAt,
       activatedAt: FieldValue.serverTimestamp(),
       deadlineAt: new Date(Date.now() + reservedSeconds * 1000),
     });
 
     return privateJson({
-      apiKey: token.apiKey,
+      apiKey: ticket,
       expiresAt: token.expiresAt,
       maxSessionDuration,
       sessionId,

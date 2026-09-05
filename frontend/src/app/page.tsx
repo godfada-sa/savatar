@@ -125,9 +125,9 @@ function StudioPreview() {
               <span className="h-1.5 w-1.5 rounded-full bg-red-400" />
               Live preview
             </div>
-            <div className="relative flex h-36 w-28 items-center justify-center rounded-[48%_48%_42%_42%] border border-[#ff4a1d]/40 bg-[#ff4a1d]/8">
-              <div className="absolute top-7 h-12 w-12 rounded-full border border-[#ff4a1d]/40" />
-              <div className="absolute bottom-5 h-12 w-20 rounded-t-[50%] border border-[#ff4a1d]/30 border-b-0" />
+            <div className="relative flex h-36 w-28 items-center justify-center rounded-[48%_48%_42%_42%] border border-[#e84314]/40 bg-[#e84314]/8">
+              <div className="absolute top-7 h-12 w-12 rounded-full border border-[#e84314]/40" />
+              <div className="absolute bottom-5 h-12 w-20 rounded-t-[50%] border border-[#e84314]/30 border-b-0" />
             </div>
             <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between rounded-md border border-white/10 bg-black/60 px-3 py-2">
               <span className="text-[10px] font-medium text-neutral-300">Character transformation</span>
@@ -147,10 +147,10 @@ function StudioPreview() {
                 <span className="font-display text-sm font-bold text-white">28</span>
               </div>
               <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10">
-                <div className="h-full w-3/5 rounded-full bg-[#ff4a1d]" />
+                <div className="h-full w-3/5 rounded-full bg-[#e84314]" />
               </div>
             </div>
-            <button type="button" className="w-full rounded-md bg-[#ff4a1d] px-3 py-2.5 text-[11px] font-semibold text-white">
+            <button type="button" className="w-full rounded-md bg-[#e84314] px-3 py-2.5 text-[11px] font-semibold text-white">
               Manage stream
             </button>
           </div>
@@ -167,20 +167,20 @@ function Hero() {
     <section className="px-5 pb-20 pt-16 sm:px-6 sm:pb-24 sm:pt-24">
       <div className="mx-auto grid max-w-6xl items-center gap-14 lg:grid-cols-[0.9fr_1.1fr] lg:gap-16">
         <div>
-          <div className="mb-6 inline-flex items-center gap-2.5">
-            <span className="h-2 w-2 rounded-full bg-[#ff4a1d]" />
-            <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-stone-500">AI live production in your browser</span>
-          </div>
+          <p className="mb-6 text-sm text-stone-500">
+            Streams rendered live by{" "}
+            <span className="font-semibold text-[#e84314]">Lucy 2.5</span>
+          </p>
           <h1 className="font-display max-w-2xl text-[2.9rem] font-extrabold leading-[1.02] tracking-[-0.045em] text-stone-900 sm:text-6xl lg:text-[4rem]">
             Transform your camera.
             <br />
-            <span className="text-[#ff4a1d]">Go live as anyone.</span>
+            <span className="text-[#e84314]">Go live as anyone.</span>
           </h1>
           <p className="mt-6 max-w-xl text-base leading-7 text-stone-600 sm:text-lg">
             Create a polished AI-powered live presence, switch looks in real time, and invite viewers into a shareable room from one browser workspace.
           </p>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-            <Link href="/signup" className="inline-flex items-center justify-center rounded-md bg-[#ff4a1d] px-6 py-3.5 text-sm font-semibold text-white shadow-[0_10px_24px_-12px_rgba(255,74,29,0.7)] transition-colors hover:bg-[#e84314]">
+            <Link href="/signup" className="inline-flex items-center justify-center rounded-md bg-[#e84314] px-6 py-3.5 text-sm font-semibold text-white shadow-[0_10px_24px_-12px_rgba(232,67,20,0.7)] transition-colors hover:bg-[#c73608]">
               Start creating
             </Link>
             <a href="#how-it-works" className="inline-flex items-center justify-center rounded-md border border-stone-300 bg-white px-6 py-3.5 text-sm font-semibold text-stone-800 transition-colors hover:border-stone-900">
@@ -190,7 +190,7 @@ function Hero() {
           <div className="mt-8 flex flex-wrap gap-x-5 gap-y-2 text-xs font-medium text-stone-500">
             {["No software install", "Mobile money payments", "Shareable watch rooms"].map((item) => (
               <span key={item} className="flex items-center gap-2">
-                <svg className="h-3.5 w-3.5 text-[#ff4a1d]" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <svg className="h-3.5 w-3.5 text-[#e84314]" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="M4.5 12.75l6 6 9-13.5" />
                 </svg>
                 {item}
@@ -226,7 +226,7 @@ function Features() {
         <div className="mt-10 grid gap-x-14 sm:grid-cols-2">
           {features.map((feature) => (
             <article key={feature.title} className="flex gap-4 border-t border-stone-300 py-6 sm:py-7">
-              <div className="mt-0.5 shrink-0 text-[#ff4a1d]">
+              <div className="mt-0.5 shrink-0 text-[#e84314]">
                 <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">{feature.icon}</svg>
               </div>
               <div>
@@ -296,19 +296,19 @@ function Pricing() {
               <div className="flex min-h-7 items-start justify-between gap-3">
                 <h3 className={`font-display text-base font-bold ${plan.featured ? "text-white" : "text-stone-900"}`}>{plan.name}</h3>
                 {plan.featured && (
-                  <span className="rounded-full bg-[#ff4a1d] px-2 py-1 text-[9px] font-bold uppercase tracking-[0.14em] text-white">Most popular</span>
+                  <span className="rounded-full bg-[#e84314] px-2 py-1 text-[9px] font-bold uppercase tracking-[0.14em] text-white">Most popular</span>
                 )}
               </div>
               <p className={`mt-4 text-sm leading-6 ${plan.featured ? "text-stone-400" : "text-stone-600"}`}>{plan.description}</p>
               <div className="mt-6">
                 <p className={`font-display text-3xl font-extrabold tracking-[-0.035em] ${plan.featured ? "text-white" : "text-stone-900"}`}>{plan.price}</p>
-                <p className={`mt-1 text-xs font-semibold ${plan.featured ? "text-[#ff8a68]" : "text-[#e84314]"}`}>{plan.credits}</p>
+                <p className={`mt-1 text-xs font-semibold ${plan.featured ? "text-[#f07a55]" : "text-[#e84314]"}`}>{plan.credits}</p>
                 <p className={`mt-0.5 text-[11px] ${plan.featured ? "text-stone-400" : "text-stone-500"}`}>{plan.duration}</p>
               </div>
               <ul className={`mt-6 space-y-3 text-xs ${plan.featured ? "text-stone-300" : "text-stone-600"}`}>
                 {plan.features.map((feature) => (
                   <li key={feature} className="flex items-center gap-2.5">
-                    <svg className={`h-3.5 w-3.5 shrink-0 ${plan.featured ? "text-[#ff8a68]" : "text-[#ff4a1d]"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <svg className={`h-3.5 w-3.5 shrink-0 ${plan.featured ? "text-[#f07a55]" : "text-[#e84314]"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="M4.5 12.75l6 6 9-13.5" />
                     </svg>
                     {feature}
@@ -319,7 +319,7 @@ function Pricing() {
                 href="/signup"
                 className={`mt-auto flex items-center justify-center rounded-md px-4 py-3 text-sm font-semibold transition-colors ${
                   plan.featured
-                    ? "bg-[#ff4a1d] text-white hover:bg-[#e84314]"
+                    ? "bg-[#e84314] text-white hover:bg-[#c73608]"
                     : "border border-stone-300 bg-white text-stone-800 hover:border-stone-900"
                 }`}
               >
@@ -341,11 +341,11 @@ function FinalCta() {
     <section className="px-5 py-20 sm:px-6 sm:py-24">
       <div className="mx-auto flex max-w-6xl flex-col items-start justify-between gap-8 rounded-lg bg-stone-900 p-8 sm:p-12 md:flex-row md:items-center">
         <div className="max-w-2xl">
-          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#ff8a68]">Start free</p>
+          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#f07a55]">Start free</p>
           <h2 className="font-display mt-3 text-3xl font-extrabold tracking-[-0.035em] text-white sm:text-4xl">Build your first live look today</h2>
           <p className="mt-3 text-[15px] leading-7 text-stone-400">Create your account, connect a camera, and see the transformed preview before you spend any streaming credits.</p>
         </div>
-        <Link href="/signup" className="shrink-0 rounded-md bg-[#ff4a1d] px-6 py-3.5 text-sm font-bold text-white transition-colors hover:bg-[#e84314]">
+        <Link href="/signup" className="shrink-0 rounded-md bg-[#e84314] px-6 py-3.5 text-sm font-bold text-white transition-colors hover:bg-[#c73608]">
           Create an account
         </Link>
       </div>

@@ -33,14 +33,20 @@ export async function verifyAndFulfillPaystackPayment(reference: string) {
     result.data.currency === "GHS" && Number(result.data.amount) === Number(order.amountSubunit) &&
     result.data.metadata?.userId === order.userId && result.data.metadata?.packId === order.packId;
   if (!verified) {
-    await paymentRef.update({ status: "verification_pending", providerMessage: result.message?.slice(0, 300) ?? null, verificationCheckedAt: FieldValue.serverTimestamp() });
+    await db.runTransaction(async (transaction) => {
+      const fresh = await transaction.get(paymentRef);
+      if (fresh.data()?.status === "completed") return;
+      transaction.update(paymentRef, { status: "verification_pending", providerMessage: result.message?.slice(0, 300) ?? null, verificationCheckedAt: FieldValue.serverTimestamp() });
+    });
     return { verified: false, alreadyProcessed: false };
   }
 
   await db.runTransaction(async (transaction) => {
     const freshPayment = await transaction.get(paymentRef);
     const fresh = freshPayment.data();
-    if (!fresh || fresh.status === "completed") return;
+    const ledgerRef = db.collection("transactions").doc(reference);
+    const ledger = await transaction.get(ledgerRef);
+    if (!fresh || fresh.status === "completed" || ledger.exists) return;
     const pack = getCreditPack(String(fresh.packId ?? ""));
     const seconds = Math.floor(Number(fresh.seconds));
     const amount = Number(fresh.amount);
@@ -59,10 +65,13 @@ export async function verifyAndFulfillPaystackPayment(reference: string) {
     transaction.update(userRef, { "wallet.balanceSeconds": FieldValue.increment(seconds), "wallet.totalPurchased": FieldValue.increment(seconds) });
     if (promoCode && !promoUsed.includes(promoCode)) {
       transaction.update(userRef, { promoUsed: FieldValue.arrayUnion(promoCode) });
-      if (promoRef && promo?.exists) transaction.update(promoRef, { usedCount: FieldValue.increment(1) });
+      if (promoRef && promo?.exists) transaction.update(promoRef, {
+        usedCount: FieldValue.increment(1),
+        ...(fresh.promoReserved === true ? { reservedCount: FieldValue.increment(-1) } : {}),
+      });
     }
     transaction.update(paymentRef, { status: "completed", providerTransactionId: String(result.data!.id ?? ""), providerChannel: result.data!.channel ?? null, paidAt: result.data!.paid_at ?? null, completedAt: FieldValue.serverTimestamp() });
-    transaction.set(db.collection("transactions").doc(reference), {
+    transaction.set(ledgerRef, {
       userId: fresh.userId, packId: fresh.packId, type: "purchase", provider: "paystack", seconds, amount,
       originalPrice: fresh.originalPrice ?? pack.priceGHS, discountPercent: fresh.discountPercent ?? 0,
       bonusSeconds: fresh.bonusSeconds ?? 0, promoCode: promoCode || null, paymentRef: reference,

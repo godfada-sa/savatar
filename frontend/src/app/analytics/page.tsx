@@ -9,7 +9,7 @@ import DashboardLayout from "@/components/DashboardLayout";
 export default function AnalyticsPage() {
   const { user, userData } = useAuth();
   const [usage, setUsage] = useState<number[]>([]);
-  useEffect(() => { if (!user) return; getDocs(query(collection(getDb(), "transactions"), where("userId", "==", user.uid), orderBy("createdAt", "desc"), limit(12))).then((snapshot) => setUsage(snapshot.docs.map((doc) => Number(doc.data().type === "usage" ? doc.data().seconds : 0)).filter(Boolean))).catch(() => setUsage([])); }, [user]);
+  useEffect(() => { if (!user) return; getDocs(query(collection(getDb(), "transactions"), where("userId", "==", user.uid), orderBy("createdAt", "desc"), limit(100))).then((snapshot) => setUsage(snapshot.docs.filter((doc) => doc.data().type === "usage" && doc.data().status === "completed").slice(0, 12).map((doc) => Number(doc.data().usedSeconds ?? doc.data().seconds ?? 0)))).catch(() => setUsage([])); }, [user]);
 
   const totalPurchased = ((userData?.wallet?.totalPurchased || 0) / 60).toFixed(1);
   const totalUsed = ((userData?.wallet?.totalUsed || 0) / 60).toFixed(1);
@@ -25,7 +25,7 @@ export default function AnalyticsPage() {
           {[
             { label: "Credits purchased", value: totalPurchased + "m", sub: "All time", color: "text-stone-900" },
             { label: "AI usage", value: totalUsed + "m", sub: "All time", color: "text-stone-900" },
-            { label: "Sessions", value: String(usage.length), sub: "Recorded", color: "text-emerald-600" },
+            { label: "Recent sessions", value: String(usage.length), sub: "Up to 12 completed", color: "text-emerald-600" },
             { label: "Credits Left", value: balanceMinutes + "m", sub: "Available", color: "text-stone-900" },
           ].map((stat) => (
             <div key={stat.label} className="min-w-0 p-3 sm:p-4 rounded-xl bg-white border border-stone-200">
@@ -47,7 +47,7 @@ export default function AnalyticsPage() {
               {(usage.length ? usage : [0]).map((v, i) => (
                 <div
                   key={i}
-                  className="flex-1 bg-[#ff4a1d]/50 rounded-t"
+                  className="flex-1 bg-[#e84314]/50 rounded-t"
                   style={{ height: `${(v / maxUsage) * 100}%`, minHeight: "4px" }}
                 />
               ))}

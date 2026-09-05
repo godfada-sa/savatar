@@ -1,19 +1,27 @@
 import {
   collection,
-  deleteDoc,
   deleteField,
   doc,
-  getDocs,
   increment,
   limit,
   onSnapshot,
   orderBy,
   query,
   runTransaction,
-  setDoc,
   type Unsubscribe,
 } from "firebase/firestore";
-import { getDb } from "./firebase";
+import { getAuthInstance, getDb } from "./firebase";
+
+async function mutateFeed(body: Record<string, unknown>) {
+  const user = getAuthInstance().currentUser;
+  if (!user) throw new Error("Sign in to continue");
+  const response = await fetch("/api/feed", { method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${await user.getIdToken()}` },
+    body: JSON.stringify(body) });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.error || "Unable to update the feed");
+}
+
 
 export interface FeedPost {
   id: string;
@@ -66,19 +74,8 @@ export interface AuthorInfo {
   photoURL: string;
 }
 
-export async function createPost(author: AuthorInfo, content: string): Promise<void> {
-  const trimmed = content.trim();
-  if (!trimmed) return;
-  await setDoc(doc(collection(getDb(), "posts")), {
-    authorId: author.uid,
-    authorName: author.name,
-    authorPhoto: author.photoURL,
-    content: trimmed,
-    createdAt: new Date().toISOString(),
-    likedBy: {},
-    likeCount: 0,
-    commentCount: 0,
-  });
+export async function createPost(_author: AuthorInfo, content: string): Promise<void> {
+  await mutateFeed({ action: "post", content });
 }
 
 /** Toggle the current user's like on a post. Resolves to the new liked state. */
@@ -104,27 +101,8 @@ export async function toggleLike(postId: string, uid: string): Promise<boolean> 
   });
 }
 
-export async function addComment(
-  postId: string,
-  author: AuthorInfo,
-  content: string,
-): Promise<void> {
-  const trimmed = content.trim();
-  if (!trimmed) return;
-  const postRef = doc(getDb(), "posts", postId);
-  const commentRef = doc(collection(getDb(), "posts", postId, "comments"));
-  await runTransaction(getDb(), async (tx) => {
-    const snap = await tx.get(postRef);
-    if (!snap.exists()) throw new Error("This post no longer exists.");
-    tx.set(commentRef, {
-      authorId: author.uid,
-      authorName: author.name,
-      authorPhoto: author.photoURL,
-      content: trimmed,
-      createdAt: new Date().toISOString(),
-    });
-    tx.update(postRef, { commentCount: increment(1) });
-  });
+export async function addComment(postId: string, _author: AuthorInfo, content: string): Promise<void> {
+  await mutateFeed({ action: "comment", postId, content });
 }
 
 export function subscribeComments(
@@ -144,23 +122,11 @@ export function subscribeComments(
 }
 
 export async function deleteComment(postId: string, commentId: string): Promise<void> {
-  await deleteDoc(doc(getDb(), "posts", postId, "comments", commentId));
+  await mutateFeed({ action: "deleteComment", postId, commentId });
 }
 
-/**
- * Delete a post. The post doc goes first (allowed by rules for its author),
- * then any remaining comments are removed best-effort — the rules allow
- * clearing comments once their parent post is gone.
- */
 export async function deletePost(postId: string): Promise<void> {
-  await deleteDoc(doc(getDb(), "posts", postId));
-  try {
-    const commentsRef = collection(getDb(), "posts", postId, "comments");
-    const snap = await getDocs(commentsRef);
-    await Promise.all(snap.docs.map((d) => deleteDoc(d.ref)));
-  } catch {
-    // Post is gone; orphan cleanup is best-effort.
-  }
+  await mutateFeed({ action: "deletePost", postId });
 }
 
 /** Compact relative time for feed timestamps. */
