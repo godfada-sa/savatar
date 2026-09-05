@@ -8,7 +8,9 @@ import DashboardLayout from "@/components/DashboardLayout";
 
 function CreditsContent() {
   const { user, userData } = useAuth();
-  const [selectedPack, setSelectedPack] = useState<string | null>(null);
+  // Basic is pre-selected (like the landing page pre-features it) so the
+  // "Most popular" treatment is visible before the user clicks anything.
+  const [selectedPack, setSelectedPack] = useState<string>("basic");
   const [processing, setProcessing] = useState(false);
 
   // Promo code state
