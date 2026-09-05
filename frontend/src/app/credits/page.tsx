@@ -244,7 +244,9 @@ function CreditsContent() {
                   <h3 className={`font-display text-base font-bold ${selected ? "text-white" : "text-stone-900"}`}>
                     {pack.name}
                   </h3>
-                  {selected && (
+                  {/* Badge is pinned to Basic (like the landing page's featured
+                      card) — it does not follow which pack is selected. */}
+                  {pack.id === "basic" && (
                     <span className="rounded-full bg-[#ff4a1d] px-2 py-1 text-[9px] font-bold uppercase tracking-[0.14em] text-white">
                       Most popular
                     </span>
