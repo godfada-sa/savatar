@@ -115,8 +115,9 @@ html.dark .app-root :is(img, video, iframe, canvas) {
   filter: invert(1) hue-rotate(180deg);
 }
 
-/* Video stages, full-screen player pages and the splash are deliberately
-   dark in BOTH themes — undo the inversion for those subtrees. */
+/* Video stages and full-screen player pages are deliberately dark in both
+   themes; the splash follows the theme but lives inside the inverted tree,
+   so it also needs the un-inversion to show its own colors. */
 html.dark .force-dark {
   filter: invert(1) hue-rotate(180deg);
 }

@@ -228,6 +228,10 @@ function CreditsContent() {
             stone card, coral accents, solid coral action). */}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 mb-6 2xl:grid-cols-5">
           {CREDIT_PACKS.map((pack) => {
+            // Basic is permanently the featured (dark) card — like the landing
+            // page. Selection is shown with a coral ring instead of moving the
+            // dark color around.
+            const featured = pack.id === "basic";
             const selected = selectedPack === pack.id;
             return (
               <button
@@ -235,39 +239,41 @@ function CreditsContent() {
                 onClick={() => selectPack(pack.id)}
                 aria-pressed={selected}
                 className={`flex min-h-[320px] flex-col rounded-lg border p-6 text-left transition ${
+                  featured ? "bg-stone-900 text-white shadow-[0_24px_50px_-24px_rgba(28,25,23,0.5)]" : "bg-white"
+                } ${
                   selected
-                    ? "border-stone-900 bg-stone-900 text-white shadow-[0_24px_50px_-24px_rgba(28,25,23,0.5)]"
-                    : "border-stone-300 bg-white hover:border-stone-400"
+                    ? "border-[#ff4a1d] ring-1 ring-[#ff4a1d]"
+                    : featured
+                      ? "border-stone-900"
+                      : "border-stone-300 hover:border-stone-400"
                 }`}
               >
                 <div className="flex min-h-7 items-start justify-between gap-3">
-                  <h3 className={`font-display text-base font-bold ${selected ? "text-white" : "text-stone-900"}`}>
+                  <h3 className={`font-display text-base font-bold ${featured ? "text-white" : "text-stone-900"}`}>
                     {pack.name}
                   </h3>
-                  {/* Badge is pinned to Basic (like the landing page's featured
-                      card) — it does not follow which pack is selected. */}
-                  {pack.id === "basic" && (
+                  {featured && (
                     <span className="rounded-full bg-[#ff4a1d] px-2 py-1 text-[9px] font-bold uppercase tracking-[0.14em] text-white">
                       Most popular
                     </span>
                   )}
                 </div>
                 <div className="mt-6">
-                  <p className={`font-display text-3xl font-extrabold tracking-[-0.035em] ${selected ? "text-white" : "text-stone-900"}`}>
+                  <p className={`font-display text-3xl font-extrabold tracking-[-0.035em] ${featured ? "text-white" : "text-stone-900"}`}>
                     GH {pack.priceGHS.toLocaleString()}
                   </p>
-                  <p className={`mt-1 text-xs font-semibold ${selected ? "text-[#ff8a68]" : "text-[#e84314]"}`}>
+                  <p className={`mt-1 text-xs font-semibold ${featured ? "text-[#ff8a68]" : "text-[#e84314]"}`}>
                     {pack.credits.toLocaleString()} credits
                   </p>
-                  <p className={`mt-0.5 text-[11px] ${selected ? "text-stone-400" : "text-stone-500"}`}>
+                  <p className={`mt-0.5 text-[11px] ${featured ? "text-stone-400" : "text-stone-500"}`}>
                     {pack.timeLabel} AI streaming
                   </p>
                 </div>
-                <ul className={`mt-6 flex-1 space-y-3 text-xs ${selected ? "text-stone-300" : "text-stone-600"}`}>
+                <ul className={`mt-6 flex-1 space-y-3 text-xs ${featured ? "text-stone-300" : "text-stone-600"}`}>
                   {["Instant wallet top-up", "Use on Studio & OBS", "Pay by mobile money or card"].map((feature) => (
                     <li key={feature} className="flex items-center gap-2.5">
                       <svg
-                        className={`h-3.5 w-3.5 shrink-0 ${selected ? "text-[#ff8a68]" : "text-[#ff4a1d]"}`}
+                        className={`h-3.5 w-3.5 shrink-0 ${featured ? "text-[#ff8a68]" : "text-[#ff4a1d]"}`}
                         fill="none"
                         stroke="currentColor"
                         viewBox="0 0 24 24"
@@ -286,7 +292,7 @@ function CreditsContent() {
                     handleGet(pack.id);
                   }}
                   className={`mt-6 flex cursor-pointer items-center justify-center rounded-md px-4 py-3 text-sm font-semibold transition ${
-                    selected
+                    featured || selected
                       ? "bg-[#ff4a1d] text-white"
                       : "border border-stone-300 bg-white text-stone-800 hover:border-stone-900"
                   }`}
