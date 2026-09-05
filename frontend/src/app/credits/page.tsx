@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState, useEffect } from "react";
+import { Suspense, useState, useEffect, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { CREDIT_PACKS } from "@/lib/credit-packs";
@@ -12,6 +12,7 @@ function CreditsContent() {
   // "Most popular" treatment is visible before the user clicks anything.
   const [selectedPack, setSelectedPack] = useState<string>("basic");
   const [processing, setProcessing] = useState(false);
+  const paymentSectionRef = useRef<HTMLDivElement | null>(null);
 
   // Promo code state
   const [promoCode, setPromoCode] = useState("");
@@ -44,6 +45,16 @@ function CreditsContent() {
     setPromoResult(null);
     setPromoError("");
     setPromoCode("");
+  };
+
+  // "Get {pack}" on a card: select the pack and scroll the Paystack payment
+  // panel into view (the panel lives below the grid, so on mobile this
+  // replaces a manual scroll with one tap).
+  const handleGet = (packId: string) => {
+    selectPack(packId);
+    requestAnimationFrame(() => {
+      paymentSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
   };
 
   const validatePromo = async () => {
@@ -196,7 +207,12 @@ function CreditsContent() {
                   ))}
                 </ul>
                 <span
-                  className={`mt-6 flex items-center justify-center rounded-md px-4 py-3 text-sm font-semibold transition ${
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleGet(pack.id);
+                  }}
+                  className={`mt-6 flex cursor-pointer items-center justify-center rounded-md px-4 py-3 text-sm font-semibold transition ${
                     selected
                       ? "bg-[#ff4a1d] text-white"
                       : "border border-stone-300 bg-white text-stone-800 hover:border-stone-900"
@@ -215,7 +231,7 @@ function CreditsContent() {
 
         {/* Payment Section */}
         {selectedPack && (
-          <div className="max-w-md mx-auto p-5 rounded-xl bg-white border border-stone-200 space-y-4 shadow-sm">
+          <div ref={paymentSectionRef} className="max-w-md mx-auto p-5 rounded-xl bg-white border border-stone-200 space-y-4 shadow-sm scroll-mt-4">
             <h3 className="text-sm font-semibold text-stone-900">Payment</h3>
 
             <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3">
