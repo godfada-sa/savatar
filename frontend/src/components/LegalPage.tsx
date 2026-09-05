@@ -1,7 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import type { ReactNode } from "react";
-import ThemeToggle from "@/components/ThemeToggle";
+import SiteNavbar from "@/components/SiteNavbar";
 
 interface LegalPageProps {
   eyebrow: string;
@@ -32,22 +32,15 @@ export function LegalSection({
 export function LegalPage({ eyebrow, title, description, children }: LegalPageProps) {
   return (
     <main className="min-h-screen bg-[#faf9f7] text-stone-900">
-      <nav className="sticky top-0 z-40 border-b border-stone-200 bg-[#faf9f7]/90 backdrop-blur-xl">
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5 sm:px-6">
-          <Link href="/" className="flex items-center gap-2.5" aria-label="Savatar home">
-            <Image src="/logo.svg" alt="" width={30} height={30} priority />
-            <span className="font-display text-[15px] font-bold tracking-[-0.02em] text-stone-900">Savatar</span>
-          </Link>
-          <div className="flex items-center gap-5 text-[13px] font-medium text-stone-500">
-            <ThemeToggle className="border border-stone-300 bg-white text-stone-600 hover:text-stone-900" />
-            <Link href="/terms" className="transition-colors hover:text-stone-900">Terms</Link>
-            <Link href="/privacy" className="transition-colors hover:text-stone-900">Privacy</Link>
-            <Link href="/signup" className="rounded-md bg-[#ff4a1d] px-4 py-2.5 font-semibold text-white transition-colors hover:bg-[#e84314]">
-              Get started
-            </Link>
-          </div>
-        </div>
-      </nav>
+      {/* Shared responsive header — same component as the landing page, so
+          dark mode inverts both identically and the wordmark never clips on
+          mobile (links collapse into the hamburger menu). */}
+      <SiteNavbar
+        links={[
+          { label: "Terms", href: "/terms" },
+          { label: "Privacy", href: "/privacy" },
+        ]}
+      />
 
       <header className="border-b border-stone-200 px-5 py-16 sm:px-6 sm:py-20">
         <div className="mx-auto max-w-3xl">

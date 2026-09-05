@@ -2,8 +2,8 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useState, useEffect } from "react";
-import ThemeToggle from "@/components/ThemeToggle";
+import { useEffect } from "react";
+import SiteNavbar from "@/components/SiteNavbar";
 
 // Light, warm "paper" theme. Brand accent is a live-broadcast coral — not the
 // indigo/purple AI-template default. Studio (dashboard) stays dark; the
@@ -103,81 +103,6 @@ const plans = [
   },
 ];
 
-function Navbar() {
-  const [mobileOpen, setMobileOpen] = useState(false);
-  const [logoVisible, setLogoVisible] = useState(false);
-
-  useEffect(() => {
-    const onArrived = () => setLogoVisible(true);
-    window.addEventListener("splash-logo-arrived", onArrived);
-    // Splash was skipped (already seen this session): show the logo immediately.
-    // When the splash plays, the LoadingScreen fires splash-logo-arrived once
-    // its logo lands in the navbar position, so we keep the logo hidden until
-    // then. (Previously this condition was inverted — the logo waited for an
-    // event that never fires when the splash is skipped, so a refresh made it
-    // disappear.)
-    if (sessionStorage.getItem("savatar-splash-seen")) {
-      setLogoVisible(true);
-    }
-    return () => window.removeEventListener("splash-logo-arrived", onArrived);
-  }, []);
-
-  return (
-    <nav className="fixed inset-x-0 top-0 z-50 border-b border-stone-200 bg-[#faf9f7]/90 backdrop-blur-xl">
-      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5 sm:px-6">
-        <Link href="/" className="flex items-center gap-2.5" aria-label="Savatar home">
-          <span
-            data-nav-logo
-            className={`transition-opacity duration-300 ${logoVisible ? "opacity-100" : "opacity-0"}`}
-          >
-            <Image src="/logo.svg" alt="" width={30} height={30} priority />
-          </span>
-          <span className="font-display text-[15px] font-bold tracking-[-0.02em] text-stone-900">Savatar</span>
-        </Link>
-
-        <div className="hidden items-center gap-8 text-[13px] font-medium text-stone-500 md:flex">
-          <a href="#features" className="transition-colors hover:text-stone-900">Features</a>
-          <a href="#how-it-works" className="transition-colors hover:text-stone-900">How it works</a>
-          <a href="#pricing" className="transition-colors hover:text-stone-900">Pricing</a>
-        </div>
-
-        <div className="flex items-center gap-2.5">
-          <ThemeToggle className="border border-stone-300 bg-white text-stone-600 hover:text-stone-900" />
-          <Link href="/login" className="hidden px-3 py-2 text-[13px] font-medium text-stone-600 transition-colors hover:text-stone-900 sm:inline-flex">
-            Sign in
-          </Link>
-          <Link href="/signup" className="hidden rounded-md bg-[#ff4a1d] px-4 py-2.5 text-[13px] font-semibold text-white transition-colors hover:bg-[#e84314] sm:inline-flex">
-            Get started
-          </Link>
-          <button
-            type="button"
-            aria-label="Toggle navigation"
-            aria-expanded={mobileOpen}
-            onClick={() => setMobileOpen((open) => !open)}
-            className="rounded-md border border-stone-300 p-2 text-stone-700 md:hidden"
-          >
-            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d={mobileOpen ? "M6 18L18 6M6 6l12 12" : "M4 7h16M4 12h16M4 17h16"} />
-            </svg>
-          </button>
-        </div>
-      </div>
-
-      {mobileOpen && (
-        <div className="border-t border-stone-200 bg-[#faf9f7] px-5 py-5 md:hidden">
-          <div className="flex flex-col gap-4 text-sm font-medium text-stone-700">
-            <a href="#features" onClick={() => setMobileOpen(false)}>Features</a>
-            <a href="#how-it-works" onClick={() => setMobileOpen(false)}>How it works</a>
-            <a href="#pricing" onClick={() => setMobileOpen(false)}>Pricing</a>
-            <Link href="/login">Sign in</Link>
-            <Link href="/signup" className="rounded-md bg-[#ff4a1d] px-4 py-3 text-center font-semibold text-white">Get started</Link>
-          </div>
-        </div>
-      )}
-    </nav>
-  );
-}
-
 // Dark product window on a light page — reads as a screenshot of the real
 // studio, not a dark site. Kept visually close to the actual dashboard.
 function StudioPreview() {
@@ -236,8 +161,10 @@ function StudioPreview() {
 }
 
 function Hero() {
+  // pt-16/24: the navbar is sticky (in-flow) on these pages, so the hero no
+  // longer needs the tall fixed-nav offset.
   return (
-    <section className="px-5 pb-20 pt-32 sm:px-6 sm:pb-24 sm:pt-40">
+    <section className="px-5 pb-20 pt-16 sm:px-6 sm:pb-24 sm:pt-24">
       <div className="mx-auto grid max-w-6xl items-center gap-14 lg:grid-cols-[0.9fr_1.1fr] lg:gap-16">
         <div>
           <div className="mb-6 inline-flex items-center gap-2.5">
@@ -447,16 +374,27 @@ function Footer() {
 }
 
 export default function Home() {
-  // Paint the root light while this page is mounted so overscroll edges and
-  // the browser chrome match the landing theme (the rest of the app is dark).
+  // Match the root background to the current theme so overscroll edges and
+  // the browser chrome never flash a light strip while dark mode is on
+  // (previously this forced paper-light unconditionally, so dark mode showed
+  // a white top/edge on the landing but not on the terms page).
   useEffect(() => {
     const html = document.documentElement;
     const body = document.body;
     const prevHtml = html.style.background;
     const prevBody = body.style.background;
-    html.style.background = "#faf9f7";
-    body.style.background = "#faf9f7";
+    const apply = () => {
+      const dark = document.documentElement.classList.contains("dark");
+      const color = dark ? "#0d0c0a" : "#faf9f7";
+      html.style.background = color;
+      body.style.background = color;
+    };
+    apply();
+    // Keep in sync when the user flips the theme while staying on this page.
+    const observer = new MutationObserver(apply);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
     return () => {
+      observer.disconnect();
       html.style.background = prevHtml;
       body.style.background = prevBody;
     };
@@ -464,7 +402,14 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-[#faf9f7] text-stone-900">
-      <Navbar />
+      <SiteNavbar
+        links={[
+          { label: "Features", href: "#features" },
+          { label: "How it works", href: "#how-it-works" },
+          { label: "Pricing", href: "#pricing" },
+        ]}
+        splashHandoff
+      />
       <Hero />
       <Features />
       <HowItWorks />
