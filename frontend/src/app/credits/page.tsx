@@ -139,38 +139,72 @@ function CreditsContent() {
           </div>
         </div>
 
-        {/* Credit Packs */}
-        <div className="grid grid-cols-1 gap-3 mb-6 md:grid-cols-2 xl:grid-cols-5">
-          {CREDIT_PACKS.map((pack) => (
-            <button
-              key={pack.id}
-              onClick={() => selectPack(pack.id)}
-              className={`block w-full p-5 rounded-xl border text-left transition ${
-                selectedPack === pack.id
-                  ? "bg-[#ff4a1d]/8 border-[#ff4a1d]/50 ring-1 ring-[#ff4a1d]/30"
-                  : "bg-white border-stone-200 hover:border-stone-400"
-              }`}
-            >
-              <div className="text-sm text-stone-500 mb-2">{pack.name} Plan</div>
-              <div className="text-3xl font-bold text-stone-900">
-                {pack.seconds >= 60 ? Math.floor(pack.seconds / 60) : pack.seconds}
-                <span className="text-xs text-stone-500 font-normal ml-1">
-                  {pack.seconds >= 60 ? "min" : "sec"}
+        {/* Credit Packs — same editorial cards as the landing pricing section.
+            The selected pack takes the landing's "featured" treatment (dark
+            stone card, coral accents, solid coral action). */}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 mb-6 2xl:grid-cols-5">
+          {CREDIT_PACKS.map((pack) => {
+            const selected = selectedPack === pack.id;
+            return (
+              <button
+                key={pack.id}
+                onClick={() => selectPack(pack.id)}
+                aria-pressed={selected}
+                className={`flex min-h-[320px] flex-col rounded-lg border p-6 text-left transition ${
+                  selected
+                    ? "border-stone-900 bg-stone-900 text-white shadow-[0_24px_50px_-24px_rgba(28,25,23,0.5)]"
+                    : "border-stone-300 bg-white hover:border-stone-400"
+                }`}
+              >
+                <div className="flex min-h-7 items-start justify-between gap-3">
+                  <h3 className={`font-display text-base font-bold ${selected ? "text-white" : "text-stone-900"}`}>
+                    {pack.name}
+                  </h3>
+                  {selected && (
+                    <span className="rounded-full bg-[#ff4a1d] px-2 py-1 text-[9px] font-bold uppercase tracking-[0.14em] text-white">
+                      Most popular
+                    </span>
+                  )}
+                </div>
+                <div className="mt-6">
+                  <p className={`font-display text-3xl font-extrabold tracking-[-0.035em] ${selected ? "text-white" : "text-stone-900"}`}>
+                    GH {pack.priceGHS.toLocaleString()}
+                  </p>
+                  <p className={`mt-1 text-xs font-semibold ${selected ? "text-[#ff8a68]" : "text-[#e84314]"}`}>
+                    {pack.credits.toLocaleString()} credits
+                  </p>
+                  <p className={`mt-0.5 text-[11px] ${selected ? "text-stone-400" : "text-stone-500"}`}>
+                    {pack.timeLabel} AI streaming
+                  </p>
+                </div>
+                <ul className={`mt-6 flex-1 space-y-3 text-xs ${selected ? "text-stone-300" : "text-stone-600"}`}>
+                  {["Instant wallet top-up", "Use on Studio & OBS", "Pay by mobile money or card"].map((feature) => (
+                    <li key={feature} className="flex items-center gap-2.5">
+                      <svg
+                        className={`h-3.5 w-3.5 shrink-0 ${selected ? "text-[#ff8a68]" : "text-[#ff4a1d]"}`}
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                        aria-hidden="true"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="M4.5 12.75l6 6 9-13.5" />
+                      </svg>
+                      {feature}
+                    </li>
+                  ))}
+                </ul>
+                <span
+                  className={`mt-6 flex items-center justify-center rounded-md px-4 py-3 text-sm font-semibold transition ${
+                    selected
+                      ? "bg-[#ff4a1d] text-white"
+                      : "border border-stone-300 bg-white text-stone-800 hover:border-stone-900"
+                  }`}
+                >
+                  Get {pack.name}
                 </span>
-              </div>
-              <div className="mt-4 border-t border-stone-200 pt-4 text-2xl font-bold text-stone-900">
-                GH₵ {pack.priceGHS.toLocaleString()}
-              </div>
-              <ul className="mt-4 space-y-2">
-                <li className="text-xs text-stone-500">• ~{pack.timeLabel} of AI streaming</li>
-                <li className="text-xs text-stone-500">• Instant wallet top-up</li>
-                <li className="text-xs text-stone-500">• Use on Studio & OBS</li>
-              </ul>
-              <div className="mt-5 w-full px-3 py-3 rounded-lg border border-stone-300 bg-white text-sm text-center text-stone-700 font-medium">
-                Get {pack.name}
-              </div>
-            </button>
-          ))}
+              </button>
+            );
+          })}
         </div>
 
         <p className="text-[11px] text-stone-500 text-center mb-6">
