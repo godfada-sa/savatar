@@ -1,10 +1,84 @@
 "use client";
 
-import { Suspense, useState, useEffect, useRef } from "react";
+import { Suspense, useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { CREDIT_PACKS } from "@/lib/credit-packs";
 import DashboardLayout from "@/components/DashboardLayout";
+
+interface PromoResult {
+  success: boolean;
+  discountPercent: number;
+  bonusSeconds: number;
+  message: string;
+}
+
+function PromoCodeField({
+  promoCode,
+  onPromoCodeChange,
+  promoResult,
+  promoError,
+  promoLoading,
+  onApply,
+  onRemove,
+}: {
+  promoCode: string;
+  onPromoCodeChange: (value: string) => void;
+  promoResult: PromoResult | null;
+  promoError: string;
+  promoLoading: boolean;
+  onApply: () => void;
+  onRemove: () => void;
+}) {
+  return (
+    <div>
+      <label className="block text-xs text-stone-500 mb-1.5">Promo Code (optional)</label>
+      <div className="flex gap-2">
+        <input
+          type="text"
+          value={promoCode}
+          onChange={(e) => onPromoCodeChange(e.target.value.toUpperCase())}
+          placeholder="Enter promo code"
+          disabled={!!promoResult}
+          className="flex-1 px-3 py-2 bg-white border border-stone-300 rounded-lg text-sm text-stone-900 placeholder-stone-400 focus:outline-none focus:border-[#ff4a1d] transition font-mono uppercase disabled:opacity-50"
+        />
+        {promoResult ? (
+          <button
+            onClick={onRemove}
+            className="px-3 py-2 bg-white border border-red-300 text-red-600 text-xs font-medium rounded-lg transition hover:bg-red-50"
+          >
+            Remove
+          </button>
+        ) : (
+          <button
+            onClick={onApply}
+            disabled={!promoCode.trim() || promoLoading}
+            className="px-3 py-2 bg-white border border-stone-300 text-stone-600 text-xs font-medium rounded-lg transition hover:bg-stone-50 disabled:opacity-50"
+          >
+            {promoLoading ? "..." : "Apply"}
+          </button>
+        )}
+      </div>
+
+      {promoResult && (
+        <div className="mt-2 p-2 rounded-lg bg-emerald-50 border border-emerald-200">
+          <div className="flex items-center gap-2">
+            <svg className="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+            <span className="text-xs text-emerald-700 font-medium">{promoResult.message}</span>
+          </div>
+        </div>
+      )}
+
+      {promoError && (
+        <div className="mt-2 p-2 rounded-lg bg-red-50 border border-red-200">
+          <span className="text-xs text-red-600">{promoError}</span>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function CreditsContent() {
   const { user, userData } = useAuth();
@@ -12,17 +86,12 @@ function CreditsContent() {
   // "Most popular" treatment is visible before the user clicks anything.
   const [selectedPack, setSelectedPack] = useState<string>("basic");
   const [processing, setProcessing] = useState(false);
-  const paymentSectionRef = useRef<HTMLDivElement | null>(null);
+  const [checkoutOpen, setCheckoutOpen] = useState(false);
 
   // Promo code state
   const [promoCode, setPromoCode] = useState("");
   const [promoLoading, setPromoLoading] = useState(false);
-  const [promoResult, setPromoResult] = useState<{
-    success: boolean;
-    discountPercent: number;
-    bonusSeconds: number;
-    message: string;
-  } | null>(null);
+  const [promoResult, setPromoResult] = useState<PromoResult | null>(null);
   const [promoError, setPromoError] = useState("");
 
   const balanceMinutes = ((userData?.wallet?.balanceSeconds || 0) / 60).toFixed(1);
@@ -47,14 +116,16 @@ function CreditsContent() {
     setPromoCode("");
   };
 
-  // "Get {pack}" on a card: select the pack and scroll the Paystack payment
-  // panel into view (the panel lives below the grid, so on mobile this
-  // replaces a manual scroll with one tap).
+  // "Get {pack}" on a card: select the pack and open the quick checkout
+  // dialog (promo code + Paystack), no scrolling needed.
   const handleGet = (packId: string) => {
     selectPack(packId);
-    requestAnimationFrame(() => {
-      paymentSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    });
+    setCheckoutOpen(true);
+  };
+
+  const closeCheckout = () => {
+    if (processing) return; // don't close mid-redirect
+    setCheckoutOpen(false);
   };
 
   const validatePromo = async () => {
@@ -229,122 +300,86 @@ function CreditsContent() {
           Credits are consumed while AI streaming is active. Durations above are estimates only.
         </p>
 
-        {/* Payment Section */}
-        {selectedPack && (
-          <div ref={paymentSectionRef} className="max-w-md mx-auto p-5 rounded-xl bg-white border border-stone-200 space-y-4 shadow-sm scroll-mt-4">
-            <h3 className="text-sm font-semibold text-stone-900">Payment</h3>
-
-            <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3">
-              <div className="text-xs font-medium text-emerald-700">Secure Paystack checkout</div>
-              <p className="mt-1 text-[11px] text-stone-500">Choose MTN MoMo, Telecel Cash, AT Money, or card on Paystack&apos;s payment page.</p>
-            </div>
-
-            {/* Promo Code */}
-            <div>
-              <label className="block text-xs text-stone-500 mb-1.5">Promo Code (optional)</label>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={promoCode}
-                  onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
-                  placeholder="Enter promo code"
-                  disabled={!!promoResult}
-                  className="flex-1 px-3 py-2 bg-white border border-stone-300 rounded-lg text-sm text-stone-900 placeholder-stone-400 focus:outline-none focus:border-[#ff4a1d] transition font-mono uppercase disabled:opacity-50"
-                />
-                {promoResult ? (
-                  <button
-                    onClick={() => { setPromoResult(null); setPromoCode(""); setPromoError(""); }}
-                    className="px-3 py-2 bg-white border border-red-300 text-red-600 text-xs font-medium rounded-lg transition hover:bg-red-50"
-                  >
-                    Remove
-                  </button>
-                ) : (
-                  <button
-                    onClick={validatePromo}
-                    disabled={!promoCode.trim() || promoLoading}
-                    className="px-3 py-2 bg-white border border-stone-300 text-stone-600 text-xs font-medium rounded-lg transition hover:bg-stone-50 disabled:opacity-50"
-                  >
-                    {promoLoading ? "..." : "Apply"}
-                  </button>
-                )}
+        {/* Quick checkout dialog — opened by "Get {pack}" */}
+        {checkoutOpen && selectedPackData && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+            onClick={closeCheckout}
+            role="presentation"
+          >
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-label={`Checkout ${selectedPackData.name} pack`}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-sm rounded-xl bg-white p-5 shadow-2xl"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="text-base font-bold text-stone-900">Checkout · {selectedPackData.name}</h3>
+                <button
+                  type="button"
+                  onClick={closeCheckout}
+                  className="rounded-md border border-stone-300 p-1.5 text-stone-500 transition hover:text-stone-900"
+                  aria-label="Close checkout"
+                >
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
               </div>
 
-              {/* Promo result */}
-              {promoResult && (
-                <div className="mt-2 p-2 rounded-lg bg-emerald-50 border border-emerald-200">
-                  <div className="flex items-center gap-2">
-                    <svg className="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                    <span className="text-xs text-emerald-700 font-medium">{promoResult.message}</span>
+              <div className="mt-3 flex items-center justify-between rounded-lg bg-stone-50 px-3 py-2.5 text-sm">
+                <span className="text-stone-500">{selectedPackData.timeLabel} AI streaming</span>
+                <span className="font-semibold text-stone-900">GH {selectedPackData.priceGHS.toLocaleString()}</span>
+              </div>
+
+              <div className="mt-4 space-y-4">
+                <PromoCodeField
+                  promoCode={promoCode}
+                  onPromoCodeChange={setPromoCode}
+                  promoResult={promoResult}
+                  promoError={promoError}
+                  promoLoading={promoLoading}
+                  onApply={validatePromo}
+                  onRemove={() => {
+                    setPromoResult(null);
+                    setPromoCode("");
+                    setPromoError("");
+                  }}
+                />
+
+                <div className="flex items-center justify-between border-t border-stone-200 pt-3 text-sm font-semibold">
+                  <span className="text-stone-900">You Pay</span>
+                  <div className="text-right">
+                    {promoResult?.discountPercent ? (
+                      <div className="flex items-center gap-2">
+                        <span className="text-stone-400 line-through text-xs">GH {selectedPackData.priceGHS.toLocaleString()}</span>
+                        <span className="text-[#e84314]">GH {finalPrice.toFixed(0)}</span>
+                      </div>
+                    ) : (
+                      <span className="text-[#e84314]">GH {finalPrice.toFixed(0)}</span>
+                    )}
                   </div>
                 </div>
-              )}
+                {totalSeconds > selectedPackData.seconds && (
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-stone-500">Total Time</span>
+                    <span className="text-emerald-600">{Math.floor(totalSeconds / 60)}m {totalSeconds % 60}s</span>
+                  </div>
+                )}
 
-              {/* Promo error */}
-              {promoError && (
-                <div className="mt-2 p-2 rounded-lg bg-red-50 border border-red-200">
-                  <span className="text-xs text-red-600">{promoError}</span>
-                </div>
-              )}
-            </div>
-
-            {/* Price Summary */}
-            <div className="p-3 rounded-lg bg-stone-50 space-y-2">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-stone-500">{selectedPackData?.name} Pack ({selectedPackData?.timeLabel})</span>
-                <span className="text-stone-900">GH {selectedPackData?.priceGHS.toLocaleString()}</span>
+                <button
+                  onClick={handlePurchase}
+                  disabled={processing}
+                  className="w-full py-3 bg-[#ff4a1d] hover:bg-[#e84314] disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium rounded-xl transition"
+                >
+                  {processing ? "Opening Paystack..." : `Continue to Paystack · GH ${finalPrice.toFixed(0)}`}
+                </button>
               </div>
-
-              {promoResult?.discountPercent ? (
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-emerald-600">{promoResult.discountPercent}% Promo Discount</span>
-                  <span className="text-emerald-600">-GH {(selectedPackData!.priceGHS - finalPrice).toFixed(0)}</span>
-                </div>
-              ) : null}
-
-              {promoResult?.bonusSeconds ? (
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-emerald-600">Bonus Time</span>
-                  <span className="text-emerald-600">+{promoResult.bonusSeconds >= 60 ? `${Math.floor(promoResult.bonusSeconds / 60)}m` : `${promoResult.bonusSeconds}s`}</span>
-                </div>
-              ) : null}
-
-              {(promoResult?.discountPercent || promoResult?.bonusSeconds) && (
-                <div className="border-t border-stone-200 pt-2" />
-              )}
-
-              <div className="flex items-center justify-between text-sm font-semibold">
-                <span className="text-stone-900">You Pay</span>
-                <div className="text-right">
-                  {promoResult?.discountPercent ? (
-                    <div className="flex items-center gap-2">
-                      <span className="text-stone-400 line-through text-xs">GH {selectedPackData?.priceGHS.toLocaleString()}</span>
-                      <span className="text-[#e84314]">GH {finalPrice.toFixed(0)}</span>
-                    </div>
-                  ) : (
-                    <span className="text-[#e84314]">GH {finalPrice.toFixed(0)}</span>
-                  )}
-                </div>
-              </div>
-
-              {totalSeconds > (selectedPackData?.seconds || 0) && (
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-stone-500">Total Time</span>
-                  <span className="text-emerald-600">{Math.floor(totalSeconds / 60)}m {totalSeconds % 60}s</span>
-                </div>
-              )}
             </div>
-
-            <button
-              onClick={handlePurchase}
-              disabled={!selectedPack || processing}
-              className="w-full py-3 bg-[#ff4a1d] hover:bg-[#e84314] disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium rounded-xl transition"
-            >
-              {processing ? "Opening Paystack..." : `Pay GH ${finalPrice.toFixed(0)} securely`}
-            </button>
           </div>
         )}
+
       </div>
     </DashboardLayout>
   );
