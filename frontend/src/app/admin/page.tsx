@@ -15,7 +15,7 @@ import {
   where,
 } from "firebase/firestore";
 import { getDb } from "@/lib/firebase";
-import { CREDIT_PACKS, DECART_COST_PACKS, DECART_COST_PER_SEC, GHS_PER_USD } from "@/lib/credit-packs";
+import { CREDIT_PACKS, PROVIDER_COST_PACKS, PROVIDER_COST_PER_SEC, GHS_PER_USD } from "@/lib/credit-packs";
 import ThemeToggle from "@/components/ThemeToggle";
 
 interface UserRecord {
@@ -49,7 +49,7 @@ interface LogRecord {
 
 const ADMIN_EMAILS = ["safful652@gmail.com"];
 
-const DECART_PACKS = DECART_COST_PACKS;
+const PROVIDER_PACKS = PROVIDER_COST_PACKS;
 const USER_PACKS = CREDIT_PACKS;
 
 type Tab = "overview" | "users" | "promos" | "buy" | "pricing" | "logs";
@@ -240,7 +240,7 @@ export default function AdminPage() {
     setBuyLoading(true);
     try {
       const db = getDb();
-      const pack = DECART_PACKS.find((p) => p.id === buyPackId);
+      const pack = PROVIDER_PACKS.find((p) => p.id === buyPackId);
       if (!pack) {
         setBuyMsg("Select a credit pack");
         setBuyLoading(false);
@@ -460,8 +460,8 @@ export default function AdminPage() {
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 divide-y divide-stone-100 sm:divide-y-0 sm:divide-x">
                     <div className="px-5 py-4">
-                      <div className="text-[10px] text-stone-400 uppercase tracking-wider">Decart cost</div>
-                      <div className="font-display text-lg font-extrabold text-emerald-600 mt-1">${(totalCreditsUsed * DECART_COST_PER_SEC).toFixed(2)}</div>
+                      <div className="text-[10px] text-stone-400 uppercase tracking-wider">AI cost (fal)</div>
+                      <div className="font-display text-lg font-extrabold text-emerald-600 mt-1">${(totalCreditsUsed * PROVIDER_COST_PER_SEC).toFixed(2)}</div>
                     </div>
                     <div className="px-5 py-4">
                       <div className="text-[10px] text-stone-400 uppercase tracking-wider">Credits remaining</div>
@@ -705,15 +705,15 @@ export default function AdminPage() {
             {tab === "buy" && (
               <div className="space-y-4">
                 <p className="text-xs text-stone-500 -mt-2">
-                  Purchase credits for any user at Decart&apos;s original cost — no markup, you pay the real API price.
+                  Purchase credits for any user at fal&apos;s original cost — no markup, you pay the real API price.
                 </p>
 
                 <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-5 py-4 flex flex-wrap items-baseline gap-x-4 gap-y-1">
-                  <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-700/80">Decart API cost</div>
+                  <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-700/80">fal API cost</div>
                   <div className="font-display text-xl font-extrabold text-emerald-700">
-                    ${DECART_COST_PER_SEC}<span className="text-sm font-bold">/sec</span>
+                    ${PROVIDER_COST_PER_SEC}<span className="text-sm font-bold">/sec</span>
                     <span className="text-stone-500 text-sm font-semibold mx-2">=</span>
-                    GH {(DECART_COST_PER_SEC * 60 * GHS_PER_USD).toFixed(0)}/min
+                    GH {(PROVIDER_COST_PER_SEC * 60 * GHS_PER_USD).toFixed(0)}/min
                   </div>
                 </div>
 
@@ -744,7 +744,7 @@ export default function AdminPage() {
                     <div>
                       <label className="block text-[10px] font-bold text-stone-400 uppercase tracking-[0.14em] mb-2">Pick a pack (at Decart cost)</label>
                       <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
-                        {DECART_PACKS.map((pack) => (
+                        {PROVIDER_PACKS.map((pack) => (
                           <button
                             key={pack.id}
                             type="button"
@@ -768,7 +768,7 @@ export default function AdminPage() {
                       disabled={buyLoading || !buyEmail || !buyPackId}
                       className="w-full max-w-md py-3 bg-stone-900 hover:bg-stone-800 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-lg transition"
                     >
-                      {buyLoading ? "Processing…" : buyPackId ? `Add ${DECART_PACKS.find((p) => p.id === buyPackId)?.timeLabel || ""} to user (GH ${DECART_PACKS.find((p) => p.id === buyPackId)?.costGHS || 0})` : "Select a pack"}
+                      {buyLoading ? "Processing…" : buyPackId ? `Add ${PROVIDER_PACKS.find((p) => p.id === buyPackId)?.timeLabel || ""} to user (GH ${PROVIDER_PACKS.find((p) => p.id === buyPackId)?.costGHS || 0})` : "Select a pack"}
                     </button>
                   </form>
                 </div>
@@ -791,7 +791,7 @@ export default function AdminPage() {
                       </thead>
                       <tbody>
                         {USER_PACKS.map((up) => {
-                          const dp = DECART_PACKS.find((d) => d.id === up.id)!;
+                          const dp = PROVIDER_PACKS.find((d) => d.id === up.id)!;
                           return (
                             <tr key={up.id} className="border-t border-stone-100">
                               <td className="px-4 py-2.5 text-xs font-semibold text-stone-900">{up.name}</td>
@@ -813,10 +813,10 @@ export default function AdminPage() {
             {tab === "pricing" && (
               <div className="space-y-4">
                 <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-5 py-4">
-                  <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-700/80">Decart API cost</div>
-                  <div className="font-display text-xl font-extrabold text-emerald-700 mt-0.5">${DECART_COST_PER_SEC}/sec</div>
+                  <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-700/80">fal API cost</div>
+                  <div className="font-display text-xl font-extrabold text-emerald-700 mt-0.5">${PROVIDER_COST_PER_SEC}/sec</div>
                   <div className="text-xs text-stone-600 mt-1">
-                    = ${DECART_COST_PER_SEC * 60}/min = GH {(DECART_COST_PER_SEC * 60 * GHS_PER_USD).toFixed(0)}/min (at $1 = GH{GHS_PER_USD})
+                    = ${PROVIDER_COST_PER_SEC * 60}/min = GH {(PROVIDER_COST_PER_SEC * 60 * GHS_PER_USD).toFixed(0)}/min (at $1 = GH{GHS_PER_USD})
                   </div>
                 </div>
 
@@ -835,7 +835,7 @@ export default function AdminPage() {
                       </thead>
                       <tbody>
                         {USER_PACKS.map((pack) => {
-                          const dp = DECART_PACKS.find((d) => d.id === pack.id)!;
+                          const dp = PROVIDER_PACKS.find((d) => d.id === pack.id)!;
                           const profit = pack.priceGHS - dp.costGHS;
                           const margin = ((profit / pack.priceGHS) * 100).toFixed(0);
                           return (

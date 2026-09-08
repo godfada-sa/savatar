@@ -19,10 +19,77 @@ const ALLOWED_MODELS = new Set(["lucy-2.5", "lucy-restyle-2", "lucy-vton-3.5"]);
 const MAX_PREPAID_SESSION_SECONDS = 300;
 const MINIMUM_STREAM_SECONDS = 60;
 
+/**
+ * fal.ai realtime endpoints per Savatar model. lucy-2.5 is the confirmed
+ * realtime endpoint on fal; restyle/vton variants are not exposed on fal's
+ * realtime API yet, so selecting those modes returns a clear 400 instead of
+ * silently streaming the wrong model.
+ */
+const FAL_ENDPOINTS: Record<string, string> = {
+  "lucy-2.5": "decart/lucy-2-5/realtime",
+};
+
+/** fal is the master provider once FAL_KEY is set and FAL_PROVIDER=1. */
+function useFalProvider() {
+  return process.env.FAL_PROVIDER === "1" && Boolean(process.env.FAL_KEY);
+}
+
 function permanentApiKey() {
   const value = process.env.DECART_API_KEY;
   if (!value) throw new Error("DECART_API_KEY is not configured");
   return value;
+}
+
+/**
+ * Mint a short-lived, model-scoped JWT from fal's realtime token endpoint.
+ * The browser connects directly to wss://fal.run/<endpoint> with this token;
+ * FAL_KEY itself never leaves this route.
+ *
+ * Verified against the live API: the token that authenticates the realtime
+ * WebSocket comes from POST /tokens/ with `allowed_apps` (the app alias, not
+ * the full endpoint path) — the /tokens/realtime variant mints a JWT the WS
+ * relay silently rejects. The response body is the JWT as a JSON string.
+ */
+async function mintFalRealtimeToken(endpoint: string, durationSeconds: number) {
+  const falKey = process.env.FAL_KEY;
+  if (!falKey) throw new Error("FAL_KEY is not configured");
+  // The app alias is the SECOND path segment (e.g. "lucy-2-5" for
+  // decart/lucy-2-5/realtime) — exactly what fal-js's parseEndpointId sends:
+  // owner/alias/path. Taking the last segment would yield "realtime", which
+  // the token relay rejects with Forbidden.
+  const appAlias = endpoint.split("/")[1] ?? endpoint;
+  const response = await fetch("https://rest.fal.ai/tokens/", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Key ${falKey}`,
+    },
+    body: JSON.stringify({
+      allowed_apps: [appAlias],
+      token_expiration: durationSeconds,
+    }),
+  });
+  if (!response.ok) {
+    throw new Error(`fal token endpoint rejected the request (${response.status})`);
+  }
+  // Body is the bare JWT as a JSON string (fal-js also handles a wrapped
+  // { detail } shape from older proxies, so accept both).
+  const text = await response.text();
+  const trimmed = text.trim();
+  let token = trimmed;
+  if (trimmed.startsWith("{")) {
+    const obj = JSON.parse(trimmed) as { token?: string; detail?: string };
+    token = obj.token ?? obj.detail ?? "";
+  } else if (trimmed.startsWith('"')) {
+    token = JSON.parse(trimmed) as string;
+  }
+  if (!token) throw new Error("fal token endpoint returned no token");
+  // Decode the JWT's exp claim for a precise expiry.
+  const claims = JSON.parse(Buffer.from(token.split(".")[1], "base64url").toString("utf8")) as { exp?: number };
+  return {
+    token,
+    expiresAt: new Date((claims.exp ?? Date.now() / 1000 + durationSeconds) * 1000),
+  };
 }
 
 export async function POST(req: NextRequest) {
@@ -76,17 +143,40 @@ export async function POST(req: NextRequest) {
 
     const origin = req.headers.get("origin") ?? process.env.APP_ORIGIN ?? req.nextUrl.origin;
     const maxSessionDuration = reservedSeconds;
-    const decart = createDecartClient({ apiKey: permanentApiKey() });
-    const token = await decart.tokens.create({
-      // Only the authenticated proxy receives this provider credential.
-      // Long enough to cover the full prepaid session plus reconnect margin,
-      // so a transport drop late in a long stream can still re-open upstream.
-      expiresIn: Math.max(120, reservedSeconds + 120),
-      allowedModels: [model],
-      allowedOrigins: [origin],
-      constraints: { realtime: { maxSessionDuration } },
-      metadata: { userId: user.uid, service: "savatar" },
-    });
+    // Provider credential lifetime covers the full prepaid window plus a
+    // reconnect margin, so a transport drop late in a long stream can still
+    // re-open upstream. The client requests the token once at connect time
+    // (no auto-refresh), so this expiry is also the provider-level hard stop.
+    const tokenDuration = Math.max(120, reservedSeconds + 120);
+
+    const provider = useFalProvider() ? "fal" : "decart";
+    let sessionTransport: string;
+    let apiKey: string;
+    // The Decart SDK returns expiresAt as a string; fal returns a Date.
+    let tokenExpiresAt: Date | string;
+    if (provider === "fal") {
+      const endpoint = FAL_ENDPOINTS[model];
+      if (!endpoint) {
+        throw new RequestError(400, "This mode is not available on the fal provider yet.");
+      }
+      const falToken = await mintFalRealtimeToken(endpoint, tokenDuration);
+      sessionTransport = "fal-realtime";
+      apiKey = falToken.token;
+      tokenExpiresAt = falToken.expiresAt;
+    } else {
+      const decart = createDecartClient({ apiKey: permanentApiKey() });
+      const token = await decart.tokens.create({
+        // Only the authenticated proxy receives this provider credential.
+        expiresIn: tokenDuration,
+        allowedModels: [model],
+        allowedOrigins: [origin],
+        constraints: { realtime: { maxSessionDuration } },
+        metadata: { userId: user.uid, service: "savatar" },
+      });
+      sessionTransport = "proxy-v1";
+      apiKey = ticket;
+      tokenExpiresAt = token.expiresAt;
+    }
 
     // deadlineAt is the server-side hard deadline: activatedAt + reservedSeconds.
     // If the client never calls /api/streaming/end (closed tab, crash), a sweep
@@ -94,21 +184,28 @@ export async function POST(req: NextRequest) {
     // the same window the countdown shows, so overuse is impossible.
     await sessionRef.update({
       status: "active",
-      transport: "proxy-v1",
+      transport: sessionTransport,
       ticketHash: createHash("sha256").update(ticket).digest("hex"),
       ticketExpiresAt: new Date(Date.now() + 90_000),
-      providerToken: token.apiKey,
+      // The fal JWT is handed to the browser and never persisted; the proxy
+      // path stores its provider token for upstream relay instead.
+      ...(provider === "fal"
+        ? { provider: "fal", providerEndpoint: FAL_ENDPOINTS[model] }
+        : { providerToken: apiKey }),
       allowedOrigin: origin,
-      tokenExpiresAt: token.expiresAt,
+      tokenExpiresAt,
       activatedAt: FieldValue.serverTimestamp(),
       deadlineAt: new Date(Date.now() + reservedSeconds * 1000),
     });
 
     return privateJson({
-      apiKey: ticket,
-      expiresAt: token.expiresAt,
+      apiKey,
+      expiresAt: tokenExpiresAt,
       maxSessionDuration,
       sessionId,
+      provider,
+      // The fal WebRTC endpoint the browser should connect to (fal path only).
+      ...(provider === "fal" ? { endpoint: FAL_ENDPOINTS[model] } : {}),
     });
   } catch (error) {
     // Do not charge a user when the provider token was never issued. Once the

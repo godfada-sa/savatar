@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { FieldValue } from "firebase-admin/firestore";
 import { getAdminServices } from "@/lib/firebase-admin";
 import {
   assertSameOrigin,
@@ -58,7 +59,10 @@ export async function POST(req: NextRequest) {
 
       const current = Math.floor(Number(session.clientGenerationSeconds ?? 0));
       transaction.update(sessionRef, {
-        // Only ever grow: the client may report out of order or reconnect.
+        // First heartbeat proves the client actually connected and started a
+        // session (fal's transport has no proxy to set this). Monotonic: the
+        // client may report out of order or reconnect.
+        claimedAt: session.claimedAt ?? FieldValue.serverTimestamp(),
         clientGenerationSeconds: Math.max(current, generationSeconds),
         lastHeartbeatAt: new Date(),
       });

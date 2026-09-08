@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
     const results = await Promise.all(snapshot.docs.map((doc) => db.runTransaction(async (tx) => {
       const current = (await tx.get(doc.ref)).data();
       if (!current || current.status !== "active") return 0;
-      const unclaimed = current.transport === "proxy-v1" && !current.claimedAt;
+      const unclaimed = !current.claimedAt;
       const expiry = unclaimed ? current.ticketExpiresAt?.toMillis?.()
         : (current.claimedAt ?? current.activatedAt)?.toMillis?.() + Number(current.reservedSeconds) * 1000 + 150_000;
       if (!Number.isFinite(expiry) || now < expiry) return 0;

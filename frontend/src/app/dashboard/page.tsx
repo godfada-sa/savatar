@@ -414,7 +414,7 @@ export default function Dashboard() {
         },
         body: JSON.stringify({ model: modelId }),
       });
-      const tokenResult = await tokenResponse.json() as { apiKey?: string; error?: string; maxSessionDuration?: number; sessionId?: string };
+      const tokenResult = await tokenResponse.json() as { apiKey?: string; error?: string; maxSessionDuration?: number; sessionId?: string; provider?: string; endpoint?: string };
       if (!tokenResponse.ok || !tokenResult.apiKey) {
         throw new Error(tokenResult.error || "Unable to authorize this AI session");
       }
@@ -428,89 +428,148 @@ export default function Dashboard() {
       lastTickSecondsRef.current = 0;
       lastHeartbeatSentAtRef.current = 0;
 
-      const model = models.realtime(modelId as Parameters<typeof models.realtime>[0]);
-      const client = createDecartClient({ apiKey: tokenResult.apiKey,
-        realtimeBaseUrl: signalingUrl.replace(/^http/, "ws"), telemetry: false });
-      const initialImage = referenceImage ? await (await fetch(referenceImage)).blob() : undefined;
-      appliedReferenceRef.current = referenceImage;
-
-      const realtimeClient = await client.realtime.connect(streamRef.current, {
-        model,
-        onConnectionChange: (state) => {
-          const labels = {
-            connecting: "Connecting to the AI service",
-            connected: "AI connected; waiting for output",
-            generating: "AI output live",
-            reconnecting: "Reconnecting to the AI service",
-            disconnected: "AI stream disconnected",
-          } as const;
-          setStartupStatus(labels[state]);
-
-          // Only count down credits when Decart is actively generating
-          isDecartActiveRef.current = state === "generating";
-
-          // Presence heartbeat: from "connected" onward (covers queue time when
-          // there are no generation ticks yet) the server knows the client is
-          // alive, so the sweep never mistakes a queued session for a crash.
-          if (state === "connected" || state === "generating") {
-            sendStreamHeartbeat(lastTickSecondsRef.current);
+      // Handle the transformed stream the same way for both providers: hand
+      // it to viewers, show it locally, and switch existing viewer tracks.
+      const attachTransformedStream = (transformedStream: MediaStream) => {
+        const outputStream = new MediaStream([...transformedStream.getVideoTracks(), ...(streamRef.current?.getAudioTracks() ?? [])]);
+        transformedStreamRef.current = outputStream;
+        for (const id of waitingViewersRef.current) void offerViewerRef.current?.(id);
+        waitingViewersRef.current.clear();
+        if (localVideoRef.current) localVideoRef.current.srcObject = outputStream;
+        setStartupStatus("AI output live");
+        const transformedVideoTrack = transformedStream.getVideoTracks()[0];
+        if (transformedVideoTrack) {
+          for (const pc of peerConnectionsRef.current.values()) {
+            const videoSender = pc.getSenders().find((sender) => sender.track?.kind === "video");
+            void videoSender?.replaceTrack(transformedVideoTrack).catch((error) => {
+              console.error("Unable to switch viewer to the transformed stream:", error);
+            });
           }
+        }
+      };
 
-          // Auto-end stream if Decart disconnects (user doesn't pay for dead sessions)
-          if (state === "disconnected") {
-            setError("The AI session ended. Your balance will update after the server settles usage.");
-            setTimeout(() => stopStream(), 0);
-          }
-        },
-        onQueuePosition: ({ position }) => setStartupStatus(`AI queue position: ${position}`),
-        onRemoteStream: (transformedStream: MediaStream) => {
-          const outputStream = new MediaStream([...transformedStream.getVideoTracks(), ...(streamRef.current?.getAudioTracks() ?? [])]);
-          transformedStreamRef.current = outputStream;
-          for (const id of waitingViewersRef.current) void offerViewerRef.current?.(id);
-          waitingViewersRef.current.clear();
-          if (localVideoRef.current) localVideoRef.current.srcObject = outputStream;
-          setStartupStatus("AI output live");
-          const transformedVideoTrack = transformedStream.getVideoTracks()[0];
-          if (transformedVideoTrack) {
-            for (const pc of peerConnectionsRef.current.values()) {
-              const videoSender = pc.getSenders().find((sender) => sender.track?.kind === "video");
-              void videoSender?.replaceTrack(transformedVideoTrack).catch((error) => {
-                console.error("Unable to switch viewer to the transformed stream:", error);
-              });
-            }
-          }
-        },
-        initialState: {
-          image: initialImage,
-          prompt: {
-            text: prompt || (referenceImage
-              ? "Substitute the character in the video with the person in the reference image."
-              : "Preserve the subject and their original camera scene."),
-            enhance: true,
+      if (tokenResult.provider === "fal") {
+        // ── fal.ai provider (master) ──────────────────────────────────
+        // Browser ↔ fal.run signaling relay ↔ Decart, over WebRTC. The
+        // wrapper mirrors the Decart SDK surface (disconnect/set/state) so
+        // the rest of the page behaves identically.
+        const { connectFalRealtime } = await import("@/lib/fal-realtime");
+        const initialPrompt = prompt || (referenceImage
+          ? "Substitute the character in the video with the person in the reference image."
+          : "Preserve the subject and their original camera scene.");
+        appliedReferenceRef.current = referenceImage;
+        const falClient = connectFalRealtime({
+          endpoint: tokenResult.endpoint ?? "decart/lucy-2-5/realtime",
+          token: tokenResult.apiKey,
+          localStream: streamRef.current,
+          initialPrompt,
+          referenceImage,
+          handlers: {
+            onStateChange: (state) => {
+              const labels = {
+                connecting: "Connecting to the AI service",
+                connected: "AI connected; waiting for output",
+                generating: "AI output live",
+                reconnecting: "Reconnecting to the AI service",
+                disconnected: "AI stream disconnected",
+              } as const;
+              setStartupStatus(labels[state]);
+              // Only count down credits while the AI is actually generating.
+              isDecartActiveRef.current = state === "generating";
+              if (state === "connected" || state === "generating") {
+                sendStreamHeartbeat(lastTickSecondsRef.current);
+              }
+              if (state === "disconnected") {
+                setError("The AI session ended. Your balance will update after the server settles usage.");
+                setTimeout(() => stopStream(), 0);
+              }
+            },
+            onRemoteStream: attachTransformedStream,
+            onGenerationTick: (seconds) => {
+              lastTickSecondsRef.current = Math.max(lastTickSecondsRef.current, Math.floor(Number(seconds) || 0));
+              sendStreamHeartbeat(lastTickSecondsRef.current);
+            },
+            onError: (err) => {
+              console.error("fal error:", err);
+              isDecartActiveRef.current = false; setIsDecartActive(false);
+              setError(err.message || "The AI stream disconnected unexpectedly.");
+              setStartupStatus("AI connection failed");
+              setTimeout(() => stopStream(), 0);
+            },
           },
-        },
-        resolution: resolution as "720p" | "1080p",
-      });
+        });
+        clientRef.current = falClient;
+        isDecartActiveRef.current = falClient.getConnectionState() === "generating";
+      } else {
+        // ── Decart provider (legacy proxy path) ───────────────────────
+        const model = models.realtime(modelId as Parameters<typeof models.realtime>[0]);
+        const client = createDecartClient({ apiKey: tokenResult.apiKey,
+          realtimeBaseUrl: signalingUrl.replace(/^http/, "ws"), telemetry: false });
+        const initialImage = referenceImage ? await (await fetch(referenceImage)).blob() : undefined;
+        appliedReferenceRef.current = referenceImage;
 
-      realtimeClient.on("error", (err: { message: string }) => {
-        console.error("Decart error:", err);
-        isDecartActiveRef.current = false; setIsDecartActive(false);
-        setError(err.message || "The AI stream disconnected unexpectedly.");
-        setStartupStatus("AI connection failed");
-        // Auto-stop: refund unused credits
-        setTimeout(() => stopStream(), 0);
-      });
+        const realtimeClient = await client.realtime.connect(streamRef.current, {
+          model,
+          onConnectionChange: (state) => {
+            const labels = {
+              connecting: "Connecting to the AI service",
+              connected: "AI connected; waiting for output",
+              generating: "AI output live",
+              reconnecting: "Reconnecting to the AI service",
+              disconnected: "AI stream disconnected",
+            } as const;
+            setStartupStatus(labels[state]);
 
-      // Track actual Decart generation seconds (SDK generationTick) and report
-      // them so an abandoned session is charged for real generation, not the
-      // full reservation. Throttled inside sendStreamHeartbeat.
-      realtimeClient.on("generationTick", ({ seconds }: { seconds: number }) => {
-        lastTickSecondsRef.current = Math.max(lastTickSecondsRef.current, Math.floor(Number(seconds) || 0));
-        sendStreamHeartbeat(lastTickSecondsRef.current);
-      });
+            // Only count down credits when Decart is actively generating
+            isDecartActiveRef.current = state === "generating";
 
-      clientRef.current = realtimeClient;
-      isDecartActiveRef.current = realtimeClient.getConnectionState() === "generating";
+            // Presence heartbeat: from "connected" onward (covers queue time when
+            // there are no generation ticks yet) the server knows the client is
+            // alive, so the sweep never mistakes a queued session for a crash.
+            if (state === "connected" || state === "generating") {
+              sendStreamHeartbeat(lastTickSecondsRef.current);
+            }
+
+            // Auto-end stream if Decart disconnects (user doesn't pay for dead sessions)
+            if (state === "disconnected") {
+              setError("The AI session ended. Your balance will update after the server settles usage.");
+              setTimeout(() => stopStream(), 0);
+            }
+          },
+          onQueuePosition: ({ position }) => setStartupStatus(`AI queue position: ${position}`),
+          onRemoteStream: attachTransformedStream,
+          initialState: {
+            image: initialImage,
+            prompt: {
+              text: prompt || (referenceImage
+                ? "Substitute the character in the video with the person in the reference image."
+                : "Preserve the subject and their original camera scene."),
+              enhance: true,
+            },
+          },
+          resolution: resolution as "720p" | "1080p",
+        });
+
+        realtimeClient.on("error", (err: { message: string }) => {
+          console.error("Decart error:", err);
+          isDecartActiveRef.current = false; setIsDecartActive(false);
+          setError(err.message || "The AI stream disconnected unexpectedly.");
+          setStartupStatus("AI connection failed");
+          // Auto-stop: refund unused credits
+          setTimeout(() => stopStream(), 0);
+        });
+
+        // Track actual Decart generation seconds (SDK generationTick) and report
+        // them so an abandoned session is charged for real generation, not the
+        // full reservation. Throttled inside sendStreamHeartbeat.
+        realtimeClient.on("generationTick", ({ seconds }: { seconds: number }) => {
+          lastTickSecondsRef.current = Math.max(lastTickSecondsRef.current, Math.floor(Number(seconds) || 0));
+          sendStreamHeartbeat(lastTickSecondsRef.current);
+        });
+
+        clientRef.current = realtimeClient;
+        isDecartActiveRef.current = realtimeClient.getConnectionState() === "generating";
+      }
       setIsConnected(true);
       setStreamDuration(0);
       setIsStreaming(true);

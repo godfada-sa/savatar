@@ -48,7 +48,7 @@ export async function POST(req: NextRequest) {
         return { refunded: 0, alreadyProcessed: false };
       }
 
-      if (session.transport === "proxy-v1" && !session.claimedAt) {
+      if (!session.claimedAt) {
         transaction.update(userRef, {
           "wallet.balanceSeconds": FieldValue.increment(reservedSeconds),
           "wallet.totalUsed": FieldValue.increment(-reservedSeconds),
@@ -57,6 +57,23 @@ export async function POST(req: NextRequest) {
         transaction.update(sessionRef, { ...updates, providerToken: FieldValue.delete(), ticketHash: FieldValue.delete() });
         transaction.update(transactionRef, updates);
         return { refunded: reservedSeconds, alreadyProcessed: false, reservedSeconds };
+      }
+      // fal settles inline: refund the unused part of the reservation based on
+      // the client-reported generation time (bounded by the reservation).
+      if (session.transport === "fal-realtime") {
+        const reported = Math.max(0, Math.floor(Number(session.clientGenerationSeconds ?? 0)));
+        const usedSeconds = Math.min(reservedSeconds, reported);
+        const unusedSeconds = reservedSeconds - usedSeconds;
+        if (unusedSeconds > 0) {
+          transaction.update(userRef, {
+            "wallet.balanceSeconds": FieldValue.increment(unusedSeconds),
+            "wallet.totalUsed": FieldValue.increment(-unusedSeconds),
+          });
+        }
+        const updates = { status: "completed", usedSeconds, unusedSeconds, endedAt: FieldValue.serverTimestamp() };
+        transaction.update(sessionRef, { ...updates, providerToken: FieldValue.delete(), ticketHash: FieldValue.delete() });
+        transaction.update(transactionRef, updates);
+        return { refunded: unusedSeconds, alreadyProcessed: false, reservedSeconds };
       }
       // Only the proxy can confirm a provider disconnect and refundable usage.
       transaction.update(sessionRef, { stopRequestedAt: FieldValue.serverTimestamp() });
