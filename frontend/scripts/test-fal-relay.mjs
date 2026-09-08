@@ -10,8 +10,16 @@ import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const { WebSocket } = require("../../backend/node_modules/ws");
 const env = parseEnv(readFileSync(new URL("../.env.local", import.meta.url), "utf8"));
-const origin = "http://localhost:3000";
-const relay = "ws://localhost:4000";
+// Usage: node scripts/test-fal-relay.mjs [origin] [relayOrigin]
+// Defaults target a local stack; pass the production origins to audit a live deploy.
+const argOrigin = process.argv[2];
+const argRelay = process.argv[3];
+if (!argOrigin) {
+  console.warn("NOTE: no origin argument given; defaulting to the local dev stack.");
+}
+const origin = argOrigin ?? "http://localhost:3000";
+const relay = argRelay
+  ?? (argOrigin ? argOrigin.replace(/^http/, "ws") : "ws://localhost:4000");
 const credential = cert({
   projectId: env.FIREBASE_PROJECT_ID,
   clientEmail: env.FIREBASE_CLIENT_EMAIL,
