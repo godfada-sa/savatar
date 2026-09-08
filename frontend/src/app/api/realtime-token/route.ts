@@ -20,6 +20,16 @@ const MAX_PREPAID_SESSION_SECONDS = 300;
 const MINIMUM_STREAM_SECONDS = 60;
 
 /**
+ * Short-lived fal realtime tokens. The fal relay keeps a session (and its
+ * billed runner) alive until the token it was opened with expires — closing
+ * the WebSocket alone does not free it. A short TTL plus client renewal
+ * through this route is therefore the kill switch: once /api/streaming/end
+ * marks the session completed, renewals are refused and the runner dies
+ * within FAL_TOKEN_TTL_SECONDS even if the browser is already closed.
+ */
+const FAL_TOKEN_TTL_SECONDS = 90;
+
+/**
  * fal.ai realtime endpoints per Savatar model. lucy-2.5 is the confirmed
  * realtime endpoint on fal; restyle/vton variants are not exposed on fal's
  * realtime API yet, so selecting those modes returns a clear 400 instead of
@@ -99,10 +109,42 @@ export async function POST(req: NextRequest) {
     assertSameOrigin(req);
     const user = await requireAuthenticatedUser(req, { requireVerifiedEmail: true });
     const body = await readJsonObject(req, 2_048);
+
+    ({ db } = getAdminServices());
+
+    // ── Token renewal (fal path) ──────────────────────────────────────
+    // Called by the client every ~81s while a session is live. Refuses once
+    // the session is no longer active (ended / killed / swept), so a stopped
+    // or dead browser's runner is released at the previous token's expiry.
+    // No wallet movement here — the reservation happened at initial mint.
+    if (body.renew === true) {
+      const renewSessionId = typeof body.sessionId === "string" ? body.sessionId : "";
+      if (!renewSessionId) throw new RequestError(400, "sessionId is required for token renewal");
+      const sessionRef = db.collection("streamSessions").doc(renewSessionId);
+      const sessionSnapshot = await sessionRef.get();
+      const session = sessionSnapshot.data();
+      if (!sessionSnapshot.exists || !session) throw new RequestError(404, "Stream session not found");
+      if (session.userId !== user.uid) throw new RequestError(403, "Not your stream session");
+      if (session.status !== "active" || session.provider !== "fal") {
+        throw new RequestError(409, "This stream session is no longer active");
+      }
+      const endpoint =
+        typeof session.providerEndpoint === "string" ? session.providerEndpoint : FAL_ENDPOINTS[String(session.model ?? "")];
+      if (!endpoint) throw new RequestError(400, "Session has no provider endpoint");
+      const falToken = await mintFalRealtimeToken(endpoint, FAL_TOKEN_TTL_SECONDS);
+      await sessionRef.update({ tokenExpiresAt: falToken.expiresAt });
+      return privateJson({
+        apiKey: falToken.token,
+        expiresAt: falToken.expiresAt,
+        sessionId: renewSessionId,
+        provider: "fal",
+        endpoint,
+      });
+    }
+
     const model = typeof body.model === "string" ? body.model : "";
     if (!ALLOWED_MODELS.has(model)) throw new RequestError(400, "Unsupported realtime model");
 
-    ({ db } = getAdminServices());
     await enforceRateLimit(db, "realtime-token", user.uid, 3, 5 * 60_000);
 
     const userRef = db.collection("users").doc(user.uid);
@@ -143,10 +185,10 @@ export async function POST(req: NextRequest) {
 
     const origin = req.headers.get("origin") ?? process.env.APP_ORIGIN ?? req.nextUrl.origin;
     const maxSessionDuration = reservedSeconds;
-    // Provider credential lifetime covers the full prepaid window plus a
-    // reconnect margin, so a transport drop late in a long stream can still
-    // re-open upstream. The client requests the token once at connect time
-    // (no auto-refresh), so this expiry is also the provider-level hard stop.
+    // Decart proxy path keeps a long-lived provider credential (no renewal
+    // mechanism, and the proxy relays it server-side). The fal path uses a
+    // SHORT token (FAL_TOKEN_TTL_SECONDS) renewed by the client through this
+    // route, because fal's relay holds the billed runner until token expiry.
     const tokenDuration = Math.max(120, reservedSeconds + 120);
 
     const provider = useFalProvider() ? "fal" : "decart";
@@ -159,7 +201,7 @@ export async function POST(req: NextRequest) {
       if (!endpoint) {
         throw new RequestError(400, "This mode is not available on the fal provider yet.");
       }
-      const falToken = await mintFalRealtimeToken(endpoint, tokenDuration);
+      const falToken = await mintFalRealtimeToken(endpoint, FAL_TOKEN_TTL_SECONDS);
       sessionTransport = "fal-realtime";
       apiKey = falToken.token;
       tokenExpiresAt = falToken.expiresAt;

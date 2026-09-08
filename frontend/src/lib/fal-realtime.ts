@@ -40,6 +40,15 @@ interface FalRealtimeOptions {
   endpoint: string;
   /** Short-lived JWT from /api/realtime-token (provider: "fal"). */
   token: string;
+  /**
+   * Called when the client needs a fresh token (initial connect uses `token`;
+   * the fal client re-fetches at 90% of tokenExpirationSeconds). The route
+   * refuses renewal once the session is ended/killed, so a stopped or dead
+   * browser's runner is released at the previous token's expiry.
+   */
+  renewToken?: () => Promise<string>;
+  /** Matches the minted token lifetime; enables client-side refresh. */
+  tokenExpirationSeconds?: number;
   /** The camera MediaStream captured in the browser. */
   localStream: MediaStream;
   initialPrompt: string;
@@ -68,7 +77,8 @@ function blobToDataUrl(blob: Blob): Promise<string> {
 }
 
 export function connectFalRealtime(options: FalRealtimeOptions): FalRealtimeConnection {
-  const { endpoint, token, localStream, initialPrompt, referenceImage, handlers } = options;
+  const { endpoint, token, renewToken, tokenExpirationSeconds, localStream, initialPrompt, referenceImage, handlers } =
+    options;
   const { onStateChange, onRemoteStream, onError, onGenerationTick } = handlers;
 
   // fal's RealtimeConnection.send is typed for model inputs; signaling
@@ -237,13 +247,26 @@ export function connectFalRealtime(options: FalRealtimeOptions): FalRealtimeConn
   };
 
   // ── Connect ────────────────────────────────────────────────────────
+  // The first tokenProvider call (connect time) returns the pre-minted JWT;
+  // refresh calls (90% of the TTL) mint a fresh one through the server, which
+  // refuses once the session is no longer active — that refusal is what
+  // releases the billed runner at token expiry when the stream was stopped
+  // or the browser died.
+  let usedInitialToken = false;
+  const tokenProvider = async () => {
+    if (!usedInitialToken) {
+      usedInitialToken = true;
+      return token;
+    }
+    if (!renewToken) return token;
+    return renewToken();
+  };
+
   connection = fal.realtime.connect(endpoint, {
     connectionKey: `savatar-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     throttleInterval: 0,
-    // Return the pre-minted JWT. No tokenExpirationSeconds is passed, so the
-    // client never re-fetches (a second fetch would mint a fresh reservation
-    // and double-charge credits).
-    tokenProvider: async () => token,
+    tokenProvider,
+    ...(tokenExpirationSeconds ? { tokenExpirationSeconds } : {}),
     onResult: (result: FalResult) => void handleResult(result),
     onError: (error: Error) => {
       setState("disconnected");

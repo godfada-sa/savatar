@@ -461,6 +461,25 @@ export default function Dashboard() {
         const falClient = connectFalRealtime({
           endpoint: tokenResult.endpoint ?? "decart/lucy-2-5/realtime",
           token: tokenResult.apiKey,
+          // Refresh the short-lived fal JWT through the server while the
+          // session is active. Once the stream is stopped/killed, the server
+          // refuses renewal and the billed runner is released at expiry.
+          renewToken: async () => {
+            const refreshResponse = await fetch("/api/realtime-token", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${idToken}`,
+              },
+              body: JSON.stringify({ renew: true, sessionId: sessionIdRef.current }),
+            });
+            const refreshed = (await refreshResponse.json()) as { apiKey?: string; error?: string };
+            if (!refreshResponse.ok || !refreshed.apiKey) {
+              throw new Error(refreshed.error || "AI session renewal refused");
+            }
+            return refreshed.apiKey;
+          },
+          tokenExpirationSeconds: 90,
           localStream: streamRef.current,
           initialPrompt,
           referenceImage,
