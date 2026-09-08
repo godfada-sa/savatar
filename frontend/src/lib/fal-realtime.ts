@@ -1,14 +1,8 @@
 // fal.ai realtime WebRTC glue for Savatar.
 //
-// fal's realtime API is a *signaling relay*: the browser connects to
-// wss://fal.run/<endpoint> with a short-lived JWT (minted by
-// /api/realtime-token, never FAL_KEY itself), and media flows directly
-// between the browser and Decart over WebRTC. The @fal-ai/client only
-// handles the WebSocket relay — the app must create the RTCPeerConnection,
-// answer the server's negotiation, and surface the remote transformed
-// stream. This module implements exactly that dance and exposes a
-// Decart-SDK-shaped surface so the dashboard treats both providers alike.
-import { fal } from "@fal-ai/client";
+// The browser connects to Savatar's authenticated signaling relay. The relay
+// owns the fal credential and closes the upstream at the paid deadline.
+import { decode, encode } from "@msgpack/msgpack";
 
 export type FalConnectionState =
   | "connecting"
@@ -37,18 +31,9 @@ export interface FalRealtimeConnection {
 }
 
 interface FalRealtimeOptions {
-  endpoint: string;
-  /** Short-lived JWT from /api/realtime-token (provider: "fal"). */
-  token: string;
-  /**
-   * Called when the client needs a fresh token (initial connect uses `token`;
-   * the fal client re-fetches at 90% of tokenExpirationSeconds). The route
-   * refuses renewal once the session is ended/killed, so a stopped or dead
-   * browser's runner is released at the previous token's expiry.
-   */
-  renewToken?: () => Promise<string>;
-  /** Matches the minted token lifetime; enables client-side refresh. */
-  tokenExpirationSeconds?: number;
+  relayUrl: string;
+  /** One-use, session-scoped Savatar ticket; never a provider credential. */
+  ticket: string;
   /** The camera MediaStream captured in the browser. */
   localStream: MediaStream;
   initialPrompt: string;
@@ -77,18 +62,14 @@ function blobToDataUrl(blob: Blob): Promise<string> {
 }
 
 export function connectFalRealtime(options: FalRealtimeOptions): FalRealtimeConnection {
-  const { endpoint, token, renewToken, tokenExpirationSeconds, localStream, initialPrompt, referenceImage, handlers } =
+  const { relayUrl, ticket, localStream, initialPrompt, referenceImage, handlers } =
     options;
   const { onStateChange, onRemoteStream, onError, onGenerationTick } = handlers;
 
   // fal's RealtimeConnection.send is typed for model inputs; signaling
   // messages (offer/icecandidate) are protocol-level, so widen the type here.
-  interface FalSocket {
-    send(input: unknown): void;
-    close(): void;
-  }
   let pc: RTCPeerConnection | null = null;
-  let connection: FalSocket | null = null;
+  let connection: WebSocket | null = null;
   let state: FalConnectionState = "connecting";
   let generationStartedAt = 0;
   let generationTimer: ReturnType<typeof setInterval> | null = null;
@@ -130,7 +111,6 @@ export function connectFalRealtime(options: FalRealtimeOptions): FalRealtimeConn
     localStream.getTracks().forEach((track) => pc!.addTrack(track, localStream));
 
     pc.ontrack = (event) => {
-      console.log("[fal-webrtc] ontrack kind=", event.track?.kind, "streams=", event.streams?.length);
       if (disconnected) return;
       // Combine the transformed video with the creator's local audio so the
       // stream handed to viewers matches the Decart path exactly.
@@ -149,14 +129,14 @@ export function connectFalRealtime(options: FalRealtimeOptions): FalRealtimeConn
 
     pc.onicecandidate = (event) => {
       if (disconnected || !event.candidate || !connection) return;
-      connection.send({
+      connection.send(encode({
         type: "icecandidate",
         candidate: {
           candidate: event.candidate.candidate,
           sdpMid: event.candidate.sdpMid,
           sdpMLineIndex: event.candidate.sdpMLineIndex,
         },
-      });
+      }));
     };
 
     pc.onconnectionstatechange = () => {
@@ -171,11 +151,6 @@ export function connectFalRealtime(options: FalRealtimeOptions): FalRealtimeConn
   };
 
   const handleResult = async (result: FalResult) => {
-    // Debug aid: surface the raw relay messages in the browser console so a
-    // live test can confirm exactly which signals fal sends (the lucy-2.5
-    // schema is only type/sdp/candidate/iceServers/error — no generation
-    // lifecycle messages).
-    console.log("[fal-relay]", JSON.stringify(result).slice(0, 300));
     switch (result.type) {
       case "ready":
         setState("connected");
@@ -187,7 +162,7 @@ export function connectFalRealtime(options: FalRealtimeOptions): FalRealtimeConn
         const peer = ensurePeerConnection(servers);
         const offer = await peer.createOffer();
         await peer.setLocalDescription(offer);
-        connection?.send({ type: "offer", sdp: offer.sdp });
+        connection?.send(encode({ type: "offer", sdp: offer.sdp }));
         break;
       }
 
@@ -223,7 +198,7 @@ export function connectFalRealtime(options: FalRealtimeOptions): FalRealtimeConn
           }
           const offer = await pc.createOffer({ iceRestart: true });
           await pc.setLocalDescription(offer);
-          connection?.send({ type: "offer", sdp: offer.sdp });
+          connection?.send(encode({ type: "offer", sdp: offer.sdp }));
         }
         break;
 
@@ -247,43 +222,44 @@ export function connectFalRealtime(options: FalRealtimeOptions): FalRealtimeConn
   };
 
   // ── Connect ────────────────────────────────────────────────────────
-  // The first tokenProvider call (connect time) returns the pre-minted JWT;
-  // refresh calls (90% of the TTL) mint a fresh one through the server, which
-  // refuses once the session is no longer active — that refusal is what
-  // releases the billed runner at token expiry when the stream was stopped
-  // or the browser died.
-  let usedInitialToken = false;
-  const tokenProvider = async () => {
-    if (!usedInitialToken) {
-      usedInitialToken = true;
-      return token;
-    }
-    if (!renewToken) return token;
-    return renewToken();
-  };
+  const url = new URL("/v1/fal-realtime", relayUrl);
+  url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+  url.searchParams.set("api_key", ticket);
+  connection = new WebSocket(url);
+  connection.binaryType = "arraybuffer";
 
-  connection = fal.realtime.connect(endpoint, {
-    connectionKey: `savatar-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    throttleInterval: 0,
-    tokenProvider,
-    ...(tokenExpirationSeconds ? { tokenExpirationSeconds } : {}),
-    onResult: (result: FalResult) => void handleResult(result),
-    onError: (error: Error) => {
-      setState("disconnected");
-      onError?.(error);
-    },
-  });
-
-  // Kick the session off with the creator's instruction.
   const initialInput: Record<string, unknown> = {
     prompt: initialPrompt,
     enable_prompt_expansion: true,
   };
   if (referenceImage) initialInput.reference_image_url = referenceImage;
-  connection.send(initialInput);
+  let latestInput = initialInput;
+  connection.onopen = () => connection?.send(encode(latestInput));
+  connection.onmessage = (event) => {
+    void (async () => {
+      try {
+        const bytes = event.data instanceof ArrayBuffer
+          ? new Uint8Array(event.data)
+          : event.data instanceof Blob
+            ? new Uint8Array(await event.data.arrayBuffer())
+            : null;
+        const result = bytes ? decode(bytes) : JSON.parse(String(event.data));
+        await handleResult(result as FalResult);
+      } catch {
+        onError?.(new Error("The AI service returned an invalid response."));
+      }
+    })();
+  };
+  connection.onerror = () => onError?.(new Error("The AI signaling connection failed."));
+  connection.onclose = () => {
+    if (disconnected) return;
+    setState("disconnected");
+    onError?.(new Error("The AI signaling connection closed."));
+  };
 
   return {
     disconnect() {
+      state = "disconnected";
       disconnected = true;
       stopGenerationTimer();
       if (pc) {
@@ -291,25 +267,27 @@ export function connectFalRealtime(options: FalRealtimeOptions): FalRealtimeConn
         pc = null;
       }
       try {
-        connection?.close();
+        connection?.close(1000, "Session ended");
       } catch {
         // Already closed.
       }
       connection = null;
-      setState("disconnected");
     },
     getConnectionState: () => state,
     async set(input) {
       if (!connection || disconnected) return;
       const update: Record<string, unknown> = { prompt: input.prompt ?? initialPrompt };
       if (input.enhance !== undefined) update.enable_prompt_expansion = input.enhance;
-      if (input.image && input.image !== null) {
-        const dataUrl = typeof input.image === "string" ? input.image : await blobToDataUrl(input.image);
-        update.reference_image_url = dataUrl;
-      } else {
-        update.reference_image_url = null;
+      if ("image" in input) {
+        if (input.image) {
+          const dataUrl = typeof input.image === "string" ? input.image : await blobToDataUrl(input.image);
+          update.reference_image_url = dataUrl;
+        } else {
+          update.reference_image_url = null;
+        }
       }
-      connection.send(update);
+      latestInput = { ...latestInput, ...update };
+      if (connection.readyState === WebSocket.OPEN) connection.send(encode(update));
     },
   };
 }

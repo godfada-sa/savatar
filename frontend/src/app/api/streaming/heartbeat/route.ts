@@ -18,17 +18,15 @@ const MAX_REPORTED_SECONDS = 86_400;
 /**
  * Client liveness + usage heartbeat for an active stream session.
  *
- * While a session is live the dashboard posts its SDK generationTick seconds
- * here every few seconds. The server records:
+ * While a session is live the dashboard posts liveness and a diagnostic SDK
+ * counter every few seconds. The server records:
  *
- *   - clientGenerationSeconds — the highest generation time the client has
- *     reported (what Decart is actually billing the developer for).
+ *   - clientGenerationSeconds — diagnostics only; never trusted for billing.
  *   - lastHeartbeatAt         — proves the client (and its WebRTC feed) is
  *     still alive, so the sweep never finalizes a live session.
  *
- * If the browser crashes without calling /api/streaming/end, the sweep uses
- * these two fields to refund the user for the time that was NOT generated
- * instead of forfeiting the whole prepaid reservation.
+ * If the browser crashes without calling /api/streaming/end, the short-lived
+ * provider token and server timestamps bound the charge and release the lock.
  */
 export async function POST(req: NextRequest) {
   try {
@@ -36,6 +34,7 @@ export async function POST(req: NextRequest) {
     const user = await requireAuthenticatedUser(req);
     const body = await readJsonObject(req, 2_048);
     const sessionId = typeof body.sessionId === "string" ? body.sessionId : "";
+    const phase = body.phase === "generating" ? "generating" : "connected";
     const generationSecondsRaw = body.generationSeconds;
     if (!sessionId) throw new RequestError(400, "sessionId is required");
 
@@ -63,8 +62,12 @@ export async function POST(req: NextRequest) {
         // session (fal's transport has no proxy to set this). Monotonic: the
         // client may report out of order or reconnect.
         claimedAt: session.claimedAt ?? FieldValue.serverTimestamp(),
+        generationStartedAt: phase === "generating"
+          ? (session.generationStartedAt ?? FieldValue.serverTimestamp())
+          : (session.generationStartedAt ?? null),
         clientGenerationSeconds: Math.max(current, generationSeconds),
-        lastHeartbeatAt: new Date(),
+        lastHeartbeatAt: FieldValue.serverTimestamp(),
+        heartbeatCount: FieldValue.increment(1),
       });
     });
 

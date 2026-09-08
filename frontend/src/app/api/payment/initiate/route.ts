@@ -3,7 +3,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { NextRequest } from "next/server";
 import { getCreditPack } from "@/lib/credit-packs";
 import { getAdminServices } from "@/lib/firebase-admin";
-import { assertSameOrigin, clientIp, enforceRateLimit, errorJson, privateJson, readJsonObject, requireAuthenticatedUser, RequestError } from "@/lib/server-security";
+import { assertSameOrigin, canonicalAppOrigin, clientIp, enforceRateLimit, errorJson, privateJson, readJsonObject, requireAuthenticatedUser, RequestError } from "@/lib/server-security";
 
 export const runtime = "nodejs";
 
@@ -120,7 +120,7 @@ export async function POST(req: NextRequest) {
       headers: { Authorization: `Bearer ${paystackSecret()}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         email: user.email, amount: amountSubunit, currency: "GHS", reference,
-        channels: ["card", "mobile_money"], callback_url: `${req.nextUrl.origin}/api/payment/callback`,
+        channels: ["card", "mobile_money"], callback_url: `${canonicalAppOrigin(req)}/api/payment/callback`,
         metadata: { userId: user.uid, packId: pack.id, seconds: totalSeconds },
       }),
       cache: "no-store",

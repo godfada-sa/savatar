@@ -1,8 +1,10 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { getOrCreateStreamRoomId } from "@/lib/stream-room";
+import { prepareReferenceImage, savePreparedReferenceImage } from "@/lib/reference-image";
 import DashboardLayout from "@/components/DashboardLayout";
 
 interface Background {
@@ -14,14 +16,17 @@ interface Background {
 
 export default function AiObsPage() {
   const { user, userData } = useAuth();
+  const router = useRouter();
   const videoRef = useRef<HTMLVideoElement>(null);
   const cameraStreamRef = useRef<MediaStream | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [cameraActive, setCameraActive] = useState(false);
+  const [micEnabled, setMicEnabled] = useState(false);
+  const [micAvailable, setMicAvailable] = useState(false);
   const [selectedBg, setSelectedBg] = useState("original");
   const [selectedLook, setSelectedLook] = useState("default");
   const [obsUrl, setObsUrl] = useState("");
-  const [resolution, setResolution] = useState("1080p");
+  const resolution = "720p";
   const [bgCategory, setBgCategory] = useState("all");
   const [referenceImage, setReferenceImage] = useState<string | null>(null);
   const [lookModalOpen, setLookModalOpen] = useState(false);
@@ -59,71 +64,93 @@ export default function AiObsPage() {
     }).catch(() => { if (!cancelled) setError("Unable to load your stream room."); });
     const frame = requestAnimationFrame(() => {
       setReferenceImage(localStorage.getItem("savatar-reference-image"));
+      setSelectedBg(localStorage.getItem("savatar-background-id") || "original");
+      setSelectedLook(localStorage.getItem("savatar-style-id") || "default");
     });
     return () => { cancelled = true; cancelAnimationFrame(frame); };
   }, [user]);
 
   useEffect(() => () => { cameraStreamRef.current?.getTracks().forEach((track) => track.stop()); }, []);
 
-  const openCamera = async (targetResolution: string) => {
+  const openCamera = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: targetResolution === "1080p" ? 1920 : 1280, height: targetResolution === "1080p" ? 1080 : 720, frameRate: { ideal: 30 } },
-        audio: true,
-      });
+      const video = { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30, max: 30 } };
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video, audio: true });
+      } catch {
+        stream = await navigator.mediaDevices.getUserMedia({ video, audio: false });
+      }
       const previousStream = videoRef.current?.srcObject as MediaStream | null;
       if (!videoRef.current) { stream.getTracks().forEach((track) => track.stop()); return; }
       cameraStreamRef.current = stream;
       if (videoRef.current) videoRef.current.srcObject = stream;
       previousStream?.getTracks().forEach((track) => track.stop());
       setCameraActive(true);
+      setMicEnabled(stream.getAudioTracks().some((track) => track.enabled));
+      setMicAvailable(stream.getAudioTracks().length > 0);
       setError("");
     } catch {
-      setError("Camera or microphone permission was denied.");
+      setError("Camera access was denied or no camera is available.");
     }
   };
 
-  const startCamera = () => openCamera(resolution);
-
-  const changeResolution = (nextResolution: string) => {
-    setResolution(nextResolution);
-    if (cameraActive) void openCamera(nextResolution);
-  };
+  const startCamera = () => openCamera();
 
   const toggleMic = () => {
     const stream = videoRef.current?.srcObject as MediaStream | null;
-    stream?.getAudioTracks().forEach((track) => { track.enabled = !track.enabled; });
+    const tracks = stream?.getAudioTracks() ?? [];
+    if (!tracks.length) return;
+    const next = !micEnabled;
+    tracks.forEach((track) => { track.enabled = next; });
+    setMicEnabled(next);
   };
 
-  const uploadReference = (file?: File) => {
-    if (!file) return;
-    if (!file.type.startsWith("image/") || file.size > 2_000_000) { setError("Use an image under 2 MB."); return; }
-    const reader = new FileReader();
-    reader.onload = () => { const image = String(reader.result); localStorage.setItem("savatar-reference-image", image); setReferenceImage(image); setSelectedLook("reference"); setLookModalOpen(false); };
-    reader.readAsDataURL(file);
+  const saveCombinedPrompt = (backgroundId: string, look: string, hasReference: boolean) => {
+    const background = backgrounds.find((item) => item.id === backgroundId);
+    const instructions: string[] = [];
+    if (hasReference) {
+      instructions.push("Replace the visible person's full body, face, hair, clothing, and visible limbs with the character from the reference image while preserving pose, motion, and framing.");
+    }
+    if (background && background.id !== "original") {
+      instructions.push(`Replace the background with a ${background.name.toLowerCase()} scene while preserving the subject, lighting, and motion.`);
+    }
+    if (look !== "default") {
+      instructions.push(`Apply a ${look} visual style while preserving subject identity and camera motion.`);
+    }
+    if (instructions.length) localStorage.setItem("savatar-ai-prompt", instructions.join(" "));
+    else localStorage.removeItem("savatar-ai-prompt");
+  };
+
+  const uploadReference = async (file?: File) => {
+    try {
+      const image = await prepareReferenceImage(file);
+      savePreparedReferenceImage(image);
+      setReferenceImage(image);
+      saveCombinedPrompt(selectedBg, selectedLook, true);
+      setLookModalOpen(false);
+      setError("");
+    } catch (uploadError) {
+      setError(uploadError instanceof Error ? uploadError.message : "The reference image could not be prepared.");
+    }
   };
 
   const removeReference = () => {
     localStorage.removeItem("savatar-reference-image");
     setReferenceImage(null);
-    setSelectedLook("default");
+    saveCombinedPrompt(selectedBg, selectedLook, false);
   };
 
   const selectBackground = (background: Background) => {
     setSelectedBg(background.id);
-    const prompt = background.id === "original"
-      ? "Preserve the original camera background."
-      : `Replace the background with a ${background.name.toLowerCase()} scene while preserving the subject, lighting, and motion.`;
-    localStorage.setItem("savatar-ai-prompt", prompt);
+    localStorage.setItem("savatar-background-id", background.id);
+    saveCombinedPrompt(background.id, selectedLook, Boolean(referenceImage));
   };
 
   const selectLook = (look: string) => {
     setSelectedLook(look);
-    if (look === "default") {
-      localStorage.removeItem("savatar-ai-prompt");
-      return;
-    }
-    localStorage.setItem("savatar-ai-prompt", `Apply a ${look} visual style while preserving the subject's identity and camera motion.`);
+    localStorage.setItem("savatar-style-id", look);
+    saveCombinedPrompt(selectedBg, look, Boolean(referenceImage));
   };
 
   const stopCamera = () => {
@@ -134,18 +161,18 @@ export default function AiObsPage() {
       cameraStreamRef.current = null;
     }
     setCameraActive(false);
+    setMicEnabled(false);
+    setMicAvailable(false);
   };
 
   return (
     <DashboardLayout>
       <div className="p-3 sm:p-6 space-y-4">
         {/* Error banner */}
-        {(error || !cameraActive) && (
+        {error && (
           <div className="mb-4 p-4 rounded-xl bg-red-50 border border-red-200">
             <div className="text-sm font-semibold text-red-600">Streaming error</div>
-            <div className="text-xs text-red-500 mt-0.5">
-              {error || "Start your camera to preview and stream."}
-            </div>
+            <div className="text-xs text-red-500 mt-0.5">{error}</div>
           </div>
         )}
 
@@ -176,7 +203,9 @@ export default function AiObsPage() {
                 </div>
                 <div className="grid grid-cols-2 gap-2 p-2 border-t border-stone-200">
                   <button onClick={cameraActive ? stopCamera : startCamera} className="px-3 py-2.5 rounded-lg bg-white border border-stone-300 text-xs text-stone-700 hover:bg-stone-50">{cameraActive ? "Stop camera" : "Camera"}</button>
-                  <button onClick={toggleMic} disabled={!cameraActive} className="px-3 py-2.5 rounded-lg bg-white border border-stone-300 text-xs text-stone-700 hover:bg-stone-50 disabled:opacity-40">Mic</button>
+                  <button onClick={toggleMic} disabled={!cameraActive || !micAvailable} className="px-3 py-2.5 rounded-lg bg-white border border-stone-300 text-xs text-stone-700 hover:bg-stone-50 disabled:opacity-40">
+                    {!cameraActive ? "Microphone" : !micAvailable ? "Mic unavailable" : micEnabled ? "Mute mic" : "Unmute mic"}
+                  </button>
                 </div>
               </div>
 
@@ -205,22 +234,16 @@ export default function AiObsPage() {
                 <div className="grid grid-cols-[1fr_auto] gap-2 p-2 border-t border-stone-200">
                   <button
                     onClick={() => {
-                      if ((userData?.wallet?.balanceSeconds ?? 0) < 60) { window.location.href = "/credits"; return; }
+                      if ((userData?.wallet?.balanceSeconds ?? 0) < 60) { router.push("/credits"); return; }
                       stopCamera();
-                      window.open("/dashboard?start=1", "savatar-studio");
+                      const studio = window.open("/dashboard?start=1", "savatar-studio");
+                      if (!studio) router.push("/dashboard?start=1");
                     }}
                     className="px-4 py-1.5 rounded-lg text-xs font-medium transition bg-[#e84314] hover:bg-[#c73608] text-white"
                   >
                     {(userData?.wallet?.balanceSeconds ?? 0) < 60 ? "Buy credits" : "Start Stream"}
                   </button>
-                  <select
-                    value={resolution}
-                    onChange={(e) => changeResolution(e.target.value)}
-                    className="px-3 py-1.5 bg-white border border-stone-300 rounded-lg text-xs text-stone-900 focus:outline-none"
-                  >
-                    <option value="720p">720p</option>
-                    <option value="1080p">1080p</option>
-                  </select>
+                  <span className="rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-xs text-stone-600" title="The real-time AI model is optimized for 720p output">720p / 30 FPS</span>
                 </div>
               </div>
             </div>
@@ -306,15 +329,24 @@ export default function AiObsPage() {
             <div className="p-4 rounded-xl bg-white border border-stone-200">
               <h3 className="text-sm font-semibold text-stone-900 mb-2">OBS Browser Source</h3>
               <p className="text-[11px] text-stone-500 mb-3">
-                Add this URL as a Browser Source in OBS (1280×720). Start Stream opens the camera and connects this output automatically.
+                Add this URL as a Browser Source in OBS (1280×720). Keep this page open to monitor the same transformed stream OBS receives.
               </p>
               <div className="force-dark p-3 rounded-lg bg-stone-900 border border-stone-700 mb-3">
                 <code className="text-[10px] text-[#f07a55] break-all">{obsUrl}</code>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <button
-                  onClick={() => { navigator.clipboard.writeText(obsUrl); alert("OBS URL copied!"); }}
-                  className="px-3 py-3 bg-[#e84314] hover:bg-[#c73608] rounded-lg text-sm text-white font-medium transition"
+                  disabled={!obsUrl}
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(obsUrl);
+                      setError("");
+                      alert("OBS URL copied!");
+                    } catch {
+                      setError("Your browser blocked clipboard access. Select and copy the URL manually.");
+                    }
+                  }}
+                  className="px-3 py-3 bg-[#e84314] hover:bg-[#c73608] rounded-lg text-sm text-white font-medium transition disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Copy URL
                 </button>
@@ -346,7 +378,7 @@ export default function AiObsPage() {
             </div>
           </div>
         </div>
-        {lookModalOpen && <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4 backdrop-blur-sm"><div className="w-full max-w-md rounded-2xl border border-stone-200 bg-white p-5 shadow-2xl"><div className="flex items-center justify-between"><h2 className="font-semibold text-stone-900">Choose your look</h2><button onClick={() => setLookModalOpen(false)} className="rounded border border-stone-300 px-2 text-stone-500 hover:text-stone-900">×</button></div><p className="mt-1 text-xs text-stone-500">Stored only in this browser until its site data is cleared.</p>{referenceImage && <div className="relative mt-4 h-28 w-28"><img src={referenceImage} alt="Saved reference" className="h-full w-full rounded-lg object-cover"/><button onClick={removeReference} aria-label="Delete saved image" className="absolute -right-2 -top-2 grid h-6 w-6 place-items-center rounded-full bg-red-500 text-xs font-bold text-white shadow-lg">×</button></div>}<input ref={fileInputRef} onChange={(event) => uploadReference(event.target.files?.[0])} type="file" accept="image/*" className="hidden"/><button onClick={() => fileInputRef.current?.click()} className="mt-4 rounded-lg bg-[#e84314] hover:bg-[#c73608] px-4 py-2 text-sm font-medium text-white">{referenceImage ? "Upload another image" : "Upload reference image"}</button></div></div>}
+        {lookModalOpen && <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4 backdrop-blur-sm"><div className="w-full max-w-md rounded-2xl border border-stone-200 bg-white p-5 shadow-2xl"><div className="flex items-center justify-between"><h2 className="font-semibold text-stone-900">Choose your look</h2><button onClick={() => setLookModalOpen(false)} className="rounded border border-stone-300 px-2 text-stone-500 hover:text-stone-900">×</button></div><p className="mt-1 text-xs text-stone-500">Use a clear, full-body JPEG, PNG, or WebP image at least 512×512. It is stored only in this browser until its site data is cleared.</p>{referenceImage && <div className="relative mt-4 h-28 w-28"><img src={referenceImage} alt="Saved reference" className="h-full w-full rounded-lg object-cover"/><button onClick={removeReference} aria-label="Delete saved image" className="absolute -right-2 -top-2 grid h-6 w-6 place-items-center rounded-full bg-red-500 text-xs font-bold text-white shadow-lg">×</button></div>}<input ref={fileInputRef} onChange={(event) => void uploadReference(event.target.files?.[0])} type="file" accept="image/jpeg,image/png,image/webp" className="hidden"/><button onClick={() => fileInputRef.current?.click()} className="mt-4 rounded-lg bg-[#e84314] hover:bg-[#c73608] px-4 py-2 text-sm font-medium text-white">{referenceImage ? "Upload another image" : "Upload reference image"}</button></div></div>}
       </div>
     </DashboardLayout>
   );

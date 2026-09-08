@@ -36,15 +36,21 @@ export function assertSameOrigin(req: NextRequest) {
   const origin = req.headers.get("origin");
   if (!origin) return;
 
-  const forwardedHost = req.headers.get("x-forwarded-host");
-  const forwardedProto = req.headers.get("x-forwarded-proto") ?? "https";
-  const allowedOrigins = new Set([req.nextUrl.origin]);
-  if (forwardedHost) allowedOrigins.add(`${forwardedProto}://${forwardedHost}`);
-  if (process.env.APP_ORIGIN) allowedOrigins.add(process.env.APP_ORIGIN);
+  const allowedOrigins = new Set<string>();
+  if (process.env.APP_ORIGIN) allowedOrigins.add(new URL(process.env.APP_ORIGIN).origin);
+  else allowedOrigins.add(req.nextUrl.origin);
+  if (process.env.NODE_ENV !== "production") {
+    allowedOrigins.add("http://localhost:3000");
+    allowedOrigins.add("http://127.0.0.1:3000");
+  }
 
   if (!allowedOrigins.has(origin)) {
     throw new RequestError(403, "Cross-origin request blocked");
   }
+}
+
+export function canonicalAppOrigin(req: NextRequest) {
+  return process.env.APP_ORIGIN ? new URL(process.env.APP_ORIGIN).origin : req.nextUrl.origin;
 }
 
 export async function readJsonObject(req: NextRequest, maxBytes = 8_192) {

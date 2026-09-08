@@ -2,7 +2,7 @@
 
 export const dynamic = "force-dynamic";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { updatePassword, reauthenticateWithCredential, EmailAuthProvider } from "firebase/auth";
 import DashboardLayout from "@/components/DashboardLayout";
@@ -10,32 +10,9 @@ import DashboardLayout from "@/components/DashboardLayout";
 export default function SettingsPage() {
   const { user, userData } = useAuth();
 
-  const [resolution, setResolution] = useState("1080p");
-  const [frameRate, setFrameRate] = useState("30");
-  const [bitrate, setBitrate] = useState("4500");
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [passwordMsg, setPasswordMsg] = useState("");
-  const [saveMsg, setSaveMsg] = useState("");
-
-  useEffect(() => {
-    const frame = requestAnimationFrame(() => {
-      const saved = localStorage.getItem("streamSettings");
-      if (saved) {
-        const settings = JSON.parse(saved);
-        setResolution(settings.resolution || "1080p");
-        setFrameRate(settings.frameRate || "30");
-        setBitrate(settings.bitrate || "4500");
-      }
-    });
-    return () => cancelAnimationFrame(frame);
-  }, []);
-
-  const handleSaveStreamSettings = () => {
-    localStorage.setItem("streamSettings", JSON.stringify({ resolution, frameRate, bitrate }));
-    setSaveMsg("Stream settings saved");
-    setTimeout(() => setSaveMsg(""), 3000);
-  };
 
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -84,43 +61,13 @@ export default function SettingsPage() {
             <h2 className="text-sm font-semibold text-stone-900 mb-1">Stream & devices</h2>
             <p className="text-xs text-stone-500 mb-4">Output quality and input controls</p>
 
-            <div className="grid grid-cols-1 gap-3 mb-4 sm:grid-cols-3">
-              <div>
-                <label className="block text-[10px] text-stone-500 uppercase tracking-wider mb-1">Resolution</label>
-                <select
-                  value={resolution}
-                  onChange={(e) => setResolution(e.target.value)}
-                  className="w-full px-3 py-2 bg-white border border-stone-300 rounded-lg text-sm text-stone-900 focus:outline-none focus:border-[#e84314]"
-                >
-                  <option value="720p">720p</option>
-                  <option value="1080p">1080p</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-[10px] text-stone-500 uppercase tracking-wider mb-1">Frame Rate</label>
-                <select
-                  value={frameRate}
-                  onChange={(e) => setFrameRate(e.target.value)}
-                  className="w-full px-3 py-2 bg-white border border-stone-300 rounded-lg text-sm text-stone-900 focus:outline-none focus:border-[#e84314]"
-                >
-                  <option value="24">24 FPS</option>
-                  <option value="30">30 FPS</option>
-                  <option value="60">60 FPS</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-[10px] text-stone-500 uppercase tracking-wider mb-1">Bitrate</label>
-                <select
-                  value={bitrate}
-                  onChange={(e) => setBitrate(e.target.value)}
-                  className="w-full px-3 py-2 bg-white border border-stone-300 rounded-lg text-sm text-stone-900 focus:outline-none focus:border-[#e84314]"
-                >
-                  <option value="2500">2500 kbps</option>
-                  <option value="4500">4500 kbps</option>
-                  <option value="6000">6000 kbps</option>
-                  <option value="8000">8000 kbps</option>
-                </select>
-              </div>
+            <div className="mb-4 grid grid-cols-3 gap-3">
+              {[['Resolution', '720p'], ['Frame rate', '30 FPS'], ['Bitrate', 'Adaptive']].map(([label, value]) => (
+                <div key={label} className="rounded-lg border border-stone-200 bg-stone-50 p-3 text-center">
+                  <div className="text-[10px] uppercase tracking-wider text-stone-500">{label}</div>
+                  <div className="mt-1 text-sm font-medium text-stone-900">{value}</div>
+                </div>
+              ))}
             </div>
 
             <div className="grid grid-cols-2 gap-3 mb-4">
@@ -132,7 +79,7 @@ export default function SettingsPage() {
                 </div>
                 <div>
                   <div className="text-xs font-medium text-stone-900">Camera</div>
-                  <div className="text-[11px] text-emerald-600">On</div>
+                  <div className="text-[11px] text-stone-500">Selected in Studio</div>
                 </div>
               </div>
               <div className="p-3 rounded-lg bg-stone-50 border border-stone-200 flex items-center gap-3">
@@ -143,19 +90,12 @@ export default function SettingsPage() {
                 </div>
                 <div>
                   <div className="text-xs font-medium text-stone-900">Microphone</div>
-                  <div className="text-[11px] text-emerald-600">On</div>
+                  <div className="text-[11px] text-stone-500">Selected in Studio</div>
                 </div>
               </div>
             </div>
 
-            <p className="text-[11px] text-stone-500 mb-3">These defaults apply to your next Studio or AI streaming session.</p>
-
-            <div className="flex items-center gap-3">
-              <button onClick={handleSaveStreamSettings} className="px-4 py-2 bg-[#e84314] hover:bg-[#c73608] text-white text-xs font-medium rounded-lg transition">
-                Save Settings
-              </button>
-              {saveMsg && <span className="text-xs text-emerald-600">{saveMsg}</span>}
-            </div>
+            <p className="text-[11px] text-stone-500">AI output is fixed at the provider-optimized profile to reduce lag. Choose camera and microphone controls in Studio.</p>
           </div>
 
           {/* Account & Wallet */}
@@ -220,7 +160,7 @@ export default function SettingsPage() {
                 type="password"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
-                minLength={6}
+                minLength={10}
                 className="w-full px-3 py-2 bg-white border border-stone-300 rounded-lg text-sm text-stone-900 focus:outline-none focus:border-[#e84314]"
               />
             </div>
@@ -237,16 +177,12 @@ export default function SettingsPage() {
               <h2 className="text-sm font-semibold text-red-600">Danger Zone</h2>
               <p className="text-xs text-stone-500">Permanently delete your account and all data</p>
             </div>
-            <button
-              onClick={() => {
-                if (confirm("Are you sure? This cannot be undone.")) {
-                  alert("Account deletion requires backend processing. Contact support.");
-                }
-              }}
+            <a
+              href="mailto:safful652@gmail.com?subject=Savatar%20account%20deletion%20request"
               className="px-4 py-2 bg-white hover:bg-red-100 border border-red-300 text-red-600 text-xs font-medium rounded-lg transition"
             >
-              Delete Account
-            </button>
+              Request deletion
+            </a>
           </div>
         </div>
       </div>

@@ -1,26 +1,48 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { io, Socket } from "socket.io-client";
 import { useAuth } from "@/lib/auth-context";
-import { iceServers, signalingUrl } from "@/lib/client-config";
+import { getIceServers, signalingUrl } from "@/lib/client-config";
 import { getOrCreateStreamRoomId } from "@/lib/stream-room";
+import { prepareReferenceImage, savePreparedReferenceImage } from "@/lib/reference-image";
 import DashboardLayout from "@/components/DashboardLayout";
 
 type Mode = "character" | "style" | "background" | "vton" | "vfx";
 
 const MODES: { id: Mode; label: string; model: string }[] = [
   { id: "character", label: "Character", model: "lucy-2.5" },
-  { id: "style", label: "Style Transfer", model: "lucy-restyle-2" },
+  { id: "style", label: "Style Transfer", model: "lucy-2.5" },
   { id: "background", label: "Background", model: "lucy-2.5" },
-  { id: "vton", label: "Virtual Try-On", model: "lucy-vton-3.5" },
+  { id: "vton", label: "Virtual Try-On", model: "lucy-2.5" },
   { id: "vfx", label: "VFX Effects", model: "lucy-2.5" },
 ];
+
+const DEFAULT_PROMPTS: Record<Mode, string> = {
+  character: "Transform the visible person into a consistent, realistic character while preserving their full-body pose, motion, framing, and background.",
+  style: "Apply a polished cinematic visual style while preserving the subject, motion, and scene composition.",
+  background: "Replace the background with a clean professional studio while preserving the subject, lighting, and motion.",
+  vton: "Apply a tasteful virtual outfit to the visible person while preserving their full-body pose, face, hands, and motion.",
+  vfx: "Add subtle cinematic visual effects around the subject while preserving their identity, pose, and motion.",
+};
+
+function streamPrompt(mode: Mode, savedPrompt: string, hasReference: boolean) {
+  if (savedPrompt.trim()) return savedPrompt.trim();
+  if (hasReference && mode === "vton") {
+    return "Dress the visible person in the complete outfit from the reference image, preserving their face, full-body pose, hands, motion, framing, and background.";
+  }
+  if (hasReference) {
+    return "Replace the visible person's full body, face, hair, clothing, and visible limbs with the character from the reference image. Preserve pose, motion, framing, and background.";
+  }
+  return DEFAULT_PROMPTS[mode];
+}
 
 type DecartModelId = "lucy-2.5" | "lucy-restyle-2" | "lucy-vton-3.5";
 
 export default function Dashboard() {
   const { user, userData } = useAuth();
+  const router = useRouter();
   const [, setIsConnected] = useState(false);
   const [isDecartActive, setIsDecartActive] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
@@ -31,6 +53,7 @@ export default function Dashboard() {
   const [reservedSeconds, setReservedSeconds] = useState(0);
   const [cameraActive, setCameraActive] = useState(false);
   const [micEnabled, setMicEnabled] = useState(true);
+  const [micAvailable, setMicAvailable] = useState(false);
   const [roomId, setRoomId] = useState("");
   const [viewerCount, setViewerCount] = useState(0);
   const [cameraDevice, setCameraDevice] = useState("default");
@@ -46,20 +69,17 @@ export default function Dashboard() {
   const lookInputRef = useRef<HTMLInputElement>(null);
   const autoStartAttemptedRef = useRef(false);
   const appliedReferenceRef = useRef<string | null>(null);
+  const appliedPromptRef = useRef("");
   const sessionIdRef = useRef<string | null>(null);
   const idTokenRef = useRef<string | null>(null);
-  // Tracks whether Decart is actively generating output ("generating" state).
-  // Countdown only ticks when this is true — user doesn't pay during connect/queue/reconnect.
+  // Tracks whether transformed frames are currently arriving for UI status.
   const isDecartActiveRef = useRef(false);
-  // Crash-fair refund bookkeeping: latest SDK generationTick seconds and a
-  // throttle timestamp so heartbeat POSTs stay well under the route rate limit.
+  // Diagnostic provider counter plus heartbeat throttle.
   const lastTickSecondsRef = useRef(0);
   const lastHeartbeatSentAtRef = useRef(0);
 
-  // Report liveness + generation seconds to the server so a crashed session
-  // (no /api/streaming/end) is refunded for time that wasn't generated instead
-  // of forfeiting the whole reservation. Best-effort: failures are ignored.
-  const sendStreamHeartbeat = useCallback((generationSeconds: number) => {
+  // Report liveness and diagnostics. Billing is always server-authoritative.
+  const sendStreamHeartbeat = useCallback((generationSeconds: number, phase: "connected" | "generating" = "connected") => {
     const sid = sessionIdRef.current;
     const token = idTokenRef.current;
     if (!sid || !token) return;
@@ -69,7 +89,11 @@ export default function Dashboard() {
     void fetch("/api/streaming/heartbeat", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ sessionId: sid, generationSeconds: Math.max(0, Math.floor(generationSeconds)) }),
+      body: JSON.stringify({
+        sessionId: sid,
+        generationSeconds: Math.max(0, Math.floor(generationSeconds)),
+        phase,
+      }),
     }).catch(() => {});
   }, []);
 
@@ -87,34 +111,19 @@ export default function Dashboard() {
   const startingRef = useRef(false);
 
   const stopStream = useCallback(async () => {
-    isDecartActiveRef.current = false; setIsDecartActive(false);
+    // Stop local/provider media first so clicking Stop is immediate even if the
+    // settlement request is slow. The short fal token is only a final fallback.
+    startingRef.current = false;
+    isDecartActiveRef.current = false;
+    setIsDecartActive(false);
+    setIsStreaming(false);
+    setStartupStatus("Stopping AI session");
     const activeClient = clientRef.current;
     clientRef.current = null;
-    activeClient?.disconnect();
+    try { activeClient?.disconnect(); } catch { /* Already disconnected. */ }
 
-    // Notify server to refund unused reserved time
     const currentSessionId = sessionIdRef.current;
     const currentToken = idTokenRef.current;
-    if (currentSessionId && currentToken) {
-      try {
-        await fetch("/api/streaming/end", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${currentToken}` },
-          body: JSON.stringify({ sessionId: currentSessionId }),
-        });
-      } catch {
-        // Best-effort: if the refund call fails, the session will still time
-        // out server-side and the user can retry from the same browser.
-        console.error("Failed to notify server of stream end");
-      }
-      sessionIdRef.current = null;
-      idTokenRef.current = null;
-    }
-
-    if (clientRef.current) {
-      clientRef.current.disconnect();
-      clientRef.current = null;
-    }
     if (socketRef.current) {
       socketRef.current.emit("broadcaster-stopped", { roomId });
       socketRef.current.disconnect();
@@ -125,16 +134,45 @@ export default function Dashboard() {
     pendingPeerCandidatesRef.current.clear();
     transformedStreamRef.current = null;
     appliedReferenceRef.current = null;
+    appliedPromptRef.current = "";
     if (localVideoRef.current && streamRef.current) {
       localVideoRef.current.srcObject = streamRef.current;
     }
-    setIsStreaming(false);
     setIsConnected(false);
     setStreamDuration(0);
     setRemainingSeconds(0);
     setReservedSeconds(0);
     setViewerCount(0);
+
+    if (!currentSessionId || !currentToken) {
+      setStartupStatus("");
+      return;
+    }
+
+    // Retry once before leaving settlement to the short-token sweeper. Session
+    // refs are cleared only after the server acknowledges the idempotent end.
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        const response = await fetch("/api/streaming/end", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${currentToken}` },
+          body: JSON.stringify({ sessionId: currentSessionId }),
+          signal: AbortSignal.timeout(8_000),
+        });
+        if (!response.ok) throw new Error("Settlement was not accepted");
+        sessionIdRef.current = null;
+        idTokenRef.current = null;
+        setStartupStatus("");
+        return;
+      } catch {
+        if (attempt === 0) {
+          await new Promise((resolve) => setTimeout(resolve, 500));
+          continue;
+        }
+      }
+    }
     setStartupStatus("");
+    setError("The stream stopped, but the balance update is still pending. The server will reconcile it automatically.");
   }, [roomId]);
 
   // List cameras
@@ -156,34 +194,39 @@ export default function Dashboard() {
     return () => window.removeEventListener("storage", syncSavedLook);
   }, []);
 
-  const applyReferenceImage = useCallback(async (dataUrl: string) => {
-    if (!clientRef.current) return;
-    const blob = await (await fetch(dataUrl)).blob();
-    await clientRef.current.set({ image: blob, prompt: prompt || "Substitute the character in the video with the person in the reference image.", enhance: true });
-    appliedReferenceRef.current = dataUrl;
-  }, [prompt]);
+  const applyCurrentLook = useCallback(async () => {
+    const client = clientRef.current;
+    if (!client) return;
+    const nextPrompt = streamPrompt(activeMode, prompt, Boolean(referenceImage));
+    const update: { image?: Blob | null; prompt: string; enhance: boolean } = {
+      prompt: nextPrompt,
+      enhance: true,
+    };
+    if (referenceImage !== appliedReferenceRef.current) {
+      update.image = referenceImage ? await (await fetch(referenceImage)).blob() : null;
+    }
+    await client.set(update);
+    appliedReferenceRef.current = referenceImage;
+    appliedPromptRef.current = nextPrompt;
+  }, [activeMode, prompt, referenceImage]);
 
   useEffect(() => {
-    if (referenceImage && isStreaming && referenceImage !== appliedReferenceRef.current) {
-      void applyReferenceImage(referenceImage).catch(() => setError("The new reference image could not be applied."));
+    const nextPrompt = streamPrompt(activeMode, prompt, Boolean(referenceImage));
+    if (isStreaming && (referenceImage !== appliedReferenceRef.current || nextPrompt !== appliedPromptRef.current)) {
+      void applyCurrentLook().catch(() => setError("The live AI look could not be updated."));
     }
-  }, [applyReferenceImage, isStreaming, referenceImage]);
+  }, [activeMode, applyCurrentLook, isStreaming, prompt, referenceImage]);
 
-  useEffect(() => {
-    if (!referenceImage && appliedReferenceRef.current && isStreaming && clientRef.current) {
-      void clientRef.current.set({
-        image: null,
-        prompt: prompt || "Preserve the subject and original camera scene.",
-        enhance: true,
-      }).then(() => { appliedReferenceRef.current = null; }).catch(() => setError("The selected background could not be applied."));
+  const saveReferenceImage = async (file?: File) => {
+    try {
+      const prepared = await prepareReferenceImage(file);
+      savePreparedReferenceImage(prepared);
+      setReferenceImage(prepared);
+      setLookModalOpen(false);
+      setError("");
+    } catch (uploadError) {
+      setError(uploadError instanceof Error ? uploadError.message : "The reference image could not be prepared.");
     }
-  }, [isStreaming, prompt, referenceImage]);
-
-  const saveReferenceImage = (file?: File) => {
-    if (!file || !file.type.startsWith("image/") || file.size > 2_000_000) { setError("Choose an image under 2 MB."); return; }
-    const reader = new FileReader();
-    reader.onload = () => { const result = String(reader.result); localStorage.setItem("savatar-reference-image", result); setReferenceImage(result); setLookModalOpen(false); };
-    reader.readAsDataURL(file);
   };
 
   const removeReferenceImage = () => {
@@ -191,15 +234,12 @@ export default function Dashboard() {
     setReferenceImage(null);
   };
 
-  // Live countdown: only ticks when Decart is in "generating" state.
-  // User does not pay during connect, queue, or reconnect.
-  // When remaining hits 0, auto-end the stream.
+  // The server reserves one bounded provider window, so the visible countdown
+  // follows that same wall clock and auto-stops at the paid deadline.
   useEffect(() => {
     if (!isStreaming) return;
     const timer = setInterval(() => {
       setStreamDuration((d) => d + 1);
-      // Only count down credits when Decart is actively generating
-      if (!isDecartActiveRef.current) return;
       setRemainingSeconds((r) => {
         if (r <= 1) {
           clearInterval(timer);
@@ -315,15 +355,19 @@ export default function Dashboard() {
   const openCamera = useCallback(async (targetResolution: string, targetDevice: string) => {
     try {
       setStartupStatus("Requesting camera and microphone access");
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-          frameRate: { ideal: 30 },
-          deviceId: targetDevice !== "default" ? { exact: targetDevice } : undefined,
-        },
-        audio: true,
-      });
+      const video = {
+        width: { ideal: targetResolution === "1080p" ? 1920 : 1280 },
+        height: { ideal: targetResolution === "1080p" ? 1080 : 720 },
+        frameRate: { ideal: 30, max: 30 },
+        deviceId: targetDevice !== "default" ? { exact: targetDevice } : undefined,
+      };
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video, audio: true });
+      } catch {
+        // A missing/blocked microphone should not prevent a video-only stream.
+        stream = await navigator.mediaDevices.getUserMedia({ video, audio: false });
+      }
       const previousStream = streamRef.current;
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = stream;
@@ -331,9 +375,10 @@ export default function Dashboard() {
       streamRef.current = stream;
       previousStream?.getTracks().forEach((track) => track.stop());
       setCameraActive(true);
-      setMicEnabled(true);
+      setMicEnabled(stream.getAudioTracks().some((track) => track.enabled));
+      setMicAvailable(stream.getAudioTracks().length > 0);
       setError("");
-      setStartupStatus("Camera ready");
+      setStartupStatus(stream.getAudioTracks().length ? "Camera ready" : "Camera ready; microphone unavailable");
       return stream;
     } catch {
       setError("No camera was found. Connect a camera, then reload this page.");
@@ -380,6 +425,7 @@ export default function Dashboard() {
     if (localVideoRef.current) localVideoRef.current.srcObject = null;
     setCameraActive(false);
     setMicEnabled(false);
+    setMicAvailable(false);
     setIsConnected(false);
     setIsStreaming(false);
   };
@@ -390,7 +436,7 @@ export default function Dashboard() {
       return;
     }
     if ((userData?.wallet?.balanceSeconds ?? 0) < 60) {
-      window.location.href = "/credits";
+      router.push("/credits");
       return;
     }
     if (!streamRef.current) {
@@ -414,7 +460,7 @@ export default function Dashboard() {
         },
         body: JSON.stringify({ model: modelId }),
       });
-      const tokenResult = await tokenResponse.json() as { apiKey?: string; error?: string; maxSessionDuration?: number; sessionId?: string; provider?: string; endpoint?: string };
+      const tokenResult = await tokenResponse.json() as { apiKey?: string; error?: string; maxSessionDuration?: number; sessionId?: string; provider?: string; deadlineAt?: string };
       if (!tokenResponse.ok || !tokenResult.apiKey) {
         throw new Error(tokenResult.error || "Unable to authorize this AI session");
       }
@@ -424,7 +470,10 @@ export default function Dashboard() {
       idTokenRef.current = idToken;
       const sessionSeconds = tokenResult.maxSessionDuration ?? 0;
       setReservedSeconds(sessionSeconds);
-      setRemainingSeconds(sessionSeconds);
+      const paidDeadline = Date.parse(tokenResult.deadlineAt ?? "");
+      setRemainingSeconds(Number.isFinite(paidDeadline)
+        ? Math.max(0, Math.min(sessionSeconds, Math.ceil((paidDeadline - Date.now()) / 1000)))
+        : sessionSeconds);
       lastTickSecondsRef.current = 0;
       lastHeartbeatSentAtRef.current = 0;
 
@@ -450,36 +499,15 @@ export default function Dashboard() {
 
       if (tokenResult.provider === "fal") {
         // ── fal.ai provider (master) ──────────────────────────────────
-        // Browser ↔ fal.run signaling relay ↔ Decart, over WebRTC. The
-        // wrapper mirrors the Decart SDK surface (disconnect/set/state) so
-        // the rest of the page behaves identically.
+        // Browser ↔ Savatar relay ↔ fal signaling, with the provider
+        // credential and paid cutoff controlled server-side.
         const { connectFalRealtime } = await import("@/lib/fal-realtime");
-        const initialPrompt = prompt || (referenceImage
-          ? "Substitute the character in the video with the person in the reference image."
-          : "Preserve the subject and their original camera scene.");
+        const initialPrompt = streamPrompt(activeMode, prompt, Boolean(referenceImage));
         appliedReferenceRef.current = referenceImage;
+        appliedPromptRef.current = initialPrompt;
         const falClient = connectFalRealtime({
-          endpoint: tokenResult.endpoint ?? "decart/lucy-2-5/realtime",
-          token: tokenResult.apiKey,
-          // Refresh the short-lived fal JWT through the server while the
-          // session is active. Once the stream is stopped/killed, the server
-          // refuses renewal and the billed runner is released at expiry.
-          renewToken: async () => {
-            const refreshResponse = await fetch("/api/realtime-token", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${idToken}`,
-              },
-              body: JSON.stringify({ renew: true, sessionId: sessionIdRef.current }),
-            });
-            const refreshed = (await refreshResponse.json()) as { apiKey?: string; error?: string };
-            if (!refreshResponse.ok || !refreshed.apiKey) {
-              throw new Error(refreshed.error || "AI session renewal refused");
-            }
-            return refreshed.apiKey;
-          },
-          tokenExpirationSeconds: 90,
+          relayUrl: signalingUrl,
+          ticket: tokenResult.apiKey,
           localStream: streamRef.current,
           initialPrompt,
           referenceImage,
@@ -493,10 +521,10 @@ export default function Dashboard() {
                 disconnected: "AI stream disconnected",
               } as const;
               setStartupStatus(labels[state]);
-              // Only count down credits while the AI is actually generating.
               isDecartActiveRef.current = state === "generating";
+              setIsDecartActive(state === "generating");
               if (state === "connected" || state === "generating") {
-                sendStreamHeartbeat(lastTickSecondsRef.current);
+                sendStreamHeartbeat(lastTickSecondsRef.current, state === "generating" ? "generating" : "connected");
               }
               if (state === "disconnected") {
                 setError("The AI session ended. Your balance will update after the server settles usage.");
@@ -526,6 +554,8 @@ export default function Dashboard() {
           realtimeBaseUrl: signalingUrl.replace(/^http/, "ws"), telemetry: false });
         const initialImage = referenceImage ? await (await fetch(referenceImage)).blob() : undefined;
         appliedReferenceRef.current = referenceImage;
+        const initialPrompt = streamPrompt(activeMode, prompt, Boolean(referenceImage));
+        appliedPromptRef.current = initialPrompt;
 
         const realtimeClient = await client.realtime.connect(streamRef.current, {
           model,
@@ -539,17 +569,17 @@ export default function Dashboard() {
             } as const;
             setStartupStatus(labels[state]);
 
-            // Only count down credits when Decart is actively generating
-            isDecartActiveRef.current = state === "generating";
+              isDecartActiveRef.current = state === "generating";
+              setIsDecartActive(state === "generating");
 
             // Presence heartbeat: from "connected" onward (covers queue time when
             // there are no generation ticks yet) the server knows the client is
             // alive, so the sweep never mistakes a queued session for a crash.
-            if (state === "connected" || state === "generating") {
-              sendStreamHeartbeat(lastTickSecondsRef.current);
+              if (state === "connected" || state === "generating") {
+                sendStreamHeartbeat(lastTickSecondsRef.current, state === "generating" ? "generating" : "connected");
             }
 
-            // Auto-end stream if Decart disconnects (user doesn't pay for dead sessions)
+            // Auto-end and settle as soon as the provider disconnects.
             if (state === "disconnected") {
               setError("The AI session ended. Your balance will update after the server settles usage.");
               setTimeout(() => stopStream(), 0);
@@ -560,9 +590,7 @@ export default function Dashboard() {
           initialState: {
             image: initialImage,
             prompt: {
-              text: prompt || (referenceImage
-                ? "Substitute the character in the video with the person in the reference image."
-                : "Preserve the subject and their original camera scene."),
+              text: initialPrompt,
               enhance: true,
             },
           },
@@ -574,16 +602,13 @@ export default function Dashboard() {
           isDecartActiveRef.current = false; setIsDecartActive(false);
           setError(err.message || "The AI stream disconnected unexpectedly.");
           setStartupStatus("AI connection failed");
-          // Auto-stop: refund unused credits
           setTimeout(() => stopStream(), 0);
         });
 
-        // Track actual Decart generation seconds (SDK generationTick) and report
-        // them so an abandoned session is charged for real generation, not the
-        // full reservation. Throttled inside sendStreamHeartbeat.
+        // Record provider diagnostics; the proxy remains the billing authority.
         realtimeClient.on("generationTick", ({ seconds }: { seconds: number }) => {
           lastTickSecondsRef.current = Math.max(lastTickSecondsRef.current, Math.floor(Number(seconds) || 0));
-          sendStreamHeartbeat(lastTickSecondsRef.current);
+          sendStreamHeartbeat(lastTickSecondsRef.current, "generating");
         });
 
         clientRef.current = realtimeClient;
@@ -611,17 +636,17 @@ export default function Dashboard() {
 
       socket.on("connect_error", () => {
         setError("Could not reach the live-stream signaling service.");
-        setIsStreaming(false);
+        void stopStream();
       });
 
       socket.on("authorization-error", () => {
         setError("Your account is not authorized to broadcast.");
-        setIsStreaming(false);
+        void stopStream();
       });
 
       socket.on("room-error", (message: string) => {
         setError(message || "Unable to open a live stream room.");
-        setIsStreaming(false);
+        void stopStream();
       });
 
       socket.on("viewer-count", (count: number) => {
@@ -634,7 +659,7 @@ export default function Dashboard() {
 
         peerConnectionsRef.current.get(viewerId)?.close();
         pendingPeerCandidatesRef.current.set(viewerId, []);
-        const pc = new RTCPeerConnection({ iceServers });
+        const pc = new RTCPeerConnection({ iceServers: await getIceServers() });
         peerConnectionsRef.current.set(viewerId, pc);
         aiStream.getTracks().forEach((track) => pc.addTrack(track, aiStream));
 
@@ -703,9 +728,11 @@ export default function Dashboard() {
       console.error("SDK connect error:", err);
       setError(err instanceof Error ? err.message : "Failed to start the AI stream.");
       setStartupStatus("");
+      if (sessionIdRef.current) await stopStream();
+    } finally {
+      startingRef.current = false;
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeMode, prompt, referenceImage, resolution, user, userData?.wallet?.balanceSeconds]);
+  }, [activeMode, prompt, referenceImage, resolution, router, sendStreamHeartbeat, stopStream, user, userData?.wallet?.balanceSeconds]);
 
   useEffect(() => {
     if (autoStartAttemptedRef.current || !user || !userData) return;
@@ -718,7 +745,6 @@ export default function Dashboard() {
   }, [cameraDevice, goLive, openCamera, resolution, user, userData]);
 
 
-  const balanceMinutes = ((userData?.wallet?.balanceSeconds || 0) / 60).toFixed(1);
   return (
     <DashboardLayout>
       <div className="p-3 sm:p-6 space-y-4">
@@ -830,8 +856,8 @@ export default function Dashboard() {
               <button onClick={cameraActive ? stopCamera : startCamera} className="px-3 py-2 rounded-lg bg-white border border-stone-300 text-xs text-stone-700 hover:bg-stone-50 transition">
                 Camera
               </button>
-              <button onClick={() => { const next = !micEnabled; streamRef.current?.getAudioTracks().forEach((track) => { track.enabled = next; }); setMicEnabled(next); }} disabled={!cameraActive} className="px-3 py-2 rounded-lg bg-white border border-stone-300 text-xs text-stone-700 hover:bg-stone-50 transition disabled:opacity-40">
-                {micEnabled ? "Mic on" : "Mic off"}
+              <button onClick={() => { const tracks = streamRef.current?.getAudioTracks() ?? []; if (!tracks.length) return; const next = !micEnabled; tracks.forEach((track) => { track.enabled = next; }); setMicEnabled(next); }} disabled={!cameraActive || !micAvailable} className="px-3 py-2 rounded-lg bg-white border border-stone-300 text-xs text-stone-700 hover:bg-stone-50 transition disabled:opacity-40">
+                {!micAvailable ? "Mic unavailable" : micEnabled ? "Mic on" : "Mic off"}
               </button>
               {availableCameras.length > 0 && (
                 <select
@@ -840,7 +866,7 @@ export default function Dashboard() {
                   disabled={isStreaming}
                   className="min-w-0 max-w-52 px-3 py-2 bg-white border border-stone-300 rounded-lg text-xs text-stone-900 focus:outline-none focus:border-[#e84314] disabled:opacity-50"
                 >
-                  <option value="default">No camera detected</option>
+                  <option value="default">Default camera</option>
                   {availableCameras.map((cam, i) => (
                     <option key={cam.deviceId} value={cam.deviceId}>
                       {cam.label || `Camera ${i + 1}`}

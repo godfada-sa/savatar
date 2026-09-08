@@ -38,3 +38,20 @@ test('wrong origin and expired ticket are rejected', async () => {
   await assert.rejects(claimTicket(fixture().db, ticket, 'https://other.com'));
   await assert.rejects(claimTicket(fixture({ ticketExpiresAt: stamp(0) }).db, ticket, 'https://example.com'));
 });
+
+test('fal tickets can only claim the fal relay and approved endpoint', async () => {
+  const valid = fixture({ transport: 'fal-proxy-v1', providerEndpoint: 'decart/lucy-2-5/realtime' });
+  await claimTicket(valid.db, ticket, 'https://example.com', 'fal-proxy-v1');
+  await assert.rejects(claimTicket(
+    fixture({ transport: 'fal-proxy-v1', providerEndpoint: 'decart/lucy-2-5/realtime' }).db,
+    ticket,
+    'https://example.com',
+    'proxy-v1',
+  ), /Ticket unavailable/);
+  await assert.rejects(claimTicket(
+    fixture({ transport: 'fal-proxy-v1', providerEndpoint: 'attacker/other/realtime' }).db,
+    ticket,
+    'https://example.com',
+    'fal-proxy-v1',
+  ), /Ticket unavailable/);
+});

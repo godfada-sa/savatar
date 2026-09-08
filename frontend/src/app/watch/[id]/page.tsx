@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams } from "next/navigation";
 import { io, Socket } from "socket.io-client";
-import { iceServers, signalingUrl } from "@/lib/client-config";
+import { getIceServers, signalingUrl } from "@/lib/client-config";
 
 export default function WatchPage() {
   const params = useParams();
@@ -29,7 +29,6 @@ export default function WatchPage() {
     socketRef.current = socket;
 
     socket.on("connect", () => {
-      console.log("Connected to signaling server");
       socket.emit("join-room", { roomId: streamId, role: "viewer" });
     });
 
@@ -80,15 +79,12 @@ export default function WatchPage() {
 
     // Handle offer from broadcaster
     socket.on("offer", async ({ offer, broadcasterId }: { offer: RTCSessionDescriptionInit; broadcasterId: string }) => {
-      console.log("Received offer from broadcaster");
-
       pcRef.current?.close();
       pendingCandidatesRef.current = [];
-      const pc = new RTCPeerConnection({ iceServers });
+      const pc = new RTCPeerConnection({ iceServers: await getIceServers() });
       pcRef.current = pc;
 
       pc.ontrack = (event) => {
-        console.log("Received remote track");
         if (videoRef.current) {
           videoRef.current.srcObject = event.streams[0];
         }
@@ -107,7 +103,6 @@ export default function WatchPage() {
       };
 
       pc.onconnectionstatechange = () => {
-        console.log("Connection state:", pc.connectionState);
         if (pc.connectionState === "disconnected" || pc.connectionState === "failed") {
           setStatus("Connection lost");
           setIsConnected(false);

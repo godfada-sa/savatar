@@ -150,9 +150,9 @@ function StudioPreview() {
                 <div className="h-full w-3/5 rounded-full bg-[#e84314]" />
               </div>
             </div>
-            <button type="button" className="w-full rounded-md bg-[#e84314] px-3 py-2.5 text-[11px] font-semibold text-white">
+            <Link href="/signup" className="block w-full rounded-md bg-[#e84314] px-3 py-2.5 text-center text-[11px] font-semibold text-white">
               Manage stream
-            </button>
+            </Link>
           </div>
         </div>
       </div>

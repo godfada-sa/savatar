@@ -1,5 +1,23 @@
 import type { NextConfig } from "next";
 
+const signalingOrigin = process.env.NEXT_PUBLIC_SIGNALING_URL || "http://localhost:4000";
+const signalingWebSocketOrigin = signalingOrigin.replace(/^http/, "ws");
+const scriptPolicy = process.env.NODE_ENV === "development" ? "'self' 'unsafe-inline' 'unsafe-eval'" : "'self' 'unsafe-inline'";
+const commonContentSecurityPolicy = [
+  "default-src 'self'",
+  `script-src ${scriptPolicy}`,
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob: https://*.googleusercontent.com https://*.googleapis.com",
+  "font-src 'self' data:",
+  "media-src 'self' blob: data:",
+  `connect-src 'self' ${signalingOrigin} ${signalingWebSocketOrigin} https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://*.fal.ai https://*.fal.run wss://*.fal.run`,
+  "worker-src 'self' blob:",
+  "frame-src 'self' https://accounts.google.com https://*.firebaseapp.com",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "object-src 'none'",
+].join("; ");
+
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   serverExternalPackages: ["firebase-admin", "jose", "jwks-rsa"],
@@ -8,7 +26,7 @@ const nextConfig: NextConfig = {
       {
         source: "/:path((?!obs/).*)",
         headers: [
-          { key: "Content-Security-Policy", value: "base-uri 'self'; form-action 'self'; frame-ancestors 'none'; object-src 'none'" },
+          { key: "Content-Security-Policy", value: `${commonContentSecurityPolicy}; frame-ancestors 'none'` },
           { key: "Cross-Origin-Opener-Policy", value: "same-origin-allow-popups" },
           { key: "Cross-Origin-Resource-Policy", value: "same-origin" },
           { key: "Permissions-Policy", value: "camera=(self), microphone=(self), geolocation=(), browsing-topics=(), usb=()" },
@@ -22,7 +40,7 @@ const nextConfig: NextConfig = {
       {
         source: "/obs/:path*",
         headers: [
-          { key: "Content-Security-Policy", value: "base-uri 'self'; frame-ancestors 'self'; object-src 'none'" },
+          { key: "Content-Security-Policy", value: `${commonContentSecurityPolicy}; frame-ancestors 'self'` },
           { key: "Cross-Origin-Resource-Policy", value: "same-origin" },
           { key: "Referrer-Policy", value: "no-referrer" },
           { key: "X-Content-Type-Options", value: "nosniff" },

@@ -10,6 +10,11 @@ import {
   RequestError,
 } from "@/lib/server-security";
 import { FieldValue } from "firebase-admin/firestore";
+import {
+  authoritativeFalUsageSeconds,
+  releaseStreamLockInTransaction,
+  streamLockRef,
+} from "@/lib/stream-sessions";
 
 export const runtime = "nodejs";
 
@@ -27,14 +32,20 @@ export async function POST(req: NextRequest) {
     const sessionRef = db.collection("streamSessions").doc(sessionId);
     const transactionRef = db.collection("transactions").doc(`stream-${sessionId}`);
     const userRef = db.collection("users").doc(user.uid);
+    const lockRef = streamLockRef(db);
+    const endedAtMs = Date.now();
 
     const refundResult = await db.runTransaction(async (transaction) => {
-      const sessionSnap = await transaction.get(sessionRef);
+      const [sessionSnap, lockSnap] = await Promise.all([
+        transaction.get(sessionRef),
+        transaction.get(lockRef),
+      ]);
       if (!sessionSnap.exists) throw new RequestError(404, "Session not found");
       const session = sessionSnap.data()!;
 
       if (session.userId !== user.uid) throw new RequestError(403, "Not your session");
       if (session.status !== "active") {
+        releaseStreamLockInTransaction(transaction, lockRef, lockSnap.data(), sessionId);
         return {
           refunded: 0,
           alreadyProcessed: true,
@@ -48,7 +59,7 @@ export async function POST(req: NextRequest) {
         return { refunded: 0, alreadyProcessed: false };
       }
 
-      if (!session.claimedAt) {
+      if (session.transport !== "fal-realtime" && !session.claimedAt) {
         transaction.update(userRef, {
           "wallet.balanceSeconds": FieldValue.increment(reservedSeconds),
           "wallet.totalUsed": FieldValue.increment(-reservedSeconds),
@@ -56,24 +67,26 @@ export async function POST(req: NextRequest) {
         const updates = { status: "completed", usedSeconds: 0, unusedSeconds: reservedSeconds, endedAt: FieldValue.serverTimestamp() };
         transaction.update(sessionRef, { ...updates, providerToken: FieldValue.delete(), ticketHash: FieldValue.delete() });
         transaction.update(transactionRef, updates);
-        return { refunded: reservedSeconds, alreadyProcessed: false, reservedSeconds };
+        releaseStreamLockInTransaction(transaction, lockRef, lockSnap.data(), sessionId);
+        return { refunded: reservedSeconds, usedSeconds: 0, alreadyProcessed: false, reservedSeconds };
       }
-      // fal settles inline: refund the unused part of the reservation based on
-      // the client-reported generation time (bounded by the reservation).
+      // fal media bypasses our backend. Settle from the server-authorized time
+      // window; browser-reported counters are diagnostics and cannot lower a bill.
       if (session.transport === "fal-realtime") {
-        const reported = Math.max(0, Math.floor(Number(session.clientGenerationSeconds ?? 0)));
-        const usedSeconds = Math.min(reservedSeconds, reported);
+        const usedSeconds = authoritativeFalUsageSeconds(session, endedAtMs);
         const unusedSeconds = reservedSeconds - usedSeconds;
+        const deadlineHit = endedAtMs >= (session.deadlineAt?.toMillis?.() ?? Infinity);
         if (unusedSeconds > 0) {
           transaction.update(userRef, {
             "wallet.balanceSeconds": FieldValue.increment(unusedSeconds),
             "wallet.totalUsed": FieldValue.increment(-unusedSeconds),
           });
         }
-        const updates = { status: "completed", usedSeconds, unusedSeconds, endedAt: FieldValue.serverTimestamp() };
+        const updates = { status: "completed", usedSeconds, unusedSeconds, deadlineHit, endedAt: FieldValue.serverTimestamp() };
         transaction.update(sessionRef, { ...updates, providerToken: FieldValue.delete(), ticketHash: FieldValue.delete() });
         transaction.update(transactionRef, updates);
-        return { refunded: unusedSeconds, alreadyProcessed: false, reservedSeconds };
+        releaseStreamLockInTransaction(transaction, lockRef, lockSnap.data(), sessionId);
+        return { refunded: unusedSeconds, usedSeconds, deadlineHit, alreadyProcessed: false, reservedSeconds };
       }
       // Only the proxy can confirm a provider disconnect and refundable usage.
       transaction.update(sessionRef, { stopRequestedAt: FieldValue.serverTimestamp() });

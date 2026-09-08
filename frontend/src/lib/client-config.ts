@@ -38,13 +38,24 @@ export const firebaseConfig = firebaseVariables as {
 
 export const signalingUrl = process.env.NEXT_PUBLIC_SIGNALING_URL ?? "http://localhost:4000";
 
-const turnUrl = process.env.NEXT_PUBLIC_TURN_URL;
-const turnUsername = process.env.NEXT_PUBLIC_TURN_USERNAME;
-const turnCredential = process.env.NEXT_PUBLIC_TURN_CREDENTIAL;
+const fallbackIceServers: RTCIceServer[] = [{ urls: "stun:stun.l.google.com:19302" }];
+let cachedIceServers: { servers: RTCIceServer[]; refreshAt: number } | null = null;
 
-export const iceServers: RTCIceServer[] = [
-  { urls: "stun:stun.l.google.com:19302" },
-  ...(turnUrl && turnUsername && turnCredential
-    ? [{ urls: turnUrl, username: turnUsername, credential: turnCredential }]
-    : []),
-];
+/** Load short-lived TURN credentials without bundling a reusable secret in JavaScript. */
+export async function getIceServers(): Promise<RTCIceServer[]> {
+  if (cachedIceServers && cachedIceServers.refreshAt > Date.now()) return cachedIceServers.servers;
+
+  try {
+    const response = await fetch("/api/webrtc/ice-servers", { cache: "no-store", credentials: "same-origin" });
+    if (!response.ok) return fallbackIceServers;
+    const body = (await response.json()) as { iceServers?: RTCIceServer[]; expiresAt?: number };
+    if (!Array.isArray(body.iceServers) || !body.iceServers.length) return fallbackIceServers;
+    const servers = body.iceServers.filter((server) => typeof server?.urls === "string" || Array.isArray(server?.urls));
+    if (!servers.length) return fallbackIceServers;
+    const expiresAt = Number(body.expiresAt) || Date.now() + 5 * 60_000;
+    cachedIceServers = { servers, refreshAt: Math.max(Date.now() + 30_000, expiresAt - 60_000) };
+    return servers;
+  } catch {
+    return fallbackIceServers;
+  }
+}

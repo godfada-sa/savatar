@@ -3,6 +3,7 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { FieldValue } from "firebase-admin/firestore";
 import { NextRequest } from "next/server";
 import { getAdminServices } from "@/lib/firebase-admin";
+import { streamLockRef } from "@/lib/stream-sessions";
 import {
   assertSameOrigin,
   enforceRateLimit,
@@ -19,15 +20,8 @@ const ALLOWED_MODELS = new Set(["lucy-2.5", "lucy-restyle-2", "lucy-vton-3.5"]);
 const MAX_PREPAID_SESSION_SECONDS = 300;
 const MINIMUM_STREAM_SECONDS = 60;
 
-/**
- * Short-lived fal realtime tokens. The fal relay keeps a session (and its
- * billed runner) alive until the token it was opened with expires — closing
- * the WebSocket alone does not free it. A short TTL plus client renewal
- * through this route is therefore the kill switch: once /api/streaming/end
- * marks the session completed, renewals are refused and the runner dies
- * within FAL_TOKEN_TTL_SECONDS even if the browser is already closed.
- */
-const FAL_TOKEN_TTL_SECONDS = 90;
+// The fal token is stored server-side and used only by the bounded relay.
+const FAL_TOKEN_TTL_SECONDS = 120;
 
 /**
  * fal.ai realtime endpoints per Savatar model. lucy-2.5 is the confirmed
@@ -40,7 +34,7 @@ const FAL_ENDPOINTS: Record<string, string> = {
 };
 
 /** fal is the master provider once FAL_KEY is set and FAL_PROVIDER=1. */
-function useFalProvider() {
+function isFalProviderEnabled() {
   return process.env.FAL_PROVIDER === "1" && Boolean(process.env.FAL_KEY);
 }
 
@@ -52,8 +46,7 @@ function permanentApiKey() {
 
 /**
  * Mint a short-lived, model-scoped JWT from fal's realtime token endpoint.
- * The browser connects directly to wss://fal.run/<endpoint> with this token;
- * FAL_KEY itself never leaves this route.
+ * The provider relay uses this token; neither it nor FAL_KEY reaches the browser.
  *
  * Verified against the live API: the token that authenticates the realtime
  * WebSocket comes from POST /tokens/ with `allowed_apps` (the app alias, not
@@ -112,38 +105,17 @@ export async function POST(req: NextRequest) {
 
     ({ db } = getAdminServices());
 
-    // ── Token renewal (fal path) ──────────────────────────────────────
-    // Called by the client every ~81s while a session is live. Refuses once
-    // the session is no longer active (ended / killed / swept), so a stopped
-    // or dead browser's runner is released at the previous token's expiry.
-    // No wallet movement here — the reservation happened at initial mint.
     if (body.renew === true) {
-      const renewSessionId = typeof body.sessionId === "string" ? body.sessionId : "";
-      if (!renewSessionId) throw new RequestError(400, "sessionId is required for token renewal");
-      const sessionRef = db.collection("streamSessions").doc(renewSessionId);
-      const sessionSnapshot = await sessionRef.get();
-      const session = sessionSnapshot.data();
-      if (!sessionSnapshot.exists || !session) throw new RequestError(404, "Stream session not found");
-      if (session.userId !== user.uid) throw new RequestError(403, "Not your stream session");
-      if (session.status !== "active" || session.provider !== "fal") {
-        throw new RequestError(409, "This stream session is no longer active");
-      }
-      const endpoint =
-        typeof session.providerEndpoint === "string" ? session.providerEndpoint : FAL_ENDPOINTS[String(session.model ?? "")];
-      if (!endpoint) throw new RequestError(400, "Session has no provider endpoint");
-      const falToken = await mintFalRealtimeToken(endpoint, FAL_TOKEN_TTL_SECONDS);
-      await sessionRef.update({ tokenExpiresAt: falToken.expiresAt });
-      return privateJson({
-        apiKey: falToken.token,
-        expiresAt: falToken.expiresAt,
-        sessionId: renewSessionId,
-        provider: "fal",
-        endpoint,
-      });
+      throw new RequestError(400, "Token renewal is not supported for relayed sessions");
     }
 
     const model = typeof body.model === "string" ? body.model : "";
     if (!ALLOWED_MODELS.has(model)) throw new RequestError(400, "Unsupported realtime model");
+
+    const provider = isFalProviderEnabled() ? "fal" : "decart";
+    if (provider === "fal" && !FAL_ENDPOINTS[model]) {
+      throw new RequestError(400, "This mode is not available on the configured AI provider.");
+    }
 
     await enforceRateLimit(db, "realtime-token", user.uid, 3, 5 * 60_000);
 
@@ -152,8 +124,22 @@ export async function POST(req: NextRequest) {
     const ticket = `${sessionId}.${randomBytes(32).toString("hex")}`;
     const sessionRef = db.collection("streamSessions").doc(sessionId);
     const transactionRef = db.collection("transactions").doc(`stream-${sessionId}`);
+    const lockRef = streamLockRef(db);
+    const reservationStartedAt = new Date();
     const reservedSeconds = await db.runTransaction(async (transaction) => {
-      const userSnapshot = await transaction.get(userRef);
+      const [lockSnapshot, userSnapshot] = await Promise.all([
+        transaction.get(lockRef),
+        transaction.get(userRef),
+      ]);
+      const lock = lockSnapshot.data();
+      const lockExpiresAt = lock?.expiresAt?.toMillis?.();
+      if (lock?.sessionId && Number.isFinite(lockExpiresAt) && lockExpiresAt > Date.now()) {
+        throw new RequestError(
+          409,
+          "Another AI stream is already active. Please wait a moment and try again.",
+          Math.max(1, Math.ceil((lockExpiresAt - Date.now()) / 1000)),
+        );
+      }
       const balanceSeconds = Math.floor(Number(userSnapshot.data()?.wallet?.balanceSeconds ?? 0));
       if (!userSnapshot.exists || !Number.isSafeInteger(balanceSeconds) || balanceSeconds < MINIMUM_STREAM_SECONDS) {
         throw new RequestError(402, "At least one minute of streaming credits is required");
@@ -179,21 +165,25 @@ export async function POST(req: NextRequest) {
         status: "reserved",
         createdAt: FieldValue.serverTimestamp(),
       });
+      transaction.set(lockRef, {
+        sessionId,
+        userId: user.uid,
+        provider,
+        status: "reserving",
+        expiresAt: new Date(reservationStartedAt.getTime() + 120_000),
+        createdAt: FieldValue.serverTimestamp(),
+      });
       return seconds;
     });
     reservation = { sessionId, userId: user.uid, seconds: reservedSeconds };
 
     const origin = req.headers.get("origin") ?? process.env.APP_ORIGIN ?? req.nextUrl.origin;
     const maxSessionDuration = reservedSeconds;
-    // Decart proxy path keeps a long-lived provider credential (no renewal
-    // mechanism, and the proxy relays it server-side). The fal path uses a
-    // SHORT token (FAL_TOKEN_TTL_SECONDS) renewed by the client through this
-    // route, because fal's relay holds the billed runner until token expiry.
     const tokenDuration = Math.max(120, reservedSeconds + 120);
 
-    const provider = useFalProvider() ? "fal" : "decart";
     let sessionTransport: string;
-    let apiKey: string;
+    const apiKey = ticket;
+    let providerToken: string;
     // The Decart SDK returns expiresAt as a string; fal returns a Date.
     let tokenExpiresAt: Date | string;
     if (provider === "fal") {
@@ -202,8 +192,8 @@ export async function POST(req: NextRequest) {
         throw new RequestError(400, "This mode is not available on the fal provider yet.");
       }
       const falToken = await mintFalRealtimeToken(endpoint, FAL_TOKEN_TTL_SECONDS);
-      sessionTransport = "fal-realtime";
-      apiKey = falToken.token;
+      sessionTransport = "fal-proxy-v1";
+      providerToken = falToken.token;
       tokenExpiresAt = falToken.expiresAt;
     } else {
       const decart = createDecartClient({ apiKey: permanentApiKey() });
@@ -216,7 +206,7 @@ export async function POST(req: NextRequest) {
         metadata: { userId: user.uid, service: "savatar" },
       });
       sessionTransport = "proxy-v1";
-      apiKey = ticket;
+      providerToken = token.apiKey;
       tokenExpiresAt = token.expiresAt;
     }
 
@@ -224,20 +214,38 @@ export async function POST(req: NextRequest) {
     // If the client never calls /api/streaming/end (closed tab, crash), a sweep
     // finalizes the session at this point and the full reservation is spent —
     // the same window the countdown shows, so overuse is impossible.
-    await sessionRef.update({
-      status: "active",
-      transport: sessionTransport,
+    const providerAuthorizedAt = new Date();
+    const deadlineAt = new Date(providerAuthorizedAt.getTime() + reservedSeconds * 1000);
+    await db.runTransaction(async (transaction) => {
+      const [freshSessionSnapshot, lockSnapshot] = await Promise.all([
+        transaction.get(sessionRef),
+        transaction.get(lockRef),
+      ]);
+      if (freshSessionSnapshot.data()?.status !== "reserved" || lockSnapshot.data()?.sessionId !== sessionId) {
+        throw new RequestError(409, "The AI session reservation expired before it could start");
+      }
+      transaction.update(sessionRef, {
+        status: "active",
+        transport: sessionTransport,
+      provider,
+      providerToken,
       ticketHash: createHash("sha256").update(ticket).digest("hex"),
       ticketExpiresAt: new Date(Date.now() + 90_000),
-      // The fal JWT is handed to the browser and never persisted; the proxy
-      // path stores its provider token for upstream relay instead.
-      ...(provider === "fal"
-        ? { provider: "fal", providerEndpoint: FAL_ENDPOINTS[model] }
-        : { providerToken: apiKey }),
+      ...(provider === "fal" ? { providerEndpoint: FAL_ENDPOINTS[model] } : {}),
       allowedOrigin: origin,
       tokenExpiresAt,
+      providerAuthorizedAt,
       activatedAt: FieldValue.serverTimestamp(),
-      deadlineAt: new Date(Date.now() + reservedSeconds * 1000),
+      deadlineAt,
+      });
+      transaction.set(lockRef, {
+        sessionId,
+        userId: user.uid,
+        provider,
+        status: "active",
+        expiresAt: deadlineAt,
+        updatedAt: FieldValue.serverTimestamp(),
+      });
     });
 
     return privateJson({
@@ -246,28 +254,35 @@ export async function POST(req: NextRequest) {
       maxSessionDuration,
       sessionId,
       provider,
-      // The fal WebRTC endpoint the browser should connect to (fal path only).
-      ...(provider === "fal" ? { endpoint: FAL_ENDPOINTS[model] } : {}),
+      deadlineAt: deadlineAt.toISOString(),
     });
   } catch (error) {
-    // Do not charge a user when the provider token was never issued. Once the
-    // token is returned, the full prepaid window is final and cannot be
-    // manipulated by a browser-side "stream ended" request.
+    // Reverse reservations that failed before a usable relay ticket was returned.
     if (reservation && db) {
+      const activeDb = db;
       const failedReservation = reservation;
-      const sessionRef = db.collection("streamSessions").doc(failedReservation.sessionId);
-      const userRef = db.collection("users").doc(failedReservation.userId);
-      const transactionRef = db.collection("transactions").doc(`stream-${failedReservation.sessionId}`);
-      await db.runTransaction(async (transaction) => {
-        const session = await transaction.get(sessionRef);
-        if (session.data()?.status !== "reserved") return;
-        transaction.update(userRef, {
-          "wallet.balanceSeconds": FieldValue.increment(failedReservation.seconds),
-          "wallet.totalUsed": FieldValue.increment(-failedReservation.seconds),
+      const sessionRef = activeDb.collection("streamSessions").doc(failedReservation.sessionId);
+      const userRef = activeDb.collection("users").doc(failedReservation.userId);
+      const transactionRef = activeDb.collection("transactions").doc(`stream-${failedReservation.sessionId}`);
+      try {
+        await activeDb.runTransaction(async (transaction) => {
+          const lockRef = streamLockRef(activeDb);
+          const [session, lock] = await Promise.all([
+            transaction.get(sessionRef),
+            transaction.get(lockRef),
+          ]);
+          if (session.data()?.status !== "reserved") return;
+          transaction.update(userRef, {
+            "wallet.balanceSeconds": FieldValue.increment(failedReservation.seconds),
+            "wallet.totalUsed": FieldValue.increment(-failedReservation.seconds),
+          });
+          transaction.update(sessionRef, { status: "token_failed", releasedAt: FieldValue.serverTimestamp() });
+          transaction.update(transactionRef, { status: "reversed", reversedAt: FieldValue.serverTimestamp() });
+          if (lock.data()?.sessionId === failedReservation.sessionId) transaction.delete(lockRef);
         });
-        transaction.update(sessionRef, { status: "token_failed", releasedAt: FieldValue.serverTimestamp() });
-        transaction.update(transactionRef, { status: "reversed", reversedAt: FieldValue.serverTimestamp() });
-      });
+      } catch (cleanupError) {
+        console.error("Realtime reservation cleanup failed:", cleanupError instanceof Error ? cleanupError.message : "unknown error");
+      }
     }
     console.error("Realtime token error:", error instanceof Error ? error.message : "unknown error");
     return errorJson(error);

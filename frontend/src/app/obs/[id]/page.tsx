@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { io, Socket } from "socket.io-client";
-import { iceServers, signalingUrl } from "@/lib/client-config";
+import { getIceServers, signalingUrl } from "@/lib/client-config";
 
 export default function ObsSourcePage() {
   const { id } = useParams<{ id: string }>();
@@ -28,7 +28,7 @@ export default function ObsSourcePage() {
     socket.on("broadcaster-left", () => setStatus("Stream ended"));
     socket.on("offer", async ({ offer, broadcasterId }: { offer: RTCSessionDescriptionInit; broadcasterId: string }) => {
       pcRef.current?.close();
-      const pc = new RTCPeerConnection({ iceServers });
+      const pc = new RTCPeerConnection({ iceServers: await getIceServers() });
       pcRef.current = pc;
       pc.ontrack = (event) => {
         if (videoRef.current) { videoRef.current.srcObject = event.streams[0]; void videoRef.current.play().catch(() => undefined); }
