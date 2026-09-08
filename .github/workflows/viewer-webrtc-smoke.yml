@@ -1,0 +1,34 @@
+name: Viewer WebRTC smoke
+
+on:
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Restore Firebase credentials
+        working-directory: frontend
+        run: node scripts/restore-test-env.mjs
+        env:
+          FIREBASE_PROJECT_ID: ${{ secrets.TEST_FIREBASE_PROJECT_ID }}
+          FIREBASE_CLIENT_EMAIL: ${{ secrets.TEST_FIREBASE_CLIENT_EMAIL }}
+          FIREBASE_PRIVATE_KEY: ${{ secrets.TEST_FIREBASE_PRIVATE_KEY }}
+          NEXT_PUBLIC_FIREBASE_API_KEY: ${{ secrets.TEST_NEXT_PUBLIC_FIREBASE_API_KEY }}
+
+      - name: Run viewer-path WebRTC smoke test (second network)
+        working-directory: frontend
+        run: node scripts/test-viewer-webrtc.mjs
