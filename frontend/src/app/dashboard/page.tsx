@@ -57,12 +57,28 @@ export default function Dashboard() {
   const [roomId, setRoomId] = useState("");
   const [viewerCount, setViewerCount] = useState(0);
   const [cameraDevice, setCameraDevice] = useState("default");
+  // Front/back preference for phones. Ignored whenever a specific device is
+  // picked from the camera list; desktops simply resolve it to their webcam.
+  const [facingMode, setFacingMode] = useState<"user" | "environment">(() => {
+    if (typeof window === "undefined") return "user";
+    return localStorage.getItem("savatar-facing-mode") === "environment" ? "environment" : "user";
+  });
+  const facingModeRef = useRef(facingMode);
   // Decart's realtime models currently produce a 720p-class stream. Matching
   // the capture to that output avoids an unnecessary 1080p upload and reduces
   // connection failures on slower browsers.
   const [resolution, setResolution] = useState("720p");
   const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>([]);
   const [error, setError] = useState("");
+  // iOS-style front-camera mirroring for the self-view only: the outgoing
+  // camera track and AI output stay unmirrored so text reads correctly to
+  // viewers, matching how phone front cameras behave.
+  const [mirrorPreview, setMirrorPreview] = useState(() => {
+    if (typeof window === "undefined") return true;
+    return localStorage.getItem("savatar-mirror-preview") !== "off";
+  });
+  // Back cameras are never mirrored — only the user-facing camera is, like on iPhone.
+  const previewMirrored = cameraActive && mirrorPreview && facingMode === "user";
   const [startupStatus, setStartupStatus] = useState("");
   const [lookModalOpen, setLookModalOpen] = useState(false);
   const [referenceImage, setReferenceImage] = useState<string | null>(null);
@@ -182,7 +198,7 @@ export default function Dashboard() {
         setAvailableCameras(devices.filter((d) => d.kind === "videoinput"));
       });
     }
-  }, [cameraActive]);
+  }, [cameraActive, cameraDevice, facingMode]);
 
   useEffect(() => {
     const syncSavedLook = () => {
@@ -355,12 +371,20 @@ export default function Dashboard() {
   const openCamera = useCallback(async (targetResolution: string, targetDevice: string) => {
     try {
       setStartupStatus("Requesting camera and microphone access");
-      const video = {
+      const video: MediaTrackConstraints = {
         width: { ideal: targetResolution === "1080p" ? 1920 : 1280 },
         height: { ideal: targetResolution === "1080p" ? 1080 : 720 },
         frameRate: { ideal: 30, max: 30 },
-        deviceId: targetDevice !== "default" ? { exact: targetDevice } : undefined,
       };
+      if (targetDevice !== "default") {
+        video.deviceId = { exact: targetDevice };
+      } else {
+        video.facingMode = { ideal: facingModeRef.current };
+      }
+      // Stop the previous stream first so phone browsers reliably hand the
+      // camera over when switching between front and back.
+      streamRef.current?.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
       let stream: MediaStream;
       try {
         stream = await navigator.mediaDevices.getUserMedia({ video, audio: true });
@@ -368,12 +392,10 @@ export default function Dashboard() {
         // A missing/blocked microphone should not prevent a video-only stream.
         stream = await navigator.mediaDevices.getUserMedia({ video, audio: false });
       }
-      const previousStream = streamRef.current;
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = stream;
       }
       streamRef.current = stream;
-      previousStream?.getTracks().forEach((track) => track.stop());
       setCameraActive(true);
       setMicEnabled(stream.getAudioTracks().some((track) => track.enabled));
       setMicAvailable(stream.getAudioTracks().length > 0);
@@ -381,6 +403,9 @@ export default function Dashboard() {
       setStartupStatus(stream.getAudioTracks().length ? "Camera ready" : "Camera ready; microphone unavailable");
       return stream;
     } catch {
+      // The previous stream was already stopped for the switch, so reflect
+      // reality: no camera is active until a new one opens successfully.
+      setCameraActive(false);
       setError("No camera was found. Connect a camera, then reload this page.");
       setStartupStatus("");
       return null;
@@ -397,6 +422,24 @@ export default function Dashboard() {
   const changeCameraDevice = (nextDevice: string) => {
     setCameraDevice(nextDevice);
     if (cameraActive && !isStreaming) void openCamera(resolution, nextDevice);
+  };
+
+  const flipCamera = () => {
+    if (isStreaming) return;
+    const next = facingModeRef.current === "user" ? "environment" : "user";
+    facingModeRef.current = next;
+    setFacingMode(next);
+    try { localStorage.setItem("savatar-facing-mode", next); } catch { /* storage unavailable */ }
+    setCameraDevice("default");
+    if (cameraActive) void openCamera(resolution, "default");
+  };
+
+  const toggleMirror = () => {
+    setMirrorPreview((current) => {
+      const next = !current;
+      try { localStorage.setItem("savatar-mirror-preview", next ? "on" : "off"); } catch { /* storage unavailable */ }
+      return next;
+    });
   };
 
   const stopCamera = async () => {
@@ -801,6 +844,7 @@ export default function Dashboard() {
               <div className="force-dark relative aspect-[3/4] sm:aspect-video bg-[#0a0a0a]">
                 <video
                   ref={localVideoRef}
+                  style={{ transform: previewMirrored ? "scaleX(-1)" : undefined }}
                   autoPlay
                   muted
                   playsInline
@@ -814,8 +858,26 @@ export default function Dashboard() {
                     <span className="text-sm">No camera detected</span>
                   </div>
                 )}
+                <button
+                  type="button"
+                  onClick={toggleMirror}
+                  disabled={facingMode === "environment"}
+                  title={facingMode === "environment"
+                    ? "The back camera is never mirrored"
+                    : isDecartActive
+                      ? "Mirrored locally only — viewers always see the unmirrored image"
+                      : "Mirror your self-view (viewers always see the unmirrored image)"}
+                  className="absolute bottom-2 right-2 px-2 py-0.5 bg-black/60 hover:bg-black/80 rounded text-[10px] text-neutral-300 disabled:opacity-50"
+                >
+                  {mirrorPreview ? "Mirror: on" : "Mirror: off"}
+                </button>
+                {isDecartActive && previewMirrored && (
+                  <div className="absolute bottom-8 right-2 px-2 py-0.5 rounded text-[10px] font-medium bg-amber-500/90 text-black">
+                    Mirrored locally only
+                  </div>
+                )}
                 <div className="absolute bottom-2 left-2 px-2 py-0.5 bg-black/60 rounded text-[10px] text-neutral-300">
-                  Your camera
+                  {isDecartActive ? "AI output" : "Your camera"}
                 </div>
                 {isStreaming && reservedSeconds > 0 && (
                   <div className="absolute top-2 right-2 flex items-center gap-2">
@@ -859,6 +921,19 @@ export default function Dashboard() {
               <button onClick={() => { const tracks = streamRef.current?.getAudioTracks() ?? []; if (!tracks.length) return; const next = !micEnabled; tracks.forEach((track) => { track.enabled = next; }); setMicEnabled(next); }} disabled={!cameraActive || !micAvailable} className="px-3 py-2 rounded-lg bg-white border border-stone-300 text-xs text-stone-700 hover:bg-stone-50 transition disabled:opacity-40">
                 {!micAvailable ? "Mic unavailable" : micEnabled ? "Mic on" : "Mic off"}
               </button>
+              {availableCameras.length > 1 && (
+                <button
+                  onClick={flipCamera}
+                  disabled={isStreaming}
+                  title="Switch between front and back camera"
+                  className="px-3 py-2 rounded-lg bg-white border border-stone-300 text-xs text-stone-700 hover:bg-stone-50 transition disabled:opacity-40"
+                >
+                  <svg className="inline-block w-3.5 h-3.5 mr-1 -mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  Flip camera
+                </button>
+              )}
               {availableCameras.length > 0 && (
                 <select
                   value={cameraDevice}

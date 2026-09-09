@@ -31,6 +31,12 @@ export default function AiObsPage() {
   const [referenceImage, setReferenceImage] = useState<string | null>(null);
   const [lookModalOpen, setLookModalOpen] = useState(false);
   const [error, setError] = useState("");
+  // iOS-style front-camera mirroring for the self-view only: the outgoing
+  // camera track stays unmirrored so text reads correctly to viewers.
+  const [mirrorPreview, setMirrorPreview] = useState(() => {
+    if (typeof window === "undefined") return true;
+    return localStorage.getItem("savatar-mirror-preview") !== "off";
+  });
 
   const backgrounds: Background[] = [
     { id: "original", name: "Original", category: "all" },
@@ -153,6 +159,14 @@ export default function AiObsPage() {
     saveCombinedPrompt(selectedBg, look, Boolean(referenceImage));
   };
 
+  const toggleMirror = () => {
+    setMirrorPreview((current) => {
+      const next = !current;
+      try { localStorage.setItem("savatar-mirror-preview", next ? "on" : "off"); } catch { /* storage unavailable */ }
+      return next;
+    });
+  };
+
   const stopCamera = () => {
     if (videoRef.current?.srcObject) {
       const stream = videoRef.current.srcObject as MediaStream;
@@ -188,7 +202,14 @@ export default function AiObsPage() {
                   <span className="text-[10px] text-stone-500 px-2 py-0.5 rounded bg-stone-100">Private</span>
                 </div>
                 <div className="force-dark relative aspect-[4/3] sm:aspect-video bg-[#0a0a0a]">
-                  <video ref={videoRef} autoPlay muted playsInline className="w-full h-full object-cover" />
+                  <video
+                    ref={videoRef}
+                    autoPlay
+                    muted
+                    playsInline
+                    className="w-full h-full object-cover"
+                    style={{ transform: cameraActive && mirrorPreview ? "scaleX(-1)" : undefined }}
+                  />
                   {!cameraActive && (
                     <div className="absolute inset-0 flex flex-col items-center justify-center text-neutral-600">
                       <svg className="w-10 h-10 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -197,6 +218,14 @@ export default function AiObsPage() {
                       <span className="text-xs">No camera</span>
                     </div>
                   )}
+                  <button
+                    type="button"
+                    onClick={toggleMirror}
+                    title="Mirror your self-view (viewers always see the unmirrored image)"
+                    className="absolute bottom-2 right-2 px-2 py-0.5 bg-black/60 hover:bg-black/80 rounded text-[10px] text-neutral-300"
+                  >
+                    {mirrorPreview ? "Mirror: on" : "Mirror: off"}
+                  </button>
                   <div className="absolute bottom-2 left-2 px-2 py-0.5 bg-black/60 rounded text-[10px] text-neutral-300">
                     Your camera
                   </div>
