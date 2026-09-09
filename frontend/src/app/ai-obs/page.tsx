@@ -196,7 +196,7 @@ export default function AiObsPage() {
             {/* Video Feeds */}
             <div className="grid grid-cols-1 items-center gap-4 xl:grid-cols-[minmax(260px,0.65fr)_44px_minmax(0,1.65fr)]">
               {/* Camera Input */}
-              <div className="rounded-xl bg-white border border-stone-200 overflow-hidden">
+              <div className="order-2 overflow-hidden rounded-xl border border-stone-200 bg-white xl:order-1">
                 <div className="p-3 border-b border-stone-200 flex items-center justify-between">
                   <span className="text-xs font-semibold text-stone-900">Camera Input</span>
                   <span className="text-[10px] text-stone-500 px-2 py-0.5 rounded bg-stone-100">Private</span>
@@ -238,7 +238,7 @@ export default function AiObsPage() {
                 </div>
               </div>
 
-              <div className="flex items-center justify-center text-[#e84314]">
+              <div className="hidden items-center justify-center text-[#e84314] xl:order-2 xl:flex">
                 <div className="flex items-center gap-2 xl:flex-col xl:gap-1">
                   <div className="h-px w-12 bg-[#e84314]/30 xl:hidden" />
                   <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -250,14 +250,14 @@ export default function AiObsPage() {
               </div>
 
               {/* AI Output */}
-              <div className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm">
+              <div className="order-1 -mx-3 overflow-hidden border-y border-stone-200 bg-white shadow-sm sm:mx-0 sm:rounded-xl sm:border xl:order-3">
                 <div className="p-3 border-b border-stone-200 flex items-center justify-between">
                   <span className="text-xs font-semibold text-stone-900">AI program output</span>
                   <span className="text-[10px] px-2 py-0.5 rounded text-stone-500 bg-stone-100">
                     OBS monitor
                   </span>
                 </div>
-                <div className="force-dark relative aspect-[4/3] min-h-[280px] bg-gradient-to-br from-[#0c1d3b] via-[#08213b] to-[#030811] sm:aspect-video xl:min-h-[440px]">
+                <div className="force-dark relative h-[62svh] min-h-[420px] bg-gradient-to-br from-[#0c1d3b] via-[#08213b] to-[#030811] sm:h-auto sm:aspect-video sm:min-h-[360px] xl:min-h-[440px]">
                   {obsUrl && <iframe title="AI program output monitor" src={`${obsUrl}?muted=1`} className="absolute inset-0 h-full w-full border-0" allow="autoplay" />}
                 </div>
                 <div className="grid grid-cols-[1fr_auto] gap-2 p-2 border-t border-stone-200">

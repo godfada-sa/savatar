@@ -822,11 +822,32 @@ export default function Dashboard() {
               and interact live. Keep Studio open while broadcasting; OBS receives the same AI output and microphone audio.
             </p>
           </div>
-          <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-stone-100 border border-stone-200 text-[11px] text-stone-600">
+          <div className="flex shrink-0 items-center gap-2 rounded-full border border-stone-200 bg-stone-100 px-3 py-1 text-[11px] text-stone-600">
             <span className={`w-2 h-2 rounded-full ${isStreaming ? "bg-emerald-500" : "bg-stone-400"}`} />
             <span className={isStreaming ? "text-emerald-600" : "text-stone-500"}>
               {isStreaming ? "Live" : "Offline"}
             </span>
+            {isStreaming && (
+              <>
+                <span className="h-3 w-px bg-stone-300" aria-hidden="true" />
+                <span className="whitespace-nowrap text-stone-700">
+                  {viewerCount} {viewerCount === 1 ? "viewer" : "viewers"}
+                </span>
+              </>
+            )}
+            {isStreaming && reservedSeconds > 0 && (
+              <>
+                <span className="h-3 w-px bg-stone-300" aria-hidden="true" />
+                <span
+                  className={`font-mono font-bold ${
+                    remainingSeconds <= 30 ? "text-red-600" : remainingSeconds <= 60 ? "text-amber-600" : "text-stone-700"
+                  }`}
+                  aria-label={`${formatTime(remainingSeconds)} of streaming credits remaining`}
+                >
+                  {formatTime(remainingSeconds)}
+                </span>
+              </>
+            )}
           </div>
         </div>
 
@@ -879,27 +900,6 @@ export default function Dashboard() {
                 <div className="absolute bottom-2 left-2 px-2 py-0.5 bg-black/60 rounded text-[10px] text-neutral-300">
                   {isDecartActive ? "AI output" : "Your camera"}
                 </div>
-                {isStreaming && reservedSeconds > 0 && (
-                  <div className="absolute top-2 right-2 flex items-center gap-2">
-                    <div className={`px-2.5 py-1 rounded-lg bg-black/70 backdrop-blur-sm flex items-center gap-1.5 ${
-                      remainingSeconds <= 30 ? "border border-red-500/40" : remainingSeconds <= 60 ? "border border-amber-500/30" : "border border-white/10"
-                    }`}>
-                      <span className={`w-1.5 h-1.5 rounded-full ${
-                        isDecartActive
-                          ? remainingSeconds <= 30 ? "bg-red-400 animate-pulse" : "bg-emerald-400"
-                          : "bg-amber-400 animate-pulse"
-                      }`} />
-                      <span className={`font-mono text-xs font-bold ${
-                        remainingSeconds <= 30 ? "text-red-400" : remainingSeconds <= 60 ? "text-amber-400" : "text-white"
-                      }`}>
-                        {formatTime(remainingSeconds)}
-                      </span>
-                      {!isDecartActive && startupStatus && (
-                        <span className="text-[9px] text-neutral-400 ml-0.5">waiting</span>
-                      )}
-                    </div>
-                  </div>
-                )}
               </div>
             </div>
 
@@ -1024,7 +1024,7 @@ export default function Dashboard() {
                   )}
                 </div>
               )}
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 gap-2">
                 <div className="text-center p-2 rounded-lg bg-stone-100">
                   <div className="text-[10px] text-stone-500 mb-0.5">AI Status</div>
                   <div className={`text-xs font-semibold ${
@@ -1036,10 +1036,6 @@ export default function Dashboard() {
                 <div className="text-center p-2 rounded-lg bg-stone-100">
                   <div className="text-[10px] text-stone-500 mb-0.5">Elapsed</div>
                   <div className="text-xs font-semibold text-stone-900">{formatTime(streamDuration)}</div>
-                </div>
-                <div className="text-center p-2 rounded-lg bg-stone-100">
-                  <div className="text-[10px] text-stone-500 mb-0.5">Viewers</div>
-                  <div className="text-xs font-semibold text-stone-900">{viewerCount || "—"}</div>
                 </div>
               </div>
               <button
