@@ -5,7 +5,10 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const STUN = { urls: "stun:stun.l.google.com:19302" };
-const EPHEMERAL_CREDENTIAL_TTL_SECONDS = 10 * 60;
+// 1 hour: metered credentials need up to 2 minutes to propagate across their
+// network before they can allocate, so a very short TTL risks handing browsers
+// credentials that are still in their propagation window (observed live).
+const EPHEMERAL_CREDENTIAL_TTL_SECONDS = 60 * 60;
 // Static credentials do not expire; clients still re-fetch hourly so a rotated
 // provider key propagates without a deploy.
 const STATIC_CREDENTIAL_TTL_MS = 60 * 60_000;
