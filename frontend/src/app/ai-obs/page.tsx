@@ -23,6 +23,11 @@ export default function AiObsPage() {
   const [cameraActive, setCameraActive] = useState(false);
   const [micEnabled, setMicEnabled] = useState(false);
   const [micAvailable, setMicAvailable] = useState(false);
+  const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>([]);
+  const [cameraDevice, setCameraDevice] = useState(() => {
+    if (typeof window === "undefined") return "default";
+    return localStorage.getItem("savatar-camera-device") || "default";
+  });
   const [selectedBg, setSelectedBg] = useState("original");
   const [selectedLook, setSelectedLook] = useState("default");
   const [obsUrl, setObsUrl] = useState("");
@@ -78,9 +83,34 @@ export default function AiObsPage() {
 
   useEffect(() => () => { cameraStreamRef.current?.getTracks().forEach((track) => track.stop()); }, []);
 
-  const openCamera = async () => {
+  useEffect(() => {
+    void navigator.mediaDevices.enumerateDevices().then((devices) => {
+      const cameras = devices.filter((device) => device.kind === "videoinput");
+      setAvailableCameras(cameras);
+      setCameraDevice((current) => {
+        const deviceIdsVisible = cameras.some((camera) => Boolean(camera.deviceId));
+        if (!deviceIdsVisible || current === "default" || cameras.some((camera) => camera.deviceId === current)) return current;
+        localStorage.removeItem("savatar-camera-device");
+        return "default";
+      });
+    }).catch(() => undefined);
+  }, []);
+
+  const refreshCameraList = async () => {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const cameras = devices.filter((device) => device.kind === "videoinput");
+    setAvailableCameras(cameras);
+    setCameraDevice((current) => {
+      if (current === "default" || cameras.some((camera) => camera.deviceId === current)) return current;
+      localStorage.removeItem("savatar-camera-device");
+      return "default";
+    });
+  };
+
+  const openCamera = async (targetDevice = cameraDevice) => {
     try {
-      const video = { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30, max: 30 } };
+      const video: MediaTrackConstraints = { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30, max: 30 } };
+      if (targetDevice !== "default") video.deviceId = { exact: targetDevice };
       let stream: MediaStream;
       try {
         stream = await navigator.mediaDevices.getUserMedia({ video, audio: true });
@@ -95,6 +125,7 @@ export default function AiObsPage() {
       setCameraActive(true);
       setMicEnabled(stream.getAudioTracks().some((track) => track.enabled));
       setMicAvailable(stream.getAudioTracks().length > 0);
+      await refreshCameraList();
       setError("");
     } catch {
       setError("Camera access was denied or no camera is available.");
@@ -102,6 +133,13 @@ export default function AiObsPage() {
   };
 
   const startCamera = () => openCamera();
+
+  const changeCameraDevice = (nextDevice: string) => {
+    setCameraDevice(nextDevice);
+    if (nextDevice === "default") localStorage.removeItem("savatar-camera-device");
+    else localStorage.setItem("savatar-camera-device", nextDevice);
+    if (cameraActive) void openCamera(nextDevice);
+  };
 
   const toggleMic = () => {
     const stream = videoRef.current?.srcObject as MediaStream | null;
@@ -235,6 +273,19 @@ export default function AiObsPage() {
                   <button onClick={toggleMic} disabled={!cameraActive || !micAvailable} className="px-3 py-2.5 rounded-lg bg-white border border-stone-300 text-xs text-stone-700 hover:bg-stone-50 disabled:opacity-40">
                     {!cameraActive ? "Microphone" : !micAvailable ? "Mic unavailable" : micEnabled ? "Mute mic" : "Unmute mic"}
                   </button>
+                  <select
+                    value={cameraDevice}
+                    onChange={(event) => changeCameraDevice(event.target.value)}
+                    aria-label="Camera device"
+                    className="col-span-2 min-w-0 rounded-lg border border-stone-300 bg-white px-3 py-2.5 text-xs text-stone-700"
+                  >
+                    <option value="default">Default camera</option>
+                    {availableCameras.filter((camera) => Boolean(camera.deviceId)).map((camera, index) => (
+                      <option key={`${camera.deviceId}-${index}`} value={camera.deviceId}>
+                        {camera.label || `Camera ${index + 1}`}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
 
@@ -360,6 +411,11 @@ export default function AiObsPage() {
               <p className="text-[11px] text-stone-500 mb-3">
                 Add this URL as a Browser Source in OBS (1280×720). Keep this page open to monitor the same transformed stream OBS receives.
               </p>
+              <ol className="mb-3 space-y-1.5 text-[11px] leading-5 text-stone-600">
+                <li><strong className="text-stone-800">1.</strong> Add a Browser Source at 1280×720 and paste this URL.</li>
+                <li><strong className="text-stone-800">2.</strong> Start the AI stream and wait until the transformed video appears. If OBS stays blank, refresh that source.</li>
+                <li><strong className="text-stone-800">3.</strong> Select Start Virtual Camera in OBS, then choose OBS Virtual Camera in your call app.</li>
+              </ol>
               <div className="force-dark p-3 rounded-lg bg-stone-900 border border-stone-700 mb-3">
                 <code className="text-[10px] text-[#f07a55] break-all">{obsUrl}</code>
               </div>

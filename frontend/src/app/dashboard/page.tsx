@@ -56,7 +56,10 @@ export default function Dashboard() {
   const [micAvailable, setMicAvailable] = useState(false);
   const [roomId, setRoomId] = useState("");
   const [viewerCount, setViewerCount] = useState(0);
-  const [cameraDevice, setCameraDevice] = useState("default");
+  const [cameraDevice, setCameraDevice] = useState(() => {
+    if (typeof window === "undefined") return "default";
+    return localStorage.getItem("savatar-camera-device") || "default";
+  });
   // Front/back preference for phones. Ignored whenever a specific device is
   // picked from the camera list; desktops simply resolve it to their webcam.
   const [facingMode, setFacingMode] = useState<"user" | "environment">(() => {
@@ -421,6 +424,8 @@ export default function Dashboard() {
 
   const changeCameraDevice = (nextDevice: string) => {
     setCameraDevice(nextDevice);
+    if (nextDevice === "default") localStorage.removeItem("savatar-camera-device");
+    else localStorage.setItem("savatar-camera-device", nextDevice);
     if (cameraActive && !isStreaming) void openCamera(resolution, nextDevice);
   };
 
@@ -431,6 +436,7 @@ export default function Dashboard() {
     setFacingMode(next);
     try { localStorage.setItem("savatar-facing-mode", next); } catch { /* storage unavailable */ }
     setCameraDevice("default");
+    localStorage.removeItem("savatar-camera-device");
     if (cameraActive) void openCamera(resolution, "default");
   };
 

@@ -39,10 +39,11 @@ export default function TutorialPage() {
 
         <section className="rounded-xl border border-stone-200 bg-white p-5">
           <h2 className="font-semibold text-stone-900">Reference tutorials</h2>
-          <div className="mt-3 grid gap-2 sm:grid-cols-3">
+          <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
             <a href="https://youtu.be/u-gFcEVk9do" target="_blank" rel="noreferrer" className="rounded-lg border border-stone-200 p-3 text-sm text-stone-700 hover:border-[#e84314]">Telegram / call setup ↗</a>
             <a href="https://youtu.be/4RYObe1HKvM" target="_blank" rel="noreferrer" className="rounded-lg border border-stone-200 p-3 text-sm text-stone-700 hover:border-[#e84314]">AI & OBS workflow ↗</a>
             <a href="https://youtu.be/vNxZGYvizzg" target="_blank" rel="noreferrer" className="rounded-lg border border-stone-200 p-3 text-sm text-stone-700 hover:border-[#e84314]">Two-phone workflow ↗</a>
+            <a href="https://youtu.be/c2CKrGt5Hsk" target="_blank" rel="noreferrer" className="rounded-lg border border-stone-200 p-3 text-sm text-stone-700 hover:border-[#e84314]">OBS Virtual Camera ↗</a>
           </div>
         </section>
       </div>
