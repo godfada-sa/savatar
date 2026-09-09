@@ -88,7 +88,7 @@ export async function finalizeSessionInTransaction(
   let usedSeconds: number;
   if (unclaimedProxy) {
     usedSeconds = 0;
-  } else if (session.transport === "fal-realtime") {
+  } else if (session.transport === "fal-realtime" || session.transport === "fal-proxy-v1") {
     usedSeconds = authoritativeFalUsageSeconds(session, asOfMs);
   } else {
     usedSeconds = reserved;
@@ -102,7 +102,9 @@ export async function finalizeSessionInTransaction(
   const updates = {
     status: "completed", usedSeconds, unusedSeconds,
     deadlineHit: deadlineAt !== null && asOfMs >= deadlineAt,
-    reconciliationRequired: !unclaimedProxy && session.transport !== "fal-realtime",
+    reconciliationRequired: !unclaimedProxy
+      && session.transport !== "fal-realtime"
+      && session.transport !== "fal-proxy-v1",
     endedAt: FieldValue.serverTimestamp(),
   };
   transaction.update(sessionRef, { ...updates, providerToken: FieldValue.delete(), ticketHash: FieldValue.delete() });

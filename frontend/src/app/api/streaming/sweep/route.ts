@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
       const current = currentSnapshot.data();
       if (!current || current.status !== "active") return { finalized: 0, refunded: 0 };
       const unclaimed = !current.claimedAt;
-      const expiry = current.transport === "fal-realtime"
+      const expiry = current.transport === "fal-realtime" || current.transport === "fal-proxy-v1"
         ? Math.min(
             current.deadlineAt?.toMillis?.() ?? Infinity,
             (current.tokenExpiresAt?.toMillis?.() ?? Infinity) + 5_000,

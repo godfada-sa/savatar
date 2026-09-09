@@ -70,9 +70,10 @@ export async function POST(req: NextRequest) {
         releaseStreamLockInTransaction(transaction, lockRef, lockSnap.data(), sessionId);
         return { refunded: reservedSeconds, usedSeconds: 0, alreadyProcessed: false, reservedSeconds };
       }
-      // fal media bypasses our backend. Settle from the server-authorized time
-      // window; browser-reported counters are diagnostics and cannot lower a bill.
-      if (session.transport === "fal-realtime") {
+      // Fal usage is bounded by server-issued timestamps. Settle both direct
+      // and relayed Fal sessions here so Stop refunds and releases the global
+      // provider lock atomically instead of depending on a later relay callback.
+      if (session.transport === "fal-realtime" || session.transport === "fal-proxy-v1") {
         const usedSeconds = authoritativeFalUsageSeconds(session, endedAtMs);
         const unusedSeconds = reservedSeconds - usedSeconds;
         const deadlineHit = endedAtMs >= (session.deadlineAt?.toMillis?.() ?? Infinity);
