@@ -33,6 +33,7 @@ export default function AiObsPage() {
   const [obsUrl, setObsUrl] = useState("");
   const resolution = "720p";
   const [bgCategory, setBgCategory] = useState("all");
+  const [backgroundsOpen, setBackgroundsOpen] = useState(false);
   const [referenceImage, setReferenceImage] = useState<string | null>(null);
   const [lookModalOpen, setLookModalOpen] = useState(false);
   const [error, setError] = useState("");
@@ -308,7 +309,7 @@ export default function AiObsPage() {
                     OBS monitor
                   </span>
                 </div>
-                <div className="force-dark relative h-[62svh] min-h-[420px] bg-gradient-to-br from-[#0c1d3b] via-[#08213b] to-[#030811] sm:h-auto sm:aspect-video sm:min-h-[360px] xl:min-h-[440px]">
+                <div className="force-dark relative h-[72svh] min-h-[520px] max-h-[760px] bg-gradient-to-br from-[#0c1d3b] via-[#08213b] to-[#030811] sm:h-auto sm:max-h-none sm:aspect-video sm:min-h-[360px] xl:min-h-[440px]">
                   {obsUrl && <iframe title="AI program output monitor" src={`${obsUrl}?muted=1`} className="absolute inset-0 h-full w-full border-0" allow="autoplay" />}
                 </div>
                 <div className="grid grid-cols-[1fr_auto] gap-2 p-2 border-t border-stone-200">
@@ -330,46 +331,62 @@ export default function AiObsPage() {
 
             {/* Backgrounds */}
             <div className="p-4 rounded-xl bg-white border border-stone-200">
-              <h3 className="text-sm font-semibold text-stone-900 mb-1">Backgrounds</h3>
-              <p className="text-[11px] text-stone-500 mb-3">
-                Choose a scene here, then select Start Stream to launch the AI output.
-              </p>
-              <div className="-mx-1 mb-4 flex gap-2 overflow-x-auto px-1 pb-1 scrollbar-none">
-                {["all", "professional", "luxury", "nature", "creative"].map((cat) => (
-                  <button
-                    key={cat}
-                    onClick={() => setBgCategory(cat)}
-                    className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition ${
-                      bgCategory === cat ? "bg-[#e84314] text-white" : "bg-stone-100 text-stone-500 hover:text-stone-900"
-                    }`}
-                  >
-                    {cat.charAt(0).toUpperCase() + cat.slice(1)}
-                  </button>
-                ))}
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-stone-900">Backgrounds</h3>
+                <button
+                  type="button"
+                  onClick={() => setBackgroundsOpen((current) => !current)}
+                  aria-expanded={backgroundsOpen}
+                  aria-controls="background-options"
+                  className="grid h-8 w-8 place-items-center rounded-lg border border-stone-200 text-stone-500 sm:hidden"
+                >
+                  <svg className={`h-4 w-4 transition-transform ${backgroundsOpen ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                  <span className="sr-only">{backgroundsOpen ? "Hide backgrounds" : "Show backgrounds"}</span>
+                </button>
               </div>
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
-                {filteredBgs.map((bg) => (
-                  <button
-                    key={bg.id}
-                    onClick={() => selectBackground(bg)}
-                    className={`group relative aspect-[4/3] overflow-hidden rounded-xl border text-left transition ${
-                      selectedBg === bg.id
-                        ? "border-[#e84314] ring-2 ring-[#e84314]/30"
-                        : "border-stone-200 bg-white hover:-translate-y-0.5 hover:border-stone-400"
-                    }`}
-                  >
-                    {bg.image ? (
-                      <img src={bg.image} alt={bg.name} loading="lazy" className="h-full w-full object-cover transition duration-300 group-hover:scale-105" />
-                    ) : (
-                      <div className="grid h-full w-full place-items-center bg-stone-200 text-xs text-stone-400">Your camera</div>
-                    )}
-                    <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black via-black/70 to-transparent px-3 pb-2 pt-8">
-                      <span className="block text-[11px] font-medium leading-tight text-white">{bg.name}</span>
-                      <span className="text-[9px] capitalize text-neutral-300">{bg.id === "original" ? "Camera" : bg.category}</span>
-                    </div>
-                    {selectedBg === bg.id && <span className="absolute right-2 top-2 grid h-6 w-6 place-items-center rounded-full bg-[#e84314] text-xs text-white shadow-lg">✓</span>}
-                  </button>
-                ))}
+              <div id="background-options" className={`${backgroundsOpen ? "block" : "hidden"} pt-3 sm:block`}>
+                <p className="mb-3 text-[11px] text-stone-500">
+                  Choose a scene here, then select Start Stream to launch the AI output.
+                </p>
+                <div className="-mx-1 mb-4 flex gap-2 overflow-x-auto px-1 pb-1 scrollbar-none">
+                  {["all", "professional", "luxury", "nature", "creative"].map((cat) => (
+                    <button
+                      key={cat}
+                      onClick={() => setBgCategory(cat)}
+                      className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition ${
+                        bgCategory === cat ? "bg-[#e84314] text-white" : "bg-stone-100 text-stone-500 hover:text-stone-900"
+                      }`}
+                    >
+                      {cat.charAt(0).toUpperCase() + cat.slice(1)}
+                    </button>
+                  ))}
+                </div>
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
+                  {filteredBgs.map((bg) => (
+                    <button
+                      key={bg.id}
+                      onClick={() => selectBackground(bg)}
+                      className={`group relative aspect-[4/3] overflow-hidden rounded-xl border text-left transition ${
+                        selectedBg === bg.id
+                          ? "border-[#e84314] ring-2 ring-[#e84314]/30"
+                          : "border-stone-200 bg-white hover:-translate-y-0.5 hover:border-stone-400"
+                      }`}
+                    >
+                      {bg.image ? (
+                        <img src={bg.image} alt={bg.name} loading="lazy" className="h-full w-full object-cover transition duration-300 group-hover:scale-105" />
+                      ) : (
+                        <div className="grid h-full w-full place-items-center bg-stone-200 text-xs text-stone-400">Your camera</div>
+                      )}
+                      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black via-black/70 to-transparent px-3 pb-2 pt-8">
+                        <span className="block text-[11px] font-medium leading-tight text-white">{bg.name}</span>
+                        <span className="text-[9px] capitalize text-neutral-300">{bg.id === "original" ? "Camera" : bg.category}</span>
+                      </div>
+                      {selectedBg === bg.id && <span className="absolute right-2 top-2 grid h-6 w-6 place-items-center rounded-full bg-[#e84314] text-xs text-white shadow-lg">✓</span>}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
 
@@ -377,18 +394,22 @@ export default function AiObsPage() {
             <div className="p-4 rounded-xl bg-white border border-stone-200">
               <h3 className="text-sm font-semibold text-stone-900 mb-3">Choose your look</h3>
               <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-                <div className="flex gap-2">
+                <div className="flex max-w-full gap-2 overflow-x-auto pb-1 scrollbar-none">
                   {["default", "anime", "cyberpunk", "ghibli"].map((look) => (
                     <button
                       key={look}
                       onClick={() => selectLook(look)}
-                      className={`w-16 h-16 rounded-lg border text-center flex flex-col items-center justify-center gap-1 transition ${
+                      className={`flex h-24 w-20 shrink-0 flex-col items-center justify-center gap-1 overflow-hidden rounded-xl border p-1.5 text-center transition ${
                         selectedLook === look
                           ? "border-[#e84314] bg-[#e84314]/10"
                           : "border-stone-200 bg-stone-50 hover:border-stone-400"
                       }`}
                     >
-                      <span className="text-lg text-stone-900">{look === "default" ? "DF" : look[0].toUpperCase()}</span>
+                      {look === "default" && referenceImage ? (
+                        <img src={referenceImage} alt="Uploaded reference" className="min-h-0 w-full flex-1 rounded-lg object-cover" />
+                      ) : (
+                        <span className="grid min-h-0 w-full flex-1 place-items-center rounded-lg bg-stone-100 text-lg text-stone-900">{look === "default" ? "DF" : look[0].toUpperCase()}</span>
+                      )}
                       <span className="text-[9px] text-stone-500 capitalize">{look}</span>
                     </button>
                   ))}
