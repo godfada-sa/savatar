@@ -2,7 +2,13 @@ import type { NextConfig } from "next";
 
 const signalingOrigin = process.env.NEXT_PUBLIC_SIGNALING_URL || "http://localhost:4000";
 const signalingWebSocketOrigin = signalingOrigin.replace(/^http/, "ws");
-const scriptPolicy = process.env.NODE_ENV === "development" ? "'self' 'unsafe-inline' 'unsafe-eval'" : "'self' 'unsafe-inline'";
+// Firebase signInWithPopup(Google) injects Google's auth scripts into the page;
+// without these origins the popup flow fails with a CSP violation.
+const googleAuthScripts = "https://apis.google.com https://accounts.google.com";
+const scriptPolicy =
+  process.env.NODE_ENV === "development"
+    ? `'self' 'unsafe-inline' 'unsafe-eval' ${googleAuthScripts}`
+    : `'self' 'unsafe-inline' ${googleAuthScripts}`;
 const commonContentSecurityPolicy = [
   "default-src 'self'",
   `script-src ${scriptPolicy}`,
@@ -10,7 +16,7 @@ const commonContentSecurityPolicy = [
   "img-src 'self' data: blob: https://*.googleusercontent.com https://*.googleapis.com",
   "font-src 'self' data:",
   "media-src 'self' blob: data:",
-  `connect-src 'self' ${signalingOrigin} ${signalingWebSocketOrigin} https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://*.fal.ai https://*.fal.run wss://*.fal.run`,
+  `connect-src 'self' ${signalingOrigin} ${signalingWebSocketOrigin} https://*.googleapis.com https://apis.google.com https://*.firebaseio.com wss://*.firebaseio.com https://*.fal.ai https://*.fal.run wss://*.fal.run`,
   "worker-src 'self' blob:",
   "frame-src 'self' https://accounts.google.com https://*.firebaseapp.com",
   "base-uri 'self'",
