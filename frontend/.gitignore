@@ -12,6 +12,7 @@
 
 # testing
 /coverage
+/.deployed-firestore.rules
 
 # next.js
 /.next/

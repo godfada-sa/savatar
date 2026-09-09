@@ -11,7 +11,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "monitor:production": "node scripts/monitor-production.mjs",
+    "test:load": "node scripts/test-signaling-load.mjs",
+    "verify:firestore": "node scripts/verify-firestore-deployment.mjs"
   },
   "overrides": {
     "jose": "4.15.9",

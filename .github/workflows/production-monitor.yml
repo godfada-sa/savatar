@@ -1,0 +1,38 @@
+name: Production monitor
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 7 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-monitor
+  cancel-in-progress: true
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install production dependencies
+        working-directory: frontend
+        run: npm ci --omit=dev
+      - name: Check uptime, billing invariants, and AI usage threshold
+        working-directory: frontend
+        run: node scripts/monitor-production.mjs
+        env:
+          FIREBASE_PROJECT_ID: ${{ secrets.TEST_FIREBASE_PROJECT_ID }}
+          FIREBASE_CLIENT_EMAIL: ${{ secrets.TEST_FIREBASE_CLIENT_EMAIL }}
+          FIREBASE_PRIVATE_KEY: ${{ secrets.TEST_FIREBASE_PRIVATE_KEY }}
+          PRODUCTION_ORIGIN: https://savatar.vercel.app
+          PRODUCTION_SIGNALING_URL: https://savatar-signaling.onrender.com
+          AI_USAGE_ALERT_SECONDS_PER_DAY: "3600"
