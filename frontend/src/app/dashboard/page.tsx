@@ -99,6 +99,7 @@ export default function Dashboard() {
   const appliedReferenceRef = useRef<string | null>(null);
   const appliedPromptRef = useRef("");
   const sessionIdRef = useRef<string | null>(null);
+  const sessionDeadlineRef = useRef<number | null>(null);
   const idTokenRef = useRef<string | null>(null);
   // Tracks whether transformed frames are currently arriving for UI status.
   const isDecartActiveRef = useRef(false);
@@ -171,6 +172,7 @@ export default function Dashboard() {
     setStreamDuration(0);
     setRemainingSeconds(0);
     setReservedSeconds(0);
+    sessionDeadlineRef.current = null;
     setViewerCount(0);
 
     if (!currentSessionId || !currentToken) {
@@ -263,22 +265,29 @@ export default function Dashboard() {
     setReferenceImage(null);
   };
 
-  // The server reserves one bounded provider window, so the visible countdown
-  // follows that same wall clock and auto-stops at the paid deadline.
+  // Follow the server clock instead of decrementing local state, which prevents
+  // background-tab timer throttling from extending a paid session. Stop with a
+  // five-second safety reserve; settlement returns those unused seconds.
   useEffect(() => {
     if (!isStreaming) return;
-    const timer = setInterval(() => {
-      setStreamDuration((d) => d + 1);
-      setRemainingSeconds((r) => {
-        if (r <= 1) {
-          clearInterval(timer);
-          setTimeout(() => stopStream(), 0);
-          return 0;
-        }
-        return r - 1;
-      });
-    }, 1000);
-    return () => clearInterval(timer);
+    let stopping = false;
+    const enforceCutoff = () => {
+      const deadline = sessionDeadlineRef.current;
+      if (!deadline) return;
+      const remaining = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+      setRemainingSeconds(remaining);
+      if (remaining <= 5 && !stopping) {
+        stopping = true;
+        void stopStream();
+      }
+    };
+    enforceCutoff();
+    const cutoffTimer = window.setInterval(enforceCutoff, 250);
+    const durationTimer = window.setInterval(() => setStreamDuration((duration) => duration + 1), 1000);
+    return () => {
+      window.clearInterval(cutoffTimer);
+      window.clearInterval(durationTimer);
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isStreaming]);
 
@@ -534,6 +543,7 @@ export default function Dashboard() {
       setReservedSeconds(sessionSeconds);
       const paidDeadline = Date.parse(tokenResult.deadlineAt ?? "");
       const effectiveDeadline = Number.isFinite(paidDeadline) ? paidDeadline : Date.now() + sessionSeconds * 1000;
+      sessionDeadlineRef.current = effectiveDeadline;
       setRemainingSeconds(Math.max(0, Math.min(sessionSeconds, Math.ceil((effectiveDeadline - Date.now()) / 1000))));
       publishLiveSessionDisplay(user.uid, effectiveDeadline);
       lastTickSecondsRef.current = 0;

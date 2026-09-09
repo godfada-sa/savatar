@@ -5,6 +5,7 @@ const { FieldValue } = require("firebase-admin/firestore");
 const TICKET = /^([0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\.[0-9a-f]{64}$/;
 const STREAM_LOCK_COLLECTION = "_streamLocks";
 const STREAM_LOCK_DOCUMENT = "shared-ai-provider";
+const CREDIT_SAFETY_RESERVE_MS = 5_000;
 
 /**
  * Validate a ticket and mark the session claimed. Reconnects are allowed:
@@ -146,7 +147,10 @@ function attachDecartProxy(server, { allowedOrigins, getDb }) {
         else if (upstream.readyState === WebSocket.OPEN) upstream.close(1000, "Session ended");
         if (client.readyState === WebSocket.OPEN) client.close(1000, "Session ended");
       };
-      const deadline = setTimeout(close, Math.max(0, session.deadlineAt.toMillis() - Date.now()));
+      // Stop upstream before the paid deadline even if the browser timer is
+      // throttled or the client disappears. Settlement refunds this reserve.
+      const deadline = setTimeout(close, Math.max(0,
+        session.deadlineAt.toMillis() - Date.now() - CREDIT_SAFETY_RESERVE_MS));
       const finish = async (code) => {
         if (finished) return;
         finished = true;
