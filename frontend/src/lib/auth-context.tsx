@@ -167,7 +167,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = async () => {
     await signOut(getAuthInstance());
-    for (const key of ["savatar-reference-image", "savatar-ai-prompt", "savatar-stream-key"]) localStorage.removeItem(key);
+    for (const key of ["savatar-reference-image", "savatar-ai-prompt", "savatar-stream-key", "savatar-active-stream-display"]) localStorage.removeItem(key);
     setUserData(null);
   };
 

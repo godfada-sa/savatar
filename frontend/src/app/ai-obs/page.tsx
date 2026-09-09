@@ -44,6 +44,7 @@ export default function AiObsPage() {
     if (typeof window === "undefined") return true;
     return localStorage.getItem("savatar-mirror-preview") !== "off";
   });
+  const [isFrontCamera, setIsFrontCamera] = useState(true);
 
   const backgrounds: Background[] = [
     { id: "original", name: "Original", category: "all" },
@@ -125,6 +126,7 @@ export default function AiObsPage() {
       if (videoRef.current) videoRef.current.srcObject = stream;
       previousStream?.getTracks().forEach((track) => track.stop());
       setCameraActive(true);
+      setIsFrontCamera(stream.getVideoTracks()[0]?.getSettings().facingMode !== "environment");
       setMicEnabled(stream.getAudioTracks().some((track) => track.enabled));
       setMicAvailable(stream.getAudioTracks().length > 0);
       await refreshCameraList();
@@ -248,7 +250,7 @@ export default function AiObsPage() {
                     muted
                     playsInline
                     className="w-full h-full object-cover"
-                    style={{ transform: cameraActive && mirrorPreview ? "scaleX(-1)" : undefined }}
+                    style={{ transform: cameraActive && mirrorPreview && isFrontCamera ? "scaleX(-1)" : undefined }}
                   />
                   {!cameraActive && (
                     <div className="absolute inset-0 flex flex-col items-center justify-center text-neutral-600">
@@ -261,14 +263,15 @@ export default function AiObsPage() {
                   <button
                     type="button"
                     onClick={toggleMirror}
-                    title="Mirror your self-view (viewers always see the unmirrored image)"
-                    className="absolute bottom-2 right-2 px-2 py-0.5 bg-black/60 hover:bg-black/80 rounded text-[10px] text-neutral-300"
+                    disabled={!isFrontCamera}
+                    aria-label={mirrorPreview ? "Turn off mirror preview" : "Turn on mirror preview"}
+                    title={isFrontCamera ? "Mirror preview" : "Back camera preview is not mirrored"}
+                    className="absolute bottom-2 right-2 grid h-8 w-8 place-items-center rounded-lg bg-black/60 text-neutral-300 hover:bg-black/80 disabled:opacity-40"
                   >
-                    {mirrorPreview ? "Mirror: on" : "Mirror: off"}
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d="M8 7l-4 5 4 5m8-10l4 5-4 5M4 12h16M12 5v14" />
+                    </svg>
                   </button>
-                  <div className="absolute bottom-2 left-2 px-2 py-0.5 bg-black/60 rounded text-[10px] text-neutral-300">
-                    Your camera
-                  </div>
                 </div>
                 <div className="grid grid-cols-2 gap-2 p-2 border-t border-stone-200">
                   <button onClick={cameraActive ? stopCamera : startCamera} className="px-3 py-2.5 rounded-lg bg-white border border-stone-300 text-xs text-stone-700 hover:bg-stone-50">{cameraActive ? "Stop camera" : "Camera"}</button>
@@ -318,12 +321,12 @@ export default function AiObsPage() {
                     onClick={() => {
                       if ((userData?.wallet?.balanceSeconds ?? 0) < 60) { router.push("/credits"); return; }
                       stopCamera();
-                      const studio = window.open("/dashboard?start=1", "savatar-studio");
-                      if (!studio) router.push("/dashboard?start=1");
+                      const studio = window.open("/dashboard", "savatar-studio");
+                      if (!studio) router.push("/dashboard");
                     }}
                     className="px-4 py-1.5 rounded-lg text-xs font-medium transition bg-[#e84314] hover:bg-[#c73608] text-white"
                   >
-                    {(userData?.wallet?.balanceSeconds ?? 0) < 60 ? "Buy credits" : "Start Stream"}
+                    {(userData?.wallet?.balanceSeconds ?? 0) < 60 ? "Buy credits" : "Open Studio"}
                   </button>
                   <span className="rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-xs text-stone-600" title="The real-time AI model is optimized for 720p output">720p / 30 FPS</span>
                 </div>

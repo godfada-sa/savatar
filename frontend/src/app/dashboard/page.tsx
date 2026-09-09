@@ -8,6 +8,7 @@ import { getIceServers, signalingUrl } from "@/lib/client-config";
 import { getOrCreateStreamRoomId } from "@/lib/stream-room";
 import { prepareReferenceImage, savePreparedReferenceImage } from "@/lib/reference-image";
 import { FULL_BODY_SWAP_PROMPT, FULL_OUTFIT_SWAP_PROMPT } from "@/lib/ai-prompts";
+import { clearLiveSessionDisplay, publishLiveSessionDisplay } from "@/lib/live-session-display";
 import DashboardLayout from "@/components/DashboardLayout";
 
 type Mode = "character" | "style" | "background" | "vton" | "vfx";
@@ -87,13 +88,14 @@ export default function Dashboard() {
     if (typeof window === "undefined") return true;
     return localStorage.getItem("savatar-mirror-preview") !== "off";
   });
-  // Back cameras are never mirrored — only the user-facing camera is, like on iPhone.
-  const previewMirrored = cameraActive && mirrorPreview && facingMode === "user";
+  const [isFrontCamera, setIsFrontCamera] = useState(true);
+  // Use the active track's reported direction so selecting a specific rear
+  // device can never inherit a stale front-camera mirror setting.
+  const previewMirrored = cameraActive && mirrorPreview && isFrontCamera;
   const [startupStatus, setStartupStatus] = useState("");
   const [lookModalOpen, setLookModalOpen] = useState(false);
   const [referenceImage, setReferenceImage] = useState<string | null>(null);
   const lookInputRef = useRef<HTMLInputElement>(null);
-  const autoStartAttemptedRef = useRef(false);
   const appliedReferenceRef = useRef<string | null>(null);
   const appliedPromptRef = useRef("");
   const sessionIdRef = useRef<string | null>(null);
@@ -143,6 +145,7 @@ export default function Dashboard() {
     isDecartActiveRef.current = false;
     setIsDecartActive(false);
     setIsStreaming(false);
+    clearLiveSessionDisplay();
     setStartupStatus("Stopping AI session");
     const activeClient = clientRef.current;
     clientRef.current = null;
@@ -319,6 +322,7 @@ export default function Dashboard() {
   // Notify server on tab close / navigation so unused credits are refunded.
   useEffect(() => {
     const handleBeforeUnload = () => {
+      clearLiveSessionDisplay();
       const sid = sessionIdRef.current;
       const token = idTokenRef.current;
       if (!sid || !token) return;
@@ -339,6 +343,7 @@ export default function Dashboard() {
     const pendingCandidates = pendingPeerCandidatesRef.current;
     return () => {
       // Notify server to refund unused time on unmount
+      clearLiveSessionDisplay();
       const sid = sessionIdRef.current;
       const token = idTokenRef.current;
       if (sid && token) {
@@ -407,6 +412,7 @@ export default function Dashboard() {
       }
       streamRef.current = stream;
       setCameraActive(true);
+      setIsFrontCamera(stream.getVideoTracks()[0]?.getSettings().facingMode !== "environment");
       setMicEnabled(stream.getAudioTracks().some((track) => track.enabled));
       setMicAvailable(stream.getAudioTracks().length > 0);
       setError("");
@@ -527,9 +533,9 @@ export default function Dashboard() {
       const sessionSeconds = tokenResult.maxSessionDuration ?? 0;
       setReservedSeconds(sessionSeconds);
       const paidDeadline = Date.parse(tokenResult.deadlineAt ?? "");
-      setRemainingSeconds(Number.isFinite(paidDeadline)
-        ? Math.max(0, Math.min(sessionSeconds, Math.ceil((paidDeadline - Date.now()) / 1000)))
-        : sessionSeconds);
+      const effectiveDeadline = Number.isFinite(paidDeadline) ? paidDeadline : Date.now() + sessionSeconds * 1000;
+      setRemainingSeconds(Math.max(0, Math.min(sessionSeconds, Math.ceil((effectiveDeadline - Date.now()) / 1000))));
+      publishLiveSessionDisplay(user.uid, effectiveDeadline);
       lastTickSecondsRef.current = 0;
       lastHeartbeatSentAtRef.current = 0;
 
@@ -790,19 +796,8 @@ export default function Dashboard() {
     }
   }, [activeMode, prompt, referenceImage, resolution, router, sendStreamHeartbeat, stopStream, user, userData?.wallet?.balanceSeconds]);
 
-  useEffect(() => {
-    if (autoStartAttemptedRef.current || !user || !userData) return;
-    if (new URLSearchParams(window.location.search).get("start") !== "1") return;
-    autoStartAttemptedRef.current = true;
-    void (async () => {
-      const stream = await openCamera(resolution, cameraDevice);
-      if (stream) await goLive();
-    })();
-  }, [cameraDevice, goLive, openCamera, resolution, user, userData]);
-
-
   return (
-    <DashboardLayout>
+    <DashboardLayout streamActive={isStreaming}>
       <div className="p-3 sm:p-6 space-y-4">
         {/* Error Banner */}
         {error && (
@@ -895,24 +890,15 @@ export default function Dashboard() {
                 <button
                   type="button"
                   onClick={toggleMirror}
-                  disabled={facingMode === "environment"}
-                  title={facingMode === "environment"
-                    ? "The back camera is never mirrored"
-                    : isDecartActive
-                      ? "Mirrored locally only — viewers always see the unmirrored image"
-                      : "Mirror your self-view (viewers always see the unmirrored image)"}
-                  className="absolute bottom-2 right-2 px-2 py-0.5 bg-black/60 hover:bg-black/80 rounded text-[10px] text-neutral-300 disabled:opacity-50"
+                  disabled={!isFrontCamera}
+                  aria-label={mirrorPreview ? "Turn off mirror preview" : "Turn on mirror preview"}
+                  title={isFrontCamera ? "Mirror preview" : "Back camera preview is not mirrored"}
+                  className="absolute bottom-2 right-2 grid h-8 w-8 place-items-center rounded-lg bg-black/60 text-neutral-300 hover:bg-black/80 disabled:opacity-40"
                 >
-                  {mirrorPreview ? "Mirror: on" : "Mirror: off"}
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d="M8 7l-4 5 4 5m8-10l4 5-4 5M4 12h16M12 5v14" />
+                  </svg>
                 </button>
-                {isDecartActive && previewMirrored && (
-                  <div className="absolute bottom-8 right-2 px-2 py-0.5 rounded text-[10px] font-medium bg-amber-500/90 text-black">
-                    Mirrored locally only
-                  </div>
-                )}
-                <div className="absolute bottom-2 left-2 px-2 py-0.5 bg-black/60 rounded text-[10px] text-neutral-300">
-                  {isDecartActive ? "AI output" : "Your camera"}
-                </div>
               </div>
             </div>
 
@@ -1100,6 +1086,8 @@ export default function Dashboard() {
               </p>
               <a
                 href="/ai-obs"
+                target={isStreaming ? "_blank" : undefined}
+                rel={isStreaming ? "noreferrer" : undefined}
                 className="block px-3 py-2 rounded-lg bg-white border border-stone-300 text-xs text-center text-stone-700 hover:bg-stone-50 transition"
               >
                 Open AI & OBS →

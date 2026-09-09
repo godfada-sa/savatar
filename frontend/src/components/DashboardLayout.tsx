@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
+import { LIVE_SESSION_DISPLAY_EVENT, readLiveSessionRemaining } from "@/lib/live-session-display";
 import ThemeToggle from "@/components/ThemeToggle";
 
 const NAV_ITEMS = [
@@ -82,11 +83,12 @@ const NAV_ITEMS = [
   },
 ];
 
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+export default function DashboardLayout({ children, streamActive = false }: { children: React.ReactNode; streamActive?: boolean }) {
   const { user, userData, loading: authLoading, logout } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [liveRemainingSeconds, setLiveRemainingSeconds] = useState(0);
   useEffect(() => {
     if (!authLoading && !user) {
       router.push("/login");
@@ -99,6 +101,21 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return () => cancelAnimationFrame(frame);
   }, [pathname]);
 
+  useEffect(() => {
+    if (!user) return;
+    const syncLiveBalance = () => setLiveRemainingSeconds(readLiveSessionRemaining(user.uid));
+    const frame = window.requestAnimationFrame(syncLiveBalance);
+    const timer = window.setInterval(syncLiveBalance, 1000);
+    window.addEventListener("storage", syncLiveBalance);
+    window.addEventListener(LIVE_SESSION_DISPLAY_EVENT, syncLiveBalance);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.clearInterval(timer);
+      window.removeEventListener("storage", syncLiveBalance);
+      window.removeEventListener(LIVE_SESSION_DISPLAY_EVENT, syncLiveBalance);
+    };
+  }, [user]);
+
   if (authLoading || !user) {
     return (
       <div className="min-h-screen bg-[#faf9f7] flex items-center justify-center">
@@ -107,7 +124,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     );
   }
 
-  const balanceMinutes = ((userData?.wallet?.balanceSeconds || 0) / 60).toFixed(1);
+  const balanceMinutes = (((userData?.wallet?.balanceSeconds || 0) + liveRemainingSeconds) / 60).toFixed(1);
   const plan = userData?.plan || "Standard";
   const currentSection = NAV_ITEMS.find((item) => item.href === pathname)?.label ?? "";
   const userInitial = (user.email?.[0] || "S").toUpperCase();
@@ -212,10 +229,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto">
             {NAV_ITEMS.map((item) => {
               const isActive = pathname === item.href;
+              const openAlongsideStream = streamActive && item.href === "/ai-obs";
               return (
                 <Link
                   key={item.href}
                   href={item.href}
+                  target={openAlongsideStream ? "_blank" : undefined}
+                  rel={openAlongsideStream ? "noreferrer" : undefined}
                   className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition ${
                     isActive
                       ? "bg-[#e84314]/10 text-[#e84314] font-semibold"
