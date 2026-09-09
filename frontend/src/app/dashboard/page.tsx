@@ -7,6 +7,7 @@ import { useAuth } from "@/lib/auth-context";
 import { getIceServers, signalingUrl } from "@/lib/client-config";
 import { getOrCreateStreamRoomId } from "@/lib/stream-room";
 import { prepareReferenceImage, savePreparedReferenceImage } from "@/lib/reference-image";
+import { FULL_BODY_SWAP_PROMPT, FULL_OUTFIT_SWAP_PROMPT } from "@/lib/ai-prompts";
 import DashboardLayout from "@/components/DashboardLayout";
 
 type Mode = "character" | "style" | "background" | "vton" | "vfx";
@@ -27,14 +28,20 @@ const DEFAULT_PROMPTS: Record<Mode, string> = {
   vfx: "Add subtle cinematic visual effects around the subject while preserving their identity, pose, and motion.",
 };
 
+const LEGACY_FULL_BODY_SWAP_PROMPT = "Replace the visible person's full body, face, hair, clothing, and visible limbs with the character from the reference image. Preserve pose, motion, framing, and background.";
+
 function streamPrompt(mode: Mode, savedPrompt: string, hasReference: boolean) {
-  if (savedPrompt.trim()) return savedPrompt.trim();
   if (hasReference && mode === "vton") {
-    return "Dress the visible person in the complete outfit from the reference image, preserving their face, full-body pose, hands, motion, framing, and background.";
+    return FULL_OUTFIT_SWAP_PROMPT;
   }
   if (hasReference) {
-    return "Replace the visible person's full body, face, hair, clothing, and visible limbs with the character from the reference image. Preserve pose, motion, framing, and background.";
+    const saved = savedPrompt.trim();
+    if (!saved) return FULL_BODY_SWAP_PROMPT;
+    if (saved.includes(FULL_BODY_SWAP_PROMPT)) return saved;
+    const modifiers = saved.replace(LEGACY_FULL_BODY_SWAP_PROMPT, "").trim();
+    return modifiers ? `${FULL_BODY_SWAP_PROMPT} ${modifiers}` : FULL_BODY_SWAP_PROMPT;
   }
+  if (savedPrompt.trim()) return savedPrompt.trim();
   return DEFAULT_PROMPTS[mode];
 }
 

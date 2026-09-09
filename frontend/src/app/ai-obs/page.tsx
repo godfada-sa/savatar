@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { getOrCreateStreamRoomId } from "@/lib/stream-room";
 import { prepareReferenceImage, savePreparedReferenceImage } from "@/lib/reference-image";
+import { FULL_BODY_SWAP_PROMPT } from "@/lib/ai-prompts";
 import DashboardLayout from "@/components/DashboardLayout";
 
 interface Background {
@@ -155,7 +156,7 @@ export default function AiObsPage() {
     const background = backgrounds.find((item) => item.id === backgroundId);
     const instructions: string[] = [];
     if (hasReference) {
-      instructions.push("Replace the visible person's full body, face, hair, clothing, and visible limbs with the character from the reference image while preserving pose, motion, and framing.");
+      instructions.push(FULL_BODY_SWAP_PROMPT);
     }
     if (background && background.id !== "original") {
       instructions.push(`Replace the background with a ${background.name.toLowerCase()} scene while preserving the subject, lighting, and motion.`);
