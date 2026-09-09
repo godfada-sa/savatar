@@ -40,18 +40,24 @@ const db = getFirestore();
 
 const roomId = `stream-${randomUUID()}`;
 let uid;
+let track;
 const sockets = [];
 const peers = [];
-const relay = { urls: ["turn:global.relay.metered.ca:443", "turn:global.relay.metered.ca:443?transport=tcp"], username: "4b39ea31294d6880ead48a45", password: "R8/NwWp2bnXwVPYq" };
+let relay;
 
 try {
   // 1. Live ICE servers from the new route must include metered TURN.
   const iceResponse = await fetch(`${origin}/api/webrtc/ice-servers`, { headers: { "sec-fetch-site": "none" } });
   const ice = await iceResponse.json();
   if (!iceResponse.ok || !Array.isArray(ice.iceServers)) throw new Error(`ice-servers request failed (${iceResponse.status})`);
-  const relayEntries = ice.iceServers.filter((s) => JSON.stringify(s.urls).includes("global.relay.metered.ca"));
-  if (relayEntries.length === 0) throw new Error("ice-servers served no metered TURN entries");
-  PASS("ice-servers serves metered TURN", `${relayEntries.length} relay transports`);
+  const relayEntries = ice.iceServers.filter(
+    (s) => JSON.stringify(s.urls).includes("turn") && (s.username || s.credential || s.password),
+  );
+  if (relayEntries.length === 0) throw new Error("ice-servers served no TURN relay entries");
+  const selectedRelay = relayEntries[0];
+  relay = { urls: selectedRelay.urls, username: selectedRelay.username, password: selectedRelay.credential ?? selectedRelay.password };
+  if (!relay.username || !relay.password) throw new Error("ice-servers returned incomplete TURN credentials");
+  PASS("ice-servers serves TURN relay", `${relayEntries.length} relay transports`);
 
   // 2. Disposable broadcaster (same flow the app uses: custom token -> idToken).
   const user = await auth.createUser({ email: `webrtc-smoke-${Date.now()}@example.com`, emailVerified: true });
@@ -106,13 +112,12 @@ try {
     pc.connectionStateChange.subscribe((state) => console.log(`  [${role}] connectionState=${state}`));
     return pc;
   };
-  const track = new MediaStreamTrack({ kind: "video" });
+  track = new MediaStreamTrack({ kind: "video" });
   const broadcasterPc = makePeer(broadcaster, "broadcaster");
   broadcasterPc.addTrack(track);
   const viewerPc = makePeer(viewer, "viewer");
   let receivedResolve;
-  let receivedReject;
-  const received = new Promise((resolve, reject) => { receivedResolve = resolve; receivedReject = reject; });
+  const received = new Promise((resolve) => { receivedResolve = resolve; });
   // werift's onTrack payload IS the remote MediaStreamTrack (it carries
   // onReceiveRtp directly), unlike the browser's {track} event shape.
   viewerPc.onTrack.subscribe((payload) => {
@@ -143,7 +148,7 @@ try {
   console.log("  [stage] offer relayed to viewer");
   const offerForViewer = await withTimeout(new Promise((resolve) => viewer.once("offer", ({ offer }) => resolve(offer))), 10_000, "offer relay");
   await viewerPc.setRemoteDescription(offerForViewer);
-  const answerSdp = await gatherAndSend(viewerPc, viewer, "viewer", "answer");
+  await gatherAndSend(viewerPc, viewer, "viewer", "answer");
   console.log("  [stage] answer relayed to broadcaster");
   const answerForBroadcaster = await withTimeout(new Promise((resolve) => broadcaster.once("answer", ({ answer }) => resolve(answer))), 10_000, "answer relay");
   await broadcasterPc.setRemoteDescription(answerForBroadcaster);
@@ -160,7 +165,7 @@ try {
 
   // 6. Real media: broadcaster writes RTP, viewer's track must receive it.
   await new Promise((resolve) => setTimeout(resolve, 500));
-  const rtpRace = withTimeout(received, 20_000, "RTP between peers").finally(() => { receivedReject = null; });
+  const rtpRace = withTimeout(received, 20_000, "RTP between peers");
   const ssrc = track.ssrc ?? 1;
   for (let i = 0; i < 30; i += 1) {
     track.writeRtp(new RtpPacket(new RtpHeader({
@@ -262,7 +267,8 @@ try {
 } catch (error) {
   FAIL("viewer webrtc smoke", error.message);
 } finally {
-  for (const pc of peers) pc.close().catch(() => {});
+  await Promise.all(peers.map((pc) => pc.close().catch(() => {})));
+  track?.stop?.();
   for (const socket of sockets) socket.disconnect();
   try {
     if (uid) {
@@ -276,4 +282,6 @@ try {
   } catch (cleanupError) {
     console.error(`Cleanup failed (delete uid ${uid} manually): ${cleanupError.message}`);
   }
+  // Some WebRTC implementations retain internal timers after close.
+  setTimeout(() => process.exit(process.exitCode ?? 0), 50);
 }

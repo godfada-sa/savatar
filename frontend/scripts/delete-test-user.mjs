@@ -1,6 +1,6 @@
 // Delete a test user (auth + firestore docs) by email.
 // Usage: node scripts/delete-test-user.mjs <email>
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 

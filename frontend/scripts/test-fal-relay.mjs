@@ -1,6 +1,5 @@
 import { readFileSync } from "node:fs";
 import { parseEnv } from "node:util";
-import { randomUUID } from "node:crypto";
 import { cert, initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";

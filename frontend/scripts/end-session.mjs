@@ -1,7 +1,7 @@
 // End a stream session for the fal test user (settles fairly via
 // /api/streaming/end) and print the result.
 // Usage: node scripts/end-session.mjs SESSION_ID [baseUrl]
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 

@@ -32,7 +32,6 @@ const FAL_KEY = env.FAL_KEY || process.env.FAL_KEY;
 if (!FAL_KEY) { console.error("FAL_KEY missing"); process.exit(1); }
 
 const ENDPOINT = process.argv[2] || "decart/lucy-2-5/realtime";
-const MODEL = ENDPOINT.split("/").slice(0, 2).join("-").replace(/\./g, "-");
 
 // Exact replica of mintFalRealtimeToken in realtime-token/route.ts.
 async function mintLikeRoute() {

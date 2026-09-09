@@ -76,6 +76,7 @@ export async function createPost(_author: AuthorInfo, content: string): Promise<
 
 /** Toggle the current user's like on a post. Resolves to the new liked state. */
 export async function toggleLike(postId: string, _uid: string): Promise<boolean> {
+  void _uid;
   const user = getAuthInstance().currentUser;
   if (!user) throw new Error("Sign in to continue");
   const token = await user.getIdToken();

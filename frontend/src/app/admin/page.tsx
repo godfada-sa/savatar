@@ -155,7 +155,7 @@ export default function AdminPage() {
 
   useEffect(() => {
     mountedRef.current = true;
-  }, []);
+  }, [mountedRef]);
 
   useEffect(() => {
     if (!authLoading && mountedRef.current) {
@@ -278,7 +278,6 @@ export default function AdminPage() {
     setPromoMsg("");
     setPromoLoading(true);
     try {
-      const db = getDb();
       const code = promoCode.toUpperCase().trim();
       if (!code) {
         setPromoMsg("Enter a promo code");
