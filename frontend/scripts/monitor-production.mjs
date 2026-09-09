@@ -13,7 +13,7 @@ function check(name, ok, detail = "") {
 }
 
 async function getJson(url) {
-  const response = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(30_000) });
+  const response = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(90_000) });
   let body = {};
   try { body = await response.json(); } catch {}
   return { response, body };
