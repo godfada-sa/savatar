@@ -8,7 +8,7 @@ export const runtime = "nodejs";
 export async function POST(req: NextRequest) {
   try {
     assertSameOrigin(req);
-    const user = await requireAuthenticatedUser(req);
+    const user = await requireAuthenticatedUser(req, { requireVerifiedEmail: true });
     const { db } = getAdminServices();
     await enforceRateLimit(db, "streaming-sweep", user.uid, 30, 60_000);
     const snapshot = await db.collection("streamSessions").where("userId", "==", user.uid).where("status", "==", "active").limit(30).get();

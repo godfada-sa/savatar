@@ -14,24 +14,48 @@ export default function LoginPage() {
   const [resetSent, setResetSent] = useState(false);
   const [showReset, setShowReset] = useState(false);
   const [resetEmail, setResetEmail] = useState("");
+  const [unverified, setUnverified] = useState(false);
+  const [verificationSent, setVerificationSent] = useState(false);
+  const [resending, setResending] = useState(false);
 
-  const { login, loginWithGoogle, loginWithApple, resetPassword } = useAuth();
+  const { login, loginWithGoogle, loginWithApple, resetPassword, resendVerification } = useAuth();
   const router = useRouter();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    setUnverified(false);
+    setVerificationSent(false);
     setLoading(true);
     try {
       await login(email, password);
       router.push("/dashboard");
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Login failed";
-      if (msg.includes("user-not-found")) setError("No account found with this email");
+      if (msg.includes("email-not-verified")) {
+        setUnverified(true);
+        setError("Verify your email before signing in.");
+      } else if (msg.includes("user-not-found")) setError("No account found with this email");
       else if (msg.includes("wrong-password") || msg.includes("invalid-credential")) setError("Invalid email or password");
       else setError("Login failed. Try again.");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleResendVerification = async () => {
+    setResending(true);
+    setError("");
+    try {
+      await resendVerification(email, password);
+      setVerificationSent(true);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "";
+      if (msg.includes("email-already-verified")) setError("This email is already verified. Sign in again.");
+      else if (msg.includes("too-many-requests")) setError("Too many requests. Please wait before trying again.");
+      else setError("Could not resend the verification email. Check your password and try again.");
+    } finally {
+      setResending(false);
     }
   };
 
@@ -83,6 +107,17 @@ export default function LoginPage() {
           <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-red-600 text-xs">
             {error}
           </div>
+        )}
+
+        {unverified && (
+          <button
+            type="button"
+            onClick={handleResendVerification}
+            disabled={resending || verificationSent}
+            className="mb-4 w-full rounded-lg border border-[#e84314]/30 bg-orange-50 px-3 py-2.5 text-xs font-medium text-[#c73608] disabled:opacity-60"
+          >
+            {verificationSent ? "Verification email sent" : resending ? "Sending..." : "Resend verification email"}
+          </button>
         )}
 
         {/* OAuth Buttons */}

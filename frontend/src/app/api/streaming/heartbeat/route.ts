@@ -31,7 +31,7 @@ const MAX_REPORTED_SECONDS = 86_400;
 export async function POST(req: NextRequest) {
   try {
     assertSameOrigin(req);
-    const user = await requireAuthenticatedUser(req);
+    const user = await requireAuthenticatedUser(req, { requireVerifiedEmail: true });
     const body = await readJsonObject(req, 2_048);
     const sessionId = typeof body.sessionId === "string" ? body.sessionId : "";
     const phase = body.phase === "generating" ? "generating" : "connected";

@@ -6,7 +6,7 @@ import { assertSameOrigin, errorJson, privateJson, requireAuthenticatedUser } fr
 export async function POST(req: NextRequest) {
   try {
     assertSameOrigin(req);
-    const user = await requireAuthenticatedUser(req);
+    const user = await requireAuthenticatedUser(req, { requireVerifiedEmail: true });
     const { db } = getAdminServices();
     const ref = db.collection("users").doc(user.uid);
     const roomId = await db.runTransaction(async (tx) => {

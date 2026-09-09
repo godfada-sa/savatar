@@ -41,6 +41,7 @@ interface AuthContextType {
   loginWithApple: () => Promise<void>;
   logout: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
+  resendVerification: (email: string, password: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({} as AuthContextType);
@@ -114,7 +115,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = async (email: string, password: string) => {
-    await signInWithEmailAndPassword(getAuthInstance(), email, password);
+    const result = await signInWithEmailAndPassword(getAuthInstance(), email, password);
+    if (!result.user.emailVerified) {
+      await signOut(getAuthInstance());
+      throw new Error("auth/email-not-verified");
+    }
   };
 
   const signup = async (email: string, password: string, name: string) => {
@@ -139,7 +144,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         promoUsed: [],
       });
       });
-      await sendEmailVerification(result.user);
+      try {
+        await sendEmailVerification(result.user, {
+          url: `${window.location.origin}/login?verified=1`,
+          handleCodeInApp: false,
+        });
+      } catch {
+        throw new Error("auth/verification-email-not-sent");
+      } finally {
+        await signOut(getAuthInstance());
+      }
     }
   };
 
@@ -161,6 +175,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await sendPasswordResetEmail(getAuthInstance(), email);
   };
 
+  const resendVerification = async (email: string, password: string) => {
+    const auth = getAuthInstance();
+    const result = await signInWithEmailAndPassword(auth, email, password);
+    try {
+      if (result.user.emailVerified) throw new Error("auth/email-already-verified");
+      await sendEmailVerification(result.user, {
+        url: `${window.location.origin}/login?verified=1`,
+        handleCodeInApp: false,
+      });
+    } finally {
+      await signOut(auth);
+    }
+  };
+
   const value = {
     user,
     userData,
@@ -171,6 +199,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     loginWithApple,
     logout,
     resetPassword,
+    resendVerification,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

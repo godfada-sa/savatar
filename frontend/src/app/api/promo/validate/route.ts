@@ -15,7 +15,7 @@ export const runtime = "nodejs";
 export async function POST(req: NextRequest) {
   try {
     assertSameOrigin(req);
-    const user = await requireAuthenticatedUser(req);
+    const user = await requireAuthenticatedUser(req, { requireVerifiedEmail: true });
     const body = await readJsonObject(req, 2_048);
 
     const promoCode = typeof body.promoCode === "string" ? body.promoCode.toUpperCase().trim() : "";

@@ -12,6 +12,7 @@ export default function SignupPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [verificationSent, setVerificationSent] = useState(false);
 
   const { signup, loginWithGoogle, loginWithApple } = useAuth();
   const router = useRouter();
@@ -22,11 +23,12 @@ export default function SignupPage() {
     setLoading(true);
     try {
       await signup(email, password, name);
-      router.push("/dashboard");
+      setVerificationSent(true);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Signup failed";
       if (msg.includes("email-already-in-use")) setError("An account with this email already exists");
       else if (msg.includes("weak-password")) setError("Use a stronger password with at least 10 characters");
+      else if (msg.includes("verification-email-not-sent")) setError("Your account was created, but the email could not be sent. Sign in and use resend verification.");
       else setError("Signup failed. Try again.");
     } finally {
       setLoading(false);
@@ -104,6 +106,15 @@ export default function SignupPage() {
           <div className="flex-1 h-px bg-stone-300" />
         </div>
 
+        {verificationSent ? (
+          <div className="space-y-4 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-center">
+            <p className="text-sm font-medium text-emerald-800">Check your email</p>
+            <p className="text-xs text-emerald-700">We sent a verification link to {email}. Verify your account before signing in.</p>
+            <Link href="/login" className="inline-block text-sm font-medium text-[#e84314] hover:text-[#c73608]">
+              Go to sign in
+            </Link>
+          </div>
+        ) : (
         <form onSubmit={handleSignup} className="space-y-3">
           <div>
             <label className="block text-xs text-stone-600 mb-1">Name</label>
@@ -148,6 +159,7 @@ export default function SignupPage() {
             {loading ? "Creating account..." : "Create Account"}
           </button>
         </form>
+        )}
 
         <p className="text-center text-xs text-stone-500 mt-6">
           Already have an account?{" "}
