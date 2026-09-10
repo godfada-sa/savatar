@@ -289,26 +289,26 @@ function Pricing() {
               key={plan.name}
               className={`flex min-h-[340px] w-[85%] flex-shrink-0 snap-center flex-col rounded-lg border p-6 sm:w-auto ${
                 plan.featured
-                  ? "pricing-card-featured border-[#2962ff] bg-[#2962ff] text-white shadow-[0_24px_55px_-24px_rgba(41,98,255,0.72)]"
+                  ? "pricing-card-featured border-[#101831] bg-[linear-gradient(135deg,#131a2d,#0a1020)] text-[#faf9f7] shadow-[0_24px_55px_-24px_rgba(41,98,255,0.72)]"
                   : "border-stone-300 bg-white"
               }`}
             >
               <div className="flex min-h-7 items-start justify-between gap-3">
-                <h3 className={`font-display text-base font-bold ${plan.featured ? "pricing-featured-ink text-white" : "text-stone-900"}`}>{plan.name}</h3>
+                <h3 className={`font-display text-base font-bold ${plan.featured ? "pricing-featured-ink text-[#faf9f7]" : "text-stone-900"}`}>{plan.name}</h3>
                 {plan.featured && (
-                  <span className="pricing-popular-badge rounded-full bg-white px-2 py-1 text-[9px] font-bold uppercase tracking-[0.14em] text-[#2962ff]">Most popular</span>
+                  <span className="pricing-popular-badge rounded-full bg-[#faf9f7] px-2 py-1 text-[9px] font-bold uppercase tracking-[0.14em] text-[#0a1020]">Most popular</span>
                 )}
               </div>
-              <p className={`mt-4 text-sm leading-6 ${plan.featured ? "pricing-featured-muted text-blue-100" : "text-stone-600"}`}>{plan.description}</p>
+              <p className={`mt-4 text-sm leading-6 ${plan.featured ? "pricing-featured-muted text-[#c3cedd]" : "text-stone-600"}`}>{plan.description}</p>
               <div className="mt-6">
-                <p className={`font-display text-3xl font-extrabold tracking-[-0.035em] ${plan.featured ? "pricing-featured-ink text-white" : "text-stone-900"}`}>{plan.price}</p>
-                <p className={`mt-1 text-xs font-semibold ${plan.featured ? "pricing-featured-accent text-white" : "text-[#e84314]"}`}>{plan.credits}</p>
-                <p className={`mt-0.5 text-[11px] ${plan.featured ? "pricing-featured-muted text-blue-100" : "text-stone-500"}`}>{plan.duration}</p>
+                <p className={`font-display text-3xl font-extrabold tracking-[-0.035em] ${plan.featured ? "pricing-featured-ink text-[#faf9f7]" : "text-stone-900"}`}>{plan.price}</p>
+                <p className={`mt-1 text-xs font-semibold ${plan.featured ? "pricing-featured-accent text-[#faf9f7]" : "text-[#e84314]"}`}>{plan.credits}</p>
+                <p className={`mt-0.5 text-[11px] ${plan.featured ? "pricing-featured-muted text-[#c3cedd]" : "text-stone-500"}`}>{plan.duration}</p>
               </div>
-              <ul className={`mt-6 space-y-3 text-xs ${plan.featured ? "pricing-featured-muted text-blue-100" : "text-stone-600"}`}>
+              <ul className={`mt-6 space-y-3 text-xs ${plan.featured ? "pricing-featured-muted text-[#c3cedd]" : "text-stone-600"}`}>
                 {plan.features.map((feature) => (
                   <li key={feature} className="flex items-center gap-2.5">
-                    <svg className={`h-3.5 w-3.5 shrink-0 ${plan.featured ? "pricing-featured-accent text-white" : "text-[#e84314]"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <svg className={`h-3.5 w-3.5 shrink-0 ${plan.featured ? "pricing-featured-accent text-[#faf9f7]" : "text-[#e84314]"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="M4.5 12.75l6 6 9-13.5" />
                     </svg>
                     {feature}
@@ -319,7 +319,7 @@ function Pricing() {
                 href="/signup"
                 className={`mt-auto flex items-center justify-center rounded-md px-4 py-3 text-sm font-semibold transition-colors ${
                   plan.featured
-                    ? "pricing-featured-button bg-white text-[#2962ff] hover:bg-blue-50"
+                    ? "pricing-featured-button bg-[#faf9f7] text-[#0a1020] hover:bg-[#f4f1ed]"
                     : "border border-stone-300 bg-white text-stone-800 hover:border-stone-900"
                 }`}
               >

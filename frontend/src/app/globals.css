@@ -158,8 +158,8 @@ html.dark .site-navbar-mobile {
 }
 
 html.dark .pricing-card-featured {
-  background: #f8fafc !important;
-  border-color: #ffffff !important;
+  background: #faf9f7 !important;
+  border-color: #faf9f7 !important;
   color: #0b1220 !important;
   box-shadow:
     0 24px 58px -25px rgba(41, 98, 255, 0.82),
@@ -181,7 +181,7 @@ html.dark .pricing-card-featured .pricing-featured-accent {
 html.dark .pricing-card-featured .pricing-popular-badge,
 html.dark .pricing-card-featured .pricing-featured-button {
   background: #2962ff !important;
-  color: #ffffff !important;
+  color: #faf9f7 !important;
 }
 
 html.dark .pricing-card-featured .pricing-featured-button:hover {

@@ -240,7 +240,7 @@ function CreditsContent() {
                 aria-pressed={selected}
                 className={`flex min-h-[320px] flex-col rounded-lg border p-6 text-left transition ${
                   featured
-                    ? "pricing-card-featured border-[#2962ff] bg-[#2962ff] text-white shadow-[0_24px_55px_-24px_rgba(41,98,255,0.72)]"
+                    ? "pricing-card-featured border-[#101831] bg-[linear-gradient(135deg,#131a2d,#0a1020)] text-[#faf9f7] shadow-[0_24px_55px_-24px_rgba(41,98,255,0.72)]"
                     : "bg-white"
                 } ${
                   selected
@@ -251,31 +251,31 @@ function CreditsContent() {
                 }`}
               >
                 <div className="flex min-h-7 items-start justify-between gap-3">
-                  <h3 className={`font-display text-base font-bold ${featured ? "pricing-featured-ink text-white" : "text-stone-900"}`}>
+                  <h3 className={`font-display text-base font-bold ${featured ? "pricing-featured-ink text-[#faf9f7]" : "text-stone-900"}`}>
                     {pack.name}
                   </h3>
                   {featured && (
-                    <span className="pricing-popular-badge rounded-full bg-white px-2 py-1 text-[9px] font-bold uppercase tracking-[0.14em] text-[#2962ff]">
+                    <span className="pricing-popular-badge rounded-full bg-[#faf9f7] px-2 py-1 text-[9px] font-bold uppercase tracking-[0.14em] text-[#0a1020]">
                       Most popular
                     </span>
                   )}
                 </div>
                 <div className="mt-6">
-                  <p className={`font-display text-3xl font-extrabold tracking-[-0.035em] ${featured ? "pricing-featured-ink text-white" : "text-stone-900"}`}>
+                  <p className={`font-display text-3xl font-extrabold tracking-[-0.035em] ${featured ? "pricing-featured-ink text-[#faf9f7]" : "text-stone-900"}`}>
                     GH {pack.priceGHS.toLocaleString()}
                   </p>
-                  <p className={`mt-1 text-xs font-semibold ${featured ? "pricing-featured-accent text-white" : "text-[#e84314]"}`}>
+                  <p className={`mt-1 text-xs font-semibold ${featured ? "pricing-featured-accent text-[#faf9f7]" : "text-[#e84314]"}`}>
                     {pack.credits.toLocaleString()} credits
                   </p>
-                  <p className={`mt-0.5 text-[11px] ${featured ? "pricing-featured-muted text-blue-100" : "text-stone-500"}`}>
+                  <p className={`mt-0.5 text-[11px] ${featured ? "pricing-featured-muted text-[#c3cedd]" : "text-stone-500"}`}>
                     {pack.timeLabel} AI streaming
                   </p>
                 </div>
-                <ul className={`mt-6 flex-1 space-y-3 text-xs ${featured ? "pricing-featured-muted text-blue-100" : "text-stone-600"}`}>
+                <ul className={`mt-6 flex-1 space-y-3 text-xs ${featured ? "pricing-featured-muted text-[#c3cedd]" : "text-stone-600"}`}>
                   {["Instant wallet top-up", "Use on Studio & OBS", "Pay by mobile money or card"].map((feature) => (
                     <li key={feature} className="flex items-center gap-2.5">
                       <svg
-                        className={`h-3.5 w-3.5 shrink-0 ${featured ? "pricing-featured-accent text-white" : "text-[#e84314]"}`}
+                        className={`h-3.5 w-3.5 shrink-0 ${featured ? "pricing-featured-accent text-[#faf9f7]" : "text-[#e84314]"}`}
                         fill="none"
                         stroke="currentColor"
                         viewBox="0 0 24 24"
@@ -295,7 +295,7 @@ function CreditsContent() {
                   }}
                   className={`mt-6 flex cursor-pointer items-center justify-center rounded-md px-4 py-3 text-sm font-semibold transition ${
                     featured
-                      ? "pricing-featured-button bg-white text-[#2962ff] hover:bg-blue-50"
+                      ? "pricing-featured-button bg-[#faf9f7] text-[#0a1020] hover:bg-[#f4f1ed]"
                       : selected
                         ? "bg-[#e84314] text-white"
                         : "border border-stone-300 bg-white text-stone-800 hover:border-stone-900"
