@@ -289,26 +289,26 @@ function Pricing() {
               key={plan.name}
               className={`flex min-h-[340px] w-[85%] flex-shrink-0 snap-center flex-col rounded-lg border p-6 sm:w-auto ${
                 plan.featured
-                  ? "border-stone-900 bg-stone-900 text-white shadow-[0_24px_50px_-24px_rgba(28,25,23,0.5)]"
+                  ? "pricing-card-featured border-[#2962ff] bg-[#2962ff] text-white shadow-[0_24px_55px_-24px_rgba(41,98,255,0.72)]"
                   : "border-stone-300 bg-white"
               }`}
             >
               <div className="flex min-h-7 items-start justify-between gap-3">
-                <h3 className={`font-display text-base font-bold ${plan.featured ? "text-white" : "text-stone-900"}`}>{plan.name}</h3>
+                <h3 className={`font-display text-base font-bold ${plan.featured ? "pricing-featured-ink text-white" : "text-stone-900"}`}>{plan.name}</h3>
                 {plan.featured && (
-                  <span className="rounded-full bg-[#e84314] px-2 py-1 text-[9px] font-bold uppercase tracking-[0.14em] text-white">Most popular</span>
+                  <span className="pricing-popular-badge rounded-full bg-white px-2 py-1 text-[9px] font-bold uppercase tracking-[0.14em] text-[#2962ff]">Most popular</span>
                 )}
               </div>
-              <p className={`mt-4 text-sm leading-6 ${plan.featured ? "text-stone-400" : "text-stone-600"}`}>{plan.description}</p>
+              <p className={`mt-4 text-sm leading-6 ${plan.featured ? "pricing-featured-muted text-blue-100" : "text-stone-600"}`}>{plan.description}</p>
               <div className="mt-6">
-                <p className={`font-display text-3xl font-extrabold tracking-[-0.035em] ${plan.featured ? "text-white" : "text-stone-900"}`}>{plan.price}</p>
-                <p className={`mt-1 text-xs font-semibold ${plan.featured ? "text-[#f07a55]" : "text-[#e84314]"}`}>{plan.credits}</p>
-                <p className={`mt-0.5 text-[11px] ${plan.featured ? "text-stone-400" : "text-stone-500"}`}>{plan.duration}</p>
+                <p className={`font-display text-3xl font-extrabold tracking-[-0.035em] ${plan.featured ? "pricing-featured-ink text-white" : "text-stone-900"}`}>{plan.price}</p>
+                <p className={`mt-1 text-xs font-semibold ${plan.featured ? "pricing-featured-accent text-white" : "text-[#e84314]"}`}>{plan.credits}</p>
+                <p className={`mt-0.5 text-[11px] ${plan.featured ? "pricing-featured-muted text-blue-100" : "text-stone-500"}`}>{plan.duration}</p>
               </div>
-              <ul className={`mt-6 space-y-3 text-xs ${plan.featured ? "text-stone-300" : "text-stone-600"}`}>
+              <ul className={`mt-6 space-y-3 text-xs ${plan.featured ? "pricing-featured-muted text-blue-100" : "text-stone-600"}`}>
                 {plan.features.map((feature) => (
                   <li key={feature} className="flex items-center gap-2.5">
-                    <svg className={`h-3.5 w-3.5 shrink-0 ${plan.featured ? "text-[#f07a55]" : "text-[#e84314]"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <svg className={`h-3.5 w-3.5 shrink-0 ${plan.featured ? "pricing-featured-accent text-white" : "text-[#e84314]"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="M4.5 12.75l6 6 9-13.5" />
                     </svg>
                     {feature}
@@ -319,7 +319,7 @@ function Pricing() {
                 href="/signup"
                 className={`mt-auto flex items-center justify-center rounded-md px-4 py-3 text-sm font-semibold transition-colors ${
                   plan.featured
-                    ? "bg-[#e84314] text-white hover:bg-[#c73608]"
+                    ? "pricing-featured-button bg-white text-[#2962ff] hover:bg-blue-50"
                     : "border border-stone-300 bg-white text-stone-800 hover:border-stone-900"
                 }`}
               >
@@ -385,7 +385,7 @@ export default function Home() {
     const prevBody = body.style.background;
     const apply = () => {
       const dark = document.documentElement.classList.contains("dark");
-      const color = dark ? "#0d0c0a" : "#faf9f7";
+      const color = dark ? "#05070a" : "#faf9f7";
       html.style.background = color;
       body.style.background = color;
     };

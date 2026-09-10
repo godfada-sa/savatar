@@ -22,12 +22,9 @@ interface SiteNavbarProps {
 }
 
 /**
- * Shared responsive header for the public (light-paper) pages: landing, terms,
- * privacy. `sticky` rather than `fixed` on purpose — dark mode is a CSS filter
- * inversion on `.app-root`, and Safari composites `position: fixed` + backdrop
- * blur outside that filtered subtree (leaving a white, un-inverted header in
- * dark mode). A sticky nav stays inside the scroll container and inverts like
- * the rest of the page.
+ * Shared responsive header for the public pages: landing, terms, and privacy.
+ * Semantic classes let the explicit light/dark palettes style translucent
+ * navigation consistently without changing its responsive behavior.
  */
 export default function SiteNavbar({ links = [], splashHandoff = false }: SiteNavbarProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -53,7 +50,7 @@ export default function SiteNavbar({ links = [], splashHandoff = false }: SiteNa
   }, [splashHandoff]);
 
   return (
-    <nav className="sticky top-0 z-50 border-b border-stone-200 bg-[#faf9f7]/90 backdrop-blur-xl">
+    <nav className="site-navbar sticky top-0 z-50 border-b border-stone-200 bg-[#faf9f7]/90 backdrop-blur-xl">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5 sm:px-6">
         <Link href="/" className="flex items-center gap-2.5" aria-label="Savatar home">
           {splashHandoff && (
@@ -118,7 +115,7 @@ export default function SiteNavbar({ links = [], splashHandoff = false }: SiteNa
       </div>
 
       {mobileOpen && (
-        <div className="border-t border-stone-200 bg-[#faf9f7] px-5 py-5 md:hidden">
+        <div className="site-navbar-mobile border-t border-stone-200 bg-[#faf9f7] px-5 py-5 md:hidden">
           <div className="flex flex-col gap-4 text-sm font-medium text-stone-700">
             {links.map((link) =>
               link.href.startsWith("#") ? (
