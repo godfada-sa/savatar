@@ -224,13 +224,13 @@ function CreditsContent() {
         </div>
 
         {/* Credit Packs — same editorial cards as the landing pricing section.
-            The selected pack takes the landing's "featured" treatment (dark
-            stone card, coral accents, solid coral action). */}
+            The featured Basic pack takes the landing's navy-glow treatment,
+            which flips to a light card in dark mode like the landing page. */}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 mb-6 2xl:grid-cols-5">
           {CREDIT_PACKS.map((pack) => {
-            // Basic is permanently the featured (dark) card — like the landing
-            // page. Selection is shown with a coral ring instead of moving the
-            // dark color around.
+            // Basic is permanently the featured (navy glow) card — like the
+            // landing page. Selection is shown with a coral ring instead of
+            // moving the navy color around.
             const featured = pack.id === "basic";
             const selected = selectedPack === pack.id;
             return (
@@ -239,41 +239,43 @@ function CreditsContent() {
                 onClick={() => selectPack(pack.id)}
                 aria-pressed={selected}
                 className={`flex min-h-[320px] flex-col rounded-lg border p-6 text-left transition ${
-                  featured ? "bg-stone-900 text-white shadow-[0_24px_50px_-24px_rgba(28,25,23,0.5)]" : "bg-white"
+                  featured
+                    ? "pricing-card-featured border-[#2962ff] bg-[#2962ff] text-white shadow-[0_24px_55px_-24px_rgba(41,98,255,0.72)]"
+                    : "bg-white"
                 } ${
                   selected
                     ? "border-[#e84314] ring-1 ring-[#e84314]"
                     : featured
-                      ? "border-stone-900"
+                      ? "border-[#2962ff]"
                       : "border-stone-300 hover:border-stone-400"
                 }`}
               >
                 <div className="flex min-h-7 items-start justify-between gap-3">
-                  <h3 className={`font-display text-base font-bold ${featured ? "text-white" : "text-stone-900"}`}>
+                  <h3 className={`font-display text-base font-bold ${featured ? "pricing-featured-ink text-white" : "text-stone-900"}`}>
                     {pack.name}
                   </h3>
                   {featured && (
-                    <span className="rounded-full bg-[#e84314] px-2 py-1 text-[9px] font-bold uppercase tracking-[0.14em] text-white">
+                    <span className="pricing-popular-badge rounded-full bg-white px-2 py-1 text-[9px] font-bold uppercase tracking-[0.14em] text-[#2962ff]">
                       Most popular
                     </span>
                   )}
                 </div>
                 <div className="mt-6">
-                  <p className={`font-display text-3xl font-extrabold tracking-[-0.035em] ${featured ? "text-white" : "text-stone-900"}`}>
+                  <p className={`font-display text-3xl font-extrabold tracking-[-0.035em] ${featured ? "pricing-featured-ink text-white" : "text-stone-900"}`}>
                     GH {pack.priceGHS.toLocaleString()}
                   </p>
-                  <p className={`mt-1 text-xs font-semibold ${featured ? "text-[#f07a55]" : "text-[#e84314]"}`}>
+                  <p className={`mt-1 text-xs font-semibold ${featured ? "pricing-featured-accent text-white" : "text-[#e84314]"}`}>
                     {pack.credits.toLocaleString()} credits
                   </p>
-                  <p className={`mt-0.5 text-[11px] ${featured ? "text-stone-400" : "text-stone-500"}`}>
+                  <p className={`mt-0.5 text-[11px] ${featured ? "pricing-featured-muted text-blue-100" : "text-stone-500"}`}>
                     {pack.timeLabel} AI streaming
                   </p>
                 </div>
-                <ul className={`mt-6 flex-1 space-y-3 text-xs ${featured ? "text-stone-300" : "text-stone-600"}`}>
+                <ul className={`mt-6 flex-1 space-y-3 text-xs ${featured ? "pricing-featured-muted text-blue-100" : "text-stone-600"}`}>
                   {["Instant wallet top-up", "Use on Studio & OBS", "Pay by mobile money or card"].map((feature) => (
                     <li key={feature} className="flex items-center gap-2.5">
                       <svg
-                        className={`h-3.5 w-3.5 shrink-0 ${featured ? "text-[#f07a55]" : "text-[#e84314]"}`}
+                        className={`h-3.5 w-3.5 shrink-0 ${featured ? "pricing-featured-accent text-white" : "text-[#e84314]"}`}
                         fill="none"
                         stroke="currentColor"
                         viewBox="0 0 24 24"
@@ -292,9 +294,11 @@ function CreditsContent() {
                     handleGet(pack.id);
                   }}
                   className={`mt-6 flex cursor-pointer items-center justify-center rounded-md px-4 py-3 text-sm font-semibold transition ${
-                    featured || selected
-                      ? "bg-[#e84314] text-white"
-                      : "border border-stone-300 bg-white text-stone-800 hover:border-stone-900"
+                    featured
+                      ? "pricing-featured-button bg-white text-[#2962ff] hover:bg-blue-50"
+                      : selected
+                        ? "bg-[#e84314] text-white"
+                        : "border border-stone-300 bg-white text-stone-800 hover:border-stone-900"
                   }`}
                 >
                   Get {pack.name}
