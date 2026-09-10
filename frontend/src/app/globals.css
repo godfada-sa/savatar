@@ -84,11 +84,9 @@ select option {
   display: none;
 }
 
-/* ── Dark mode (smart inversion theme) ──────────────────────────
-   The app uses hardcoded light colors, so dark mode inverts the whole
-   canvas. `.app-root` is a fixed, full-viewport scroll container: applying
-   the filter there keeps position:fixed children (navbars, modals, menus)
-   anchored to the viewport instead of the tall document. */
+/* ── Dark mode ───────────────────────────────────────────────────
+   A cool broadcast-studio palette inspired by Virofy's navy surfaces.
+   These mappings are scoped to html.dark, leaving the light theme intact. */
 .app-root {
   position: fixed;
   inset: 0;
@@ -98,43 +96,119 @@ select option {
 
 html.dark {
   color-scheme: dark;
-  background: #0d0c0a;
+  --background: #05070a;
+  --foreground: #eef2f8;
+  --surface: #131a22;
+  --surface-hover: #182230;
+  --border: rgba(255, 255, 255, 0.09);
+  --text-muted: #9aa7b8;
+  background: #05070a;
 }
 
 html.dark body {
-  background: #0d0c0a;
+  background: #05070a;
+  color: #eef2f8;
 }
 
 html.dark .app-root {
-  filter: invert(1) hue-rotate(180deg);
+  background:
+    radial-gradient(70% 55% at 92% 0%, rgba(41, 98, 255, 0.10), transparent 68%),
+    #05070a;
 }
 
-/* Media and inherently-dark surfaces are inverted a second time so they
-   keep their true colors inside the dark theme. */
-html.dark .app-root :is(img, video, iframe, canvas) {
-  filter: invert(1) hue-rotate(180deg);
+html.dark :is(.bg-white, .bg-stone-50) {
+  background-color: #131a22 !important;
 }
 
-/* Video stages and full-screen player pages are deliberately dark in both
-   themes; the splash follows the theme but lives inside the inverted tree,
-   so it also needs the un-inversion to show its own colors. */
-html.dark .force-dark {
-  filter: invert(1) hue-rotate(180deg);
+html.dark :is(.bg-stone-100, .bg-stone-200) {
+  background-color: #182230 !important;
 }
 
-html.dark .force-dark :is(img, video, iframe, canvas) {
-  filter: none;
+html.dark :is(.bg-\[\#faf9f7\], .bg-\[\#f4f1ed\]) {
+  background-color: #05070a !important;
+}
+
+html.dark .bg-\[\#1c1917\] {
+  background-color: #0d1117 !important;
+}
+
+html.dark :is(.border-stone-100, .border-stone-200) {
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+html.dark :is(.border-stone-300, .border-stone-400) {
+  border-color: rgba(156, 141, 255, 0.24) !important;
+}
+
+html.dark :is(.text-stone-900, .text-stone-800) {
+  color: #eef2f8 !important;
+}
+
+html.dark :is(.text-stone-700, .text-stone-600) {
+  color: #c3cedd !important;
+}
+
+html.dark .text-stone-500 {
+  color: #9aa7b8 !important;
+}
+
+html.dark .text-stone-400 {
+  color: #7f8da3 !important;
+}
+
+html.dark :is(.bg-red-50, .bg-red-100) {
+  background-color: rgba(239, 68, 68, 0.11) !important;
+}
+
+html.dark :is(.bg-emerald-50, .bg-emerald-100) {
+  background-color: rgba(34, 197, 94, 0.10) !important;
+}
+
+html.dark :is(.bg-amber-50, .bg-orange-50) {
+  background-color: rgba(245, 158, 11, 0.10) !important;
+}
+
+html.dark :is(.border-red-200, .border-red-300) {
+  border-color: rgba(248, 113, 113, 0.32) !important;
+}
+
+html.dark .border-emerald-200 {
+  border-color: rgba(74, 222, 128, 0.28) !important;
+}
+
+html.dark .border-amber-200 {
+  border-color: rgba(251, 191, 36, 0.28) !important;
+}
+
+html.dark [class~="hover:bg-stone-50"]:hover,
+html.dark [class~="hover:bg-stone-100"]:hover,
+html.dark [class~="hover:bg-stone-200"]:hover {
+  background-color: #1d2938 !important;
+}
+
+html.dark :is(input, textarea, select) {
+  background-color: #0d1117;
+  border-color: rgba(156, 141, 255, 0.24);
+  color: #eef2f8;
+}
+
+html.dark :is(input, textarea)::placeholder {
+  color: #64718a;
+}
+
+html.dark :focus-visible {
+  outline-color: #9c8dff;
 }
 
 html.dark select option {
-  background: #1c1a17;
-  color: #f5f2ef;
+  background: #131a22;
+  color: #eef2f8;
 }
 
 html.dark ::-webkit-scrollbar-track {
-  background: #0d0c0a;
+  background: #05070a;
 }
 
 html.dark ::-webkit-scrollbar-thumb {
-  background: #3a3531;
+  background: #344258;
 }
