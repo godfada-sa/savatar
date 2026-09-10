@@ -8,7 +8,7 @@ import { usePathname } from "next/navigation";
  * the coral logo mark draws itself in (exactly matching the navbar logo),
  * the wordmark staggers in, a hairline bar fills, then the logo flies to
  * the navbar position and the splash fades. Theme-aware: paper in light
- * mode, deep ink in dark mode. No glow blobs, particles, or other
+ * mode, deep navy in dark mode. No glow blobs, particles, or other
  * AI-template flourishes.
  *
  * Drop <LoadingScreen /> into layout.tsx and it handles everything.
@@ -212,8 +212,8 @@ export default function LoadingScreen({ introSeen = false }: { introSeen?: boole
       <style>{`
         html.splash-active { background: #faf9f7 !important; }
         html.splash-active body { background: #faf9f7 !important; }
-        html.dark.splash-active { background: #0d0c0a !important; }
-        html.dark.splash-active body { background: #0d0c0a !important; }
+        html.dark.splash-active { background: #081020 !important; }
+        html.dark.splash-active body { background: #081020 !important; }
 
         #splash {
           --splash-bg: #faf9f7;
@@ -226,9 +226,9 @@ export default function LoadingScreen({ introSeen = false }: { introSeen?: boole
           z-index: 9999;
         }
         html.dark #splash {
-          --splash-bg: #0d0c0a;
-          --splash-ink: #f7f2ea;
-          --splash-track: #262220;
+          --splash-bg: #081020;
+          --splash-ink: #eef2f8;
+          --splash-track: #182230;
         }
 
         .logo-cluster {
