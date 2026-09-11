@@ -328,7 +328,8 @@ export default function Dashboard() {
     return () => clearInterval(timer);
   }, [isStreaming, sendStreamHeartbeat]);
 
-  // Notify server on tab close / navigation so unused credits are refunded.
+  // Notify server on tab close / navigation so the relay tears down the
+  // provider immediately and refunds all unused reservation time.
   useEffect(() => {
     const handleBeforeUnload = () => {
       clearLiveSessionDisplay();
@@ -344,7 +345,11 @@ export default function Dashboard() {
       }).catch(() => {});
     };
     window.addEventListener("beforeunload", handleBeforeUnload);
-    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+    window.addEventListener("pagehide", handleBeforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      window.removeEventListener("pagehide", handleBeforeUnload);
+    };
   }, []);
 
   useEffect(() => {

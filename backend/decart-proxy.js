@@ -29,8 +29,8 @@ const UPSTREAM_CLOSE_GRACE_MS = 1_000;
 // arrives and the provider session keeps running and billing until the paid
 // deadline — minutes of AI time nobody used. Ping the browser and end the
 // session once it stops answering; the browser replies to pings on its own.
-const CLIENT_PING_INTERVAL_MS = 15_000;
-const CLIENT_LIVENESS_TIMEOUT_MS = 45_000;
+const CLIENT_PING_INTERVAL_MS = 5_000;
+const CLIENT_LIVENESS_TIMEOUT_MS = 15_000;
 // fal reports the rejection a fraction of a second after the messages it sends
 // on a socket it accepted, so the acceptance window is idle-based: it restarts
 // on every upstream message and only flushes once fal has gone quiet. The
@@ -97,7 +97,15 @@ async function settleSession(db, ref, usedSeconds, reconciliationRequired = fals
     const lockRef = db.collection(STREAM_LOCK_COLLECTION).doc(lockDocument);
     const lockSnapshot = await tx.get(lockRef);
     const accumulated = Math.max(0, Math.floor(Number(data.accumulatedSeconds ?? 0)));
-    const used = Math.max(0, Math.min(data.reservedSeconds, accumulated + Math.ceil(usedSeconds)));
+    // Fal's media travels directly between the browser and provider. Do not
+    // charge for a reserved token or an empty negotiated track: generation is
+    // billable only after the frame-confirmed client heartbeat is recorded.
+    const generatedAt = data.generationStartedAt?.toMillis?.() ?? data.generationStartedAt?.getTime?.();
+    const measuredFalSeconds = Number.isFinite(generatedAt)
+      ? Math.max(0, Math.ceil((Date.now() - generatedAt) / 1000))
+      : 0;
+    const providerSeconds = data.transport === "fal-proxy-v1" ? measuredFalSeconds : usedSeconds;
+    const used = Math.max(0, Math.min(data.reservedSeconds, accumulated + Math.ceil(providerSeconds)));
     if (!Number.isSafeInteger(used)) throw new Error("Invalid provider usage");
     const unused = data.reservedSeconds - used;
     tx.update(db.collection("users").doc(data.userId), {

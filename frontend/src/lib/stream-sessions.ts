@@ -33,9 +33,9 @@ function timestampMillis(value: unknown): number | null {
 }
 
 /**
- * fal media bypasses our server, so browser-reported counters can never be
- * trusted for billing. Charge the server-authorized wall-clock window instead,
- * capped by both the current short-lived provider token and the reservation.
+ * Bill Fal only after the browser has confirmed decoded AI frames. Reserving a
+ * token or negotiating a track is not useful output and must be fully refunded
+ * when the user stops or the browser disappears before generation begins.
  */
 export function authoritativeFalUsageSeconds(
   session: Record<string, unknown>,
@@ -44,9 +44,8 @@ export function authoritativeFalUsageSeconds(
   const reserved = Math.floor(Number(session.reservedSeconds ?? 0));
   if (!Number.isSafeInteger(reserved) || reserved <= 0) return 0;
 
-  const startedAt = timestampMillis(session.providerAuthorizedAt)
-    ?? timestampMillis(session.activatedAt);
-  if (startedAt === null) return reserved;
+  const startedAt = timestampMillis(session.generationStartedAt);
+  if (startedAt === null) return 0;
 
   const deadlineAt = timestampMillis(session.deadlineAt) ?? (startedAt + reserved * 1000);
   const tokenExpiresAt = timestampMillis(session.tokenExpiresAt) ?? deadlineAt;

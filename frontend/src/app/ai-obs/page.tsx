@@ -319,14 +319,15 @@ export default function AiObsPage() {
                 <div className="grid grid-cols-[1fr_auto] gap-2 p-2 border-t border-stone-200">
                   <button
                     onClick={() => {
-                      if ((userData?.wallet?.balanceSeconds ?? 0) < 60) { router.push("/credits"); return; }
+                      if (!userData || (userData.wallet?.balanceSeconds ?? 0) < 60) { router.push("/credits"); return; }
                       stopCamera();
                       const studio = window.open("/dashboard", "savatar-studio");
                       if (!studio) router.push("/dashboard");
                     }}
+                    disabled={!userData}
                     className="px-4 py-1.5 rounded-lg text-xs font-medium transition bg-[#e84314] hover:bg-[#c73608] text-white"
                   >
-                    {(userData?.wallet?.balanceSeconds ?? 0) < 60 ? "Buy credits" : "Open Studio"}
+                    {!userData ? "Loading credits…" : (userData.wallet?.balanceSeconds ?? 0) < 60 ? "Buy credits" : "Open Studio"}
                   </button>
                   <span className="rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-xs text-stone-600" title="The real-time AI model is optimized for 720p output">720p / 30 FPS</span>
                 </div>
