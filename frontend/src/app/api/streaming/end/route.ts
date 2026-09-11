@@ -6,6 +6,7 @@ import {
   errorJson,
   privateJson,
   readJsonObject,
+  refundRateLimit,
   requireAuthenticatedUser,
   RequestError,
 } from "@/lib/server-security";
@@ -46,17 +47,27 @@ export async function POST(req: NextRequest) {
       if (session.userId !== user.uid) throw new RequestError(403, "Not your session");
       if (session.status !== "active") {
         releaseStreamLockInTransaction(transaction, lockRef, lockSnap.data(), sessionId);
+        const settledUsedSeconds = Math.floor(Number(session.usedSeconds ?? 0));
+        // Zero billable seconds means no AI output was ever produced — the
+        // provider rejected the session, which is not abuse. Hand the
+        // authorization attempt back; the marker makes this once-only so a
+        // repeated (idempotent) end cannot refund the same attempt twice.
+        const refundRateLimitAttempt = settledUsedSeconds === 0 && !session.rateLimitRefundedAt;
+        if (refundRateLimitAttempt) {
+          transaction.update(sessionRef, { rateLimitRefundedAt: FieldValue.serverTimestamp() });
+        }
         return {
           refunded: 0,
           alreadyProcessed: true,
-          usedSeconds: Math.floor(Number(session.usedSeconds ?? 0)),
+          refundRateLimitAttempt,
+          usedSeconds: settledUsedSeconds,
           reservedSeconds: Math.floor(Number(session.reservedSeconds ?? 0)),
         };
       }
 
       const reservedSeconds = Math.floor(Number(session.reservedSeconds ?? 0));
       if (!Number.isSafeInteger(reservedSeconds) || reservedSeconds <= 0) {
-        return { refunded: 0, alreadyProcessed: false };
+        return { refunded: 0, alreadyProcessed: false, refundRateLimitAttempt: false };
       }
 
       if (session.transport !== "fal-realtime" && !session.claimedAt) {
@@ -64,11 +75,19 @@ export async function POST(req: NextRequest) {
           "wallet.balanceSeconds": FieldValue.increment(reservedSeconds),
           "wallet.totalUsed": FieldValue.increment(-reservedSeconds),
         });
+        // The provider credential was never claimed, so no AI session ever ran:
+        // nothing to bill and nothing for the limiter to charge for.
+        const refundRateLimitAttempt = !session.rateLimitRefundedAt;
         const updates = { status: "completed", usedSeconds: 0, unusedSeconds: reservedSeconds, endedAt: FieldValue.serverTimestamp() };
-        transaction.update(sessionRef, { ...updates, providerToken: FieldValue.delete(), ticketHash: FieldValue.delete() });
+        transaction.update(sessionRef, {
+          ...updates,
+          ...(refundRateLimitAttempt ? { rateLimitRefundedAt: FieldValue.serverTimestamp() } : {}),
+          providerToken: FieldValue.delete(),
+          ticketHash: FieldValue.delete(),
+        });
         transaction.update(transactionRef, updates);
         releaseStreamLockInTransaction(transaction, lockRef, lockSnap.data(), sessionId);
-        return { refunded: reservedSeconds, usedSeconds: 0, alreadyProcessed: false, reservedSeconds };
+        return { refunded: reservedSeconds, usedSeconds: 0, alreadyProcessed: false, refundRateLimitAttempt, reservedSeconds };
       }
       // Fal usage is bounded by server-issued timestamps. Settle both direct
       // and relayed Fal sessions here so Stop refunds and releases the global
@@ -83,16 +102,32 @@ export async function POST(req: NextRequest) {
             "wallet.totalUsed": FieldValue.increment(-unusedSeconds),
           });
         }
+        const refundRateLimitAttempt = usedSeconds === 0 && !session.rateLimitRefundedAt;
         const updates = { status: "completed", usedSeconds, unusedSeconds, deadlineHit, endedAt: FieldValue.serverTimestamp() };
-        transaction.update(sessionRef, { ...updates, providerToken: FieldValue.delete(), ticketHash: FieldValue.delete() });
+        transaction.update(sessionRef, {
+          ...updates,
+          ...(refundRateLimitAttempt ? { rateLimitRefundedAt: FieldValue.serverTimestamp() } : {}),
+          providerToken: FieldValue.delete(),
+          ticketHash: FieldValue.delete(),
+        });
         transaction.update(transactionRef, updates);
         releaseStreamLockInTransaction(transaction, lockRef, lockSnap.data(), sessionId);
-        return { refunded: unusedSeconds, usedSeconds, deadlineHit, alreadyProcessed: false, reservedSeconds };
+        return { refunded: unusedSeconds, usedSeconds, deadlineHit, alreadyProcessed: false, refundRateLimitAttempt, reservedSeconds };
       }
       // Only the proxy can confirm a provider disconnect and refundable usage.
       transaction.update(sessionRef, { stopRequestedAt: FieldValue.serverTimestamp() });
-      return { refunded: 0, pending: true, alreadyProcessed: false, reservedSeconds };
+      return { refunded: 0, pending: true, alreadyProcessed: false, refundRateLimitAttempt: false, reservedSeconds };
     });
+
+    // Applied outside the settlement transaction: the marker written above makes
+    // the retry-safe end path refund at most one attempt per session.
+    if (refundResult.refundRateLimitAttempt) {
+      try {
+        await refundRateLimit(db, "realtime-token", user.uid);
+      } catch (refundError) {
+        console.error("Rate limit refund failed:", refundError instanceof Error ? refundError.message : "unknown error");
+      }
+    }
 
     return privateJson({
       success: true,

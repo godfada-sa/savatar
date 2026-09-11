@@ -155,3 +155,29 @@ export async function enforceRateLimit(
     throw new RequestError(429, `Too many requests. Try again in ${result.retryAfter}s.`, result.retryAfter);
   }
 }
+
+/**
+ * Give one attempt back to the current window.
+ *
+ * enforceRateLimit consumes an attempt up front, but an authorization that
+ * never produced a session is not abuse: the provider rejecting a stream
+ * (fal permits one concurrent session per account) or a failed reservation
+ * must not cost the creator one of their attempts. Callers refund only after
+ * they have positively established that nothing ran.
+ *
+ * Decrementing an already-expired window is harmless — the next
+ * enforceRateLimit call resets an expired window to 1 regardless of the
+ * leftover count — so no window bookkeeping is needed here. Refunds are
+ * idempotency-guarded by the caller, never by this helper.
+ */
+export async function refundRateLimit(db: Firestore, scope: string, subject: string) {
+  const digest = createHash("sha256").update(`${scope}:${subject}`).digest("hex").slice(0, 40);
+  const ref = db.collection("_securityRateLimits").doc(`${scope}_${digest}`);
+
+  await db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(ref);
+    const currentCount = Number(snapshot.data()?.count ?? 0);
+    if (!snapshot.exists || !Number.isFinite(currentCount) || currentCount <= 0) return;
+    transaction.update(ref, { count: currentCount - 1 });
+  });
+}

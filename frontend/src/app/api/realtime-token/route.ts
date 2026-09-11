@@ -10,6 +10,7 @@ import {
   errorJson,
   privateJson,
   readJsonObject,
+  refundRateLimit,
   requireAuthenticatedUser,
   RequestError,
 } from "@/lib/server-security";
@@ -98,6 +99,10 @@ async function mintFalRealtimeToken(endpoint: string, durationSeconds: number) {
 export async function POST(req: NextRequest) {
   let reservation: { sessionId: string; userId: string; seconds: number } | null = null;
   let db: ReturnType<typeof getAdminServices>["db"] | null = null;
+  // Set only once the limiter has actually charged an attempt, so the failure
+  // path hands one back without ever discounting a request the limiter refused
+  // (a refusal consumed nothing).
+  let rateLimitedUserId: string | null = null;
   try {
     assertSameOrigin(req);
     const user = await requireAuthenticatedUser(req, { requireVerifiedEmail: true });
@@ -122,6 +127,7 @@ export async function POST(req: NextRequest) {
     // not lock the creator out of retrying. The wallet is the real cost bound,
     // so this only has to stop hammering.
     await enforceRateLimit(db, "realtime-token", user.uid, 10, 5 * 60_000);
+    rateLimitedUserId = user.uid;
 
     const userRef = db.collection("users").doc(user.uid);
     const sessionId = randomUUID();
@@ -286,6 +292,17 @@ export async function POST(req: NextRequest) {
         });
       } catch (cleanupError) {
         console.error("Realtime reservation cleanup failed:", cleanupError instanceof Error ? cleanupError.message : "unknown error");
+      }
+    }
+    // The limiter already charged this attempt, but an authorization that never
+    // handed back a usable relay ticket produced no session at all — a provider
+    // rejecting the stream is not abuse, so give the attempt back instead of
+    // burning the creator's allowance on retries.
+    if (rateLimitedUserId && db) {
+      try {
+        await refundRateLimit(db, "realtime-token", rateLimitedUserId);
+      } catch (refundError) {
+        console.error("Rate limit refund failed:", refundError instanceof Error ? refundError.message : "unknown error");
       }
     }
     console.error("Realtime token error:", error instanceof Error ? error.message : "unknown error");
