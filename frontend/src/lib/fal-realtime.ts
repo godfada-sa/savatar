@@ -41,6 +41,14 @@ interface FalRealtimeOptions {
   handlers: FalRealtimeHandlers;
 }
 
+// fal only forms the media path when the offer already carries the ICE
+// candidates. Measured against the real service: a trickled offer (candidates
+// sent as their own messages, which is what browsers do by default) leaves ICE
+// stuck in "connecting" and fal returns zero RTP — a black preview with no
+// error — while the same offer with candidates inline connects and returns
+// video. So gathering is allowed to finish first, and trickling is kept only as
+// a fallback for the case where gathering does not complete in time.
+const ICE_GATHER_TIMEOUT_MS = 3_000;
 // How long a declared remote video track is given to produce its first decoded
 // frame before the client stops waiting for output.
 const FRAME_WAIT_TIMEOUT_MS = 20_000;
@@ -57,6 +65,23 @@ interface FalResult {
   iceservers?: Array<{ urls?: string | string[]; username?: string; credential?: string }> | null;
   error?: string | null;
   success?: boolean;
+}
+
+function waitForIceGathering(pc: RTCPeerConnection, timeoutMs: number): Promise<boolean> {
+  if (pc.iceGatheringState === "complete") return Promise.resolve(true);
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (gathered: boolean) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      pc.removeEventListener("icegatheringstatechange", onChange);
+      resolve(gathered);
+    };
+    const onChange = () => { if (pc.iceGatheringState === "complete") finish(true); };
+    pc.addEventListener("icegatheringstatechange", onChange);
+    const timer = setTimeout(() => finish(pc.iceGatheringState === "complete"), timeoutMs);
+  });
 }
 
 function blobToDataUrl(blob: Blob): Promise<string> {
@@ -88,6 +113,8 @@ export function connectFalRealtime(options: FalRealtimeOptions): FalRealtimeConn
   const pendingRemoteCandidates: RTCIceCandidateInit[] = [];
   // True once the transformed track has actually decoded frames.
   let announced = false;
+  // Whether candidates still need to be sent separately (see the offer above).
+  let trickleCandidates = false;
   let connectionGraceTimer: ReturnType<typeof setTimeout> | null = null;
 
   const setState = (next: FalConnectionState) => {
@@ -183,7 +210,9 @@ export function connectFalRealtime(options: FalRealtimeOptions): FalRealtimeConn
     };
 
     pc.onicecandidate = (event) => {
-      if (disconnected || !event.candidate || !connection) return;
+      // Only when gathering did not finish in time: otherwise the candidates
+      // are already inside the offer fal accepted.
+      if (disconnected || !event.candidate || !connection || !trickleCandidates) return;
       connection.send(encode({
         type: "icecandidate",
         candidate: {
@@ -231,7 +260,10 @@ export function connectFalRealtime(options: FalRealtimeOptions): FalRealtimeConn
         const peer = ensurePeerConnection(servers);
         const offer = await peer.createOffer();
         await peer.setLocalDescription(offer);
-        connection?.send(encode({ type: "offer", sdp: offer.sdp }));
+        // Let ICE gathering finish so the offer can carry its candidates.
+        const gathered = await waitForIceGathering(peer, ICE_GATHER_TIMEOUT_MS);
+        trickleCandidates = !gathered;
+        connection?.send(encode({ type: "offer", sdp: peer.localDescription?.sdp ?? offer.sdp }));
         break;
       }
 
@@ -274,7 +306,9 @@ export function connectFalRealtime(options: FalRealtimeOptions): FalRealtimeConn
           }
           const offer = await pc.createOffer({ iceRestart: true });
           await pc.setLocalDescription(offer);
-          connection?.send(encode({ type: "offer", sdp: offer.sdp }));
+          const gathered = await waitForIceGathering(pc, ICE_GATHER_TIMEOUT_MS);
+          trickleCandidates = !gathered;
+          connection?.send(encode({ type: "offer", sdp: pc.localDescription?.sdp ?? offer.sdp }));
         }
         break;
 
