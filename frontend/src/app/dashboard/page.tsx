@@ -853,7 +853,7 @@ export default function Dashboard() {
                 </span>
               </>
             )}
-            {isStreaming && reservedSeconds > 0 && (
+            {isStreaming && reservedSeconds > 0 && isDecartActive && (
               <>
                 <span className="h-3 w-px bg-stone-300" aria-hidden="true" />
                 <span
@@ -1014,7 +1014,7 @@ export default function Dashboard() {
             {/* Stream Status */}
             <div className="p-4 rounded-xl bg-white border border-stone-200">
               <h3 className="text-sm font-semibold text-stone-900 mb-3">Stream status</h3>
-              {isStreaming && reservedSeconds > 0 && (
+              {isStreaming && reservedSeconds > 0 && isDecartActive && (
                 <div className="mb-3">
                   <div className="flex items-center justify-between text-[10px] text-stone-500 mb-1">
                     <span>Credits remaining</span>

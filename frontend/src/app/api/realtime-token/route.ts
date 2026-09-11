@@ -117,7 +117,11 @@ export async function POST(req: NextRequest) {
       throw new RequestError(400, "This mode is not available on the configured AI provider.");
     }
 
-    await enforceRateLimit(db, "realtime-token", user.uid, 3, 5 * 60_000);
+    // Every authorization is a real reserve/settle cycle, and a provider that
+    // rejects the session (fal allows one concurrent session per account) must
+    // not lock the creator out of retrying. The wallet is the real cost bound,
+    // so this only has to stop hammering.
+    await enforceRateLimit(db, "realtime-token", user.uid, 10, 5 * 60_000);
 
     const userRef = db.collection("users").doc(user.uid);
     const sessionId = randomUUID();

@@ -150,6 +150,8 @@ export async function enforceRateLimit(
   });
 
   if (!result.allowed) {
-    throw new RequestError(429, "Too many requests. Try again shortly.", result.retryAfter);
+    // State the wait so the client can show an actionable countdown instead of
+    // an open-ended "shortly" (the value also rides along in Retry-After).
+    throw new RequestError(429, `Too many requests. Try again in ${result.retryAfter}s.`, result.retryAfter);
   }
 }

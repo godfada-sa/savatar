@@ -6,6 +6,23 @@ const TICKET = /^([0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f
 const STREAM_LOCK_COLLECTION = "_streamLocks";
 const STREAM_LOCK_DOCUMENT = "shared-ai-provider";
 const CREDIT_SAFETY_RESERVE_MS = 5_000;
+// fal permits a single concurrent realtime session per account, and it reports
+// the rejection only AFTER acknowledging the socket (ready + iceServers, then
+// {type:"error",error:"Concurrent session limit reached."}). Hold the browser
+// open and re-open the upstream for a bounded window so a session that is still
+// winding down on fal's side delays the stream instead of failing the paid one.
+const FAL_CONCURRENCY_WAIT_MS = 20_000;
+const FAL_CONCURRENCY_RETRY_MS = 2_000;
+// fal reports the rejection a fraction of a second after the messages it sends
+// on a socket it accepted, so the acceptance window is idle-based: it restarts
+// on every upstream message and only flushes once fal has gone quiet. The
+// absolute cap keeps a chatty-but-healthy upstream from stalling the browser.
+const FAL_ACCEPT_IDLE_MS = 800;
+const FAL_ACCEPT_MAX_MS = 6_000;
+const FAL_CONCURRENCY_MARKER = "Concurrent session limit reached";
+// Overridable so the retry path can be exercised against a stub provider in
+// tests; production always uses fal's realtime host.
+const FAL_REALTIME_BASE_URL = process.env.FAL_REALTIME_BASE_URL || "wss://fal.run";
 
 /**
  * Validate a ticket and mark the session claimed. Reconnects are allowed:
@@ -124,7 +141,7 @@ function attachDecartProxy(server, { allowedOrigins, getDb }) {
       const isFal = session.transport === "fal-proxy-v1";
       let upstreamUrl;
       if (isFal) {
-        upstreamUrl = new URL(`wss://fal.run/${session.providerEndpoint}`);
+        upstreamUrl = new URL(`${FAL_REALTIME_BASE_URL}/${session.providerEndpoint}`);
         upstreamUrl.searchParams.set("fal_jwt_token", session.providerToken);
       } else {
         upstreamUrl = new URL("wss://api3.decart.ai/v1/stream");
@@ -133,18 +150,25 @@ function attachDecartProxy(server, { allowedOrigins, getDb }) {
         upstreamUrl.searchParams.set("resolution", url.searchParams.get("resolution") === "1080p" ? "1080p" : "720p");
         if (url.searchParams.get("livekit_server_codec") === "vp8") upstreamUrl.searchParams.set("livekit_server_codec", "vp8");
       }
-      const upstream = new WebSocket(upstreamUrl, { origin, handshakeTimeout: 20_000,
-        maxPayload: 3 * 1024 * 1024, perMessageDeflate: false });
+      let upstream = null;
       let startedAt = null, ticks = 0, endedSeconds = null, opened = false, finished = false;
       let queued = [], queuedBytes = 0, messageBytes = 0, messageCount = 0, windowAt = Date.now();
       let unsubscribe = () => {};
+      let retryTimer = null;
+      let probeTimer = null;
       const releaseSlot = () => {
         const slot = slots.get(ref.id);
         if (slot && slot.client === client) slots.delete(ref.id);
       };
       const close = () => {
-        if (upstream.readyState === WebSocket.CONNECTING) upstream.terminate();
-        else if (upstream.readyState === WebSocket.OPEN) upstream.close(1000, "Session ended");
+        if (upstream) {
+          if (upstream.readyState === WebSocket.CONNECTING) upstream.terminate();
+          else if (upstream.readyState === WebSocket.OPEN) upstream.close(1000, "Session ended");
+        }
+        clearTimeout(retryTimer);
+        clearTimeout(probeTimer);
+        retryTimer = null;
+        probeTimer = null;
         if (client.readyState === WebSocket.OPEN) client.close(1000, "Session ended");
       };
       // Stop upstream before the paid deadline even if the browser timer is
@@ -155,10 +179,16 @@ function attachDecartProxy(server, { allowedOrigins, getDb }) {
         if (finished) return;
         finished = true;
         clearTimeout(deadline);
+        clearTimeout(retryTimer);
+        clearTimeout(probeTimer);
+        retryTimer = null;
+        probeTimer = null;
         unsubscribe();
         releaseSlot();
-        if (upstream.readyState === WebSocket.CONNECTING) upstream.terminate();
-        else if (upstream.readyState === WebSocket.OPEN) upstream.close(1000, "Session ended");
+        if (upstream) {
+          if (upstream.readyState === WebSocket.CONNECTING) upstream.terminate();
+          else if (upstream.readyState === WebSocket.OPEN) upstream.close(1000, "Session ended");
+        }
         if (client.readyState === WebSocket.OPEN) client.close(1000, "Session ended");
         const uncertain = opened && code !== 1000 && code !== 1001 && endedSeconds === null;
         const used = endedSeconds ?? (uncertain ? session.reservedSeconds
@@ -180,16 +210,23 @@ function attachDecartProxy(server, { allowedOrigins, getDb }) {
         const data = snapshot.data();
         if (!data || data.stopRequestedAt || data.status !== "active") close();
       }, close);
+      const sendUpstream = (raw, binary) => {
+        if (upstream && upstream.readyState === WebSocket.OPEN) { upstream.send(raw, { binary }); return true; }
+        // While a fal reconnect is pending `upstream` is null; keep queueing so
+        // the browser's offer/prompt/ICE messages survive the wait.
+        if ((!upstream || upstream.readyState === WebSocket.CONNECTING)
+          && queuedBytes + raw.length <= 3 * 1024 * 1024) {
+          queued.push({ raw, binary }); queuedBytes += raw.length; return true;
+        }
+        return false;
+      };
       client.on("message", (raw, binary) => {
         if (Date.now() - windowAt > 60_000) { windowAt = Date.now(); messageBytes = 0; messageCount = 0; }
         messageBytes += raw.length; messageCount++;
         if (messageBytes > 8 * 1024 * 1024 || messageCount > 240) return close();
         if (isFal) {
           if (!binary) return close();
-          if (upstream.readyState === WebSocket.OPEN) upstream.send(raw, { binary: true });
-          else if (upstream.readyState === WebSocket.CONNECTING && queuedBytes + raw.length <= 3 * 1024 * 1024) {
-            queued.push({ raw, binary: true }); queuedBytes += raw.length;
-          } else close();
+          if (!sendUpstream(raw, true)) close();
           return;
         }
         if (binary) return close();
@@ -201,36 +238,123 @@ function attachDecartProxy(server, { allowedOrigins, getDb }) {
           client.joinSent = true;
         }
         if (!["livekit_join", "offer", "ice-candidate", "prompt", "set_image", "set_passthrough", "ping"].includes(data.type)) return close();
-        if (upstream.readyState === WebSocket.OPEN) upstream.send(raw, { binary: false });
-        else if (upstream.readyState === WebSocket.CONNECTING && queuedBytes + raw.length <= 3 * 1024 * 1024) {
-          queued.push({ raw, binary: false }); queuedBytes += raw.length;
-        } else close();
+        if (!sendUpstream(raw, false)) close();
       });
-      upstream.on("open", () => {
-        opened = true;
-        if (isFal && startedAt === null) startedAt = Date.now();
-        for (const item of queued) upstream.send(item.raw, { binary: item.binary });
-        queued = [];
-      });
-      upstream.on("message", (raw, binary) => {
-        if (!isFal) {
-          if (binary) return close();
-          let data;
-          try { data = JSON.parse(raw.toString()); } catch { return close(); }
-          if (data.type === "generation_started" && startedAt === null) startedAt = Date.now();
-          if ((data.type === "generation_tick" || data.type === "generation_ended")
-            && Number.isFinite(data.seconds) && data.seconds >= 0) {
-            ticks = Math.max(ticks, data.seconds);
-            if (data.type === "generation_ended") endedSeconds = ticks;
+      // ── Provider upstream (fal is retryable) ─────────────────────────
+      let probing = false;
+      let probeBuffer = [];
+      let lastRejection = null;
+      // Never wait past the paid window: the deadline timer already owns that.
+      const retryUntil = isFal
+        ? Math.max(Date.now(), Math.min(Date.now() + FAL_CONCURRENCY_WAIT_MS,
+            session.deadlineAt.toMillis() - CREDIT_SAFETY_RESERVE_MS))
+        : 0;
+      let probeOpenedAt = 0;
+      const forwardToClient = (raw, binary) => {
+        if (client.readyState !== WebSocket.OPEN) return;
+        if (client.bufferedAmount > 4 * 1024 * 1024) return close();
+        client.send(raw, { binary });
+      };
+      // fal accepted the session for real: bill from acceptance, not from the
+      // handshake of an attempt it went on to reject.
+      const flushProbe = () => {
+        probing = false;
+        clearTimeout(probeTimer);
+        probeTimer = null;
+        const buffered = probeBuffer;
+        probeBuffer = [];
+        if (startedAt === null) startedAt = Date.now();
+        for (const item of buffered) forwardToClient(item.raw, item.binary);
+      };
+      // Re-arm the acceptance window. Returns false once the cap is reached, at
+      // which point the buffered messages are released even if fal is chatty.
+      const armProbe = () => {
+        clearTimeout(probeTimer);
+        const remainingCap = FAL_ACCEPT_MAX_MS - (Date.now() - probeOpenedAt);
+        if (remainingCap <= 0) { flushProbe(); return false; }
+        probeTimer = setTimeout(flushProbe, Math.min(FAL_ACCEPT_IDLE_MS, remainingCap));
+        return true;
+      };
+      const retryFalUpstream = () => {
+        if (finished || !isFal) return;
+        // One retry per rejection: the rejected socket's own close event must
+        // not schedule a second attempt (that would open two upstreams and
+        // leave one orphaned against fal's single-session limit).
+        if (retryTimer) return;
+        probing = false;
+        probeBuffer = [];
+        clearTimeout(probeTimer);
+        probeTimer = null;
+        const rejected = upstream;
+        upstream = null;
+        if (rejected) {
+          try { rejected.terminate(); } catch { /* already gone */ }
+        }
+        if (Date.now() >= retryUntil) {
+          // Out of wait: hand the browser the provider's own message so the
+          // failure is explanatory, then settle normally (nothing billed).
+          if (lastRejection) forwardToClient(lastRejection.raw, lastRejection.binary);
+          close();
+          return;
+        }
+        retryTimer = setTimeout(() => { retryTimer = null; openUpstream(); }, FAL_CONCURRENCY_RETRY_MS);
+      };
+      function openUpstream() {
+        if (finished || client.readyState !== WebSocket.OPEN) return;
+        const attempt = new WebSocket(upstreamUrl, { origin, handshakeTimeout: 20_000,
+          maxPayload: 3 * 1024 * 1024, perMessageDeflate: false });
+        upstream = attempt;
+        attempt.on("open", () => {
+          opened = true;
+          if (!isFal && startedAt === null) startedAt = Date.now();
+          // The acceptance window starts only once the upstream is actually
+          // open: fal's ready/iceServers/rejection burst happens after that,
+          // and arming earlier would flush before fal has said anything.
+          if (isFal) {
+            probing = true;
+            probeBuffer = [];
+            probeOpenedAt = Date.now();
           }
-        }
-        if (client.readyState === WebSocket.OPEN) {
-          if (client.bufferedAmount > 4 * 1024 * 1024) return close();
-          client.send(raw, { binary });
-        }
-      });
-      upstream.on("close", (code) => { void finish(code); });
-      upstream.on("error", close);
+          for (const item of queued) attempt.send(item.raw, { binary: item.binary });
+          queued = [];
+          if (isFal) armProbe();
+        });
+        attempt.on("message", (raw, binary) => {
+          if (!isFal) {
+            if (binary) return close();
+            let data;
+            try { data = JSON.parse(raw.toString()); } catch { return close(); }
+            if (data.type === "generation_started" && startedAt === null) startedAt = Date.now();
+            if ((data.type === "generation_tick" || data.type === "generation_ended")
+              && Number.isFinite(data.seconds) && data.seconds >= 0) {
+              ticks = Math.max(ticks, data.seconds);
+              if (data.type === "generation_ended") endedSeconds = ticks;
+            }
+            forwardToClient(raw, binary);
+            return;
+          }
+          if (probing) {
+            // The rejection message is the signal to re-open, so it must not
+            // reach the browser (which would tear the paid session down).
+            if (raw.includes(FAL_CONCURRENCY_MARKER)) { lastRejection = { raw, binary }; retryFalUpstream(); return; }
+            probeBuffer.push({ raw, binary });
+            armProbe();
+            return;
+          }
+          forwardToClient(raw, binary);
+        });
+        attempt.on("close", (code) => {
+          if (finished) return;
+          // A retry already replaced this socket; its close is not a signal.
+          if (upstream !== attempt) return;
+          // A close before acceptance is the rejection arriving without its
+          // message; retry rather than failing the session on the first try.
+          if (isFal && startedAt === null && Date.now() < retryUntil) { retryFalUpstream(); return; }
+          void finish(code);
+        });
+        attempt.on("error", () => { if (!isFal) close(); });
+      }
+      openUpstream();
       client.on("close", () => { void finish(1001); });
       client.on("error", close);
     });
