@@ -552,7 +552,19 @@ export default function Dashboard() {
       // Handle the transformed stream the same way for both providers: hand
       // it to viewers, show it locally, and switch existing viewer tracks.
       const attachTransformedStream = (transformedStream: MediaStream) => {
-        const outputStream = new MediaStream([...transformedStream.getVideoTracks(), ...(streamRef.current?.getAudioTracks() ?? [])]);
+        // A stream with no video track is not AI output: swapping the preview to
+        // it is what turned a stalled session into a black rectangle. Keep the
+        // camera on screen until there is something real to show.
+        const videoTracks = transformedStream.getVideoTracks();
+        if (videoTracks.length === 0) return;
+        // The fal path already merges the creator's microphone into the stream
+        // it hands over, so only fall back to the local tracks when it carries
+        // no audio of its own (otherwise viewers hear the creator twice).
+        const incomingAudio = transformedStream.getAudioTracks();
+        const outputStream = new MediaStream([
+          ...videoTracks,
+          ...(incomingAudio.length ? incomingAudio : streamRef.current?.getAudioTracks() ?? []),
+        ]);
         transformedStreamRef.current = outputStream;
         for (const id of waitingViewersRef.current) void offerViewerRef.current?.(id);
         waitingViewersRef.current.clear();

@@ -41,6 +41,13 @@ interface FalRealtimeOptions {
   handlers: FalRealtimeHandlers;
 }
 
+// How long a declared remote video track is given to produce its first decoded
+// frame before the client stops waiting for output.
+const FRAME_WAIT_TIMEOUT_MS = 20_000;
+// How long an ICE "disconnected" state may persist before it is treated as a
+// real loss (the state is often transient during a path switch).
+const CONNECTION_GRACE_MS = 5_000;
+
 interface FalResult {
   type?: string;
   sdp?: string | null;
@@ -74,6 +81,14 @@ export function connectFalRealtime(options: FalRealtimeOptions): FalRealtimeConn
   let generationStartedAt = 0;
   let generationTimer: ReturnType<typeof setInterval> | null = null;
   let disconnected = false;
+  // Remote candidates that arrive before the answer is applied. Applying them
+  // early always fails (InvalidStateError) and the old code swallowed that,
+  // which silently dropped ICE and left a negotiated track with no media.
+  let remoteDescriptionSet = false;
+  const pendingRemoteCandidates: RTCIceCandidateInit[] = [];
+  // True once the transformed track has actually decoded frames.
+  let announced = false;
+  let connectionGraceTimer: ReturnType<typeof setTimeout> | null = null;
 
   const setState = (next: FalConnectionState) => {
     if (disconnected) return;
@@ -97,6 +112,39 @@ export function connectFalRealtime(options: FalRealtimeOptions): FalRealtimeConn
     }
   };
 
+  // An `ontrack` event only means the answer DECLARED a track: it fires as soon
+  // as the remote description is applied, whether or not a single frame ever
+  // arrives. Polling the receiver's stats for decoded frames is what actually
+  // proves the AI is producing pictures, so the transformed stream is announced
+  // (and billing starts) only then. Until it does, the creator keeps seeing the
+  // camera instead of a black rectangle.
+  const watchForFrames = (track: MediaStreamTrack, receiver: RTCRtpReceiver | null, onFrames: () => void) => {
+    // A remote track only unmutes once the receiver is actually getting media,
+    // which covers browsers where the inbound-rtp frame counters lag.
+    try { track.addEventListener("unmute", () => { if (!disconnected) onFrames(); }); } catch { /* unsupported */ }
+    const startedAt = Date.now();
+    const poll = async () => {
+      if (disconnected) return;
+      if (announced) return;
+      let decoded = 0;
+      try {
+        const stats = await (receiver ?? pc)!.getStats();
+        stats.forEach((report) => {
+          const entry = report as unknown as Record<string, unknown>;
+          if (entry.type === "inbound-rtp" && entry.kind === "video") {
+            decoded = Math.max(decoded,
+              Number(entry.framesDecoded ?? 0), Number(entry.framesReceived ?? 0));
+          }
+        });
+      } catch {
+        // Stats unavailable this tick; retry below.
+      }
+      if (decoded > 0) { onFrames(); return; }
+      if (Date.now() - startedAt < FRAME_WAIT_TIMEOUT_MS) setTimeout(poll, 250);
+    };
+    void poll();
+  };
+
   // ── WebRTC negotiation ─────────────────────────────────────────────
   const ensurePeerConnection = (servers: NonNullable<FalResult["iceServers"]>) => {
     if (pc) return pc;
@@ -112,19 +160,26 @@ export function connectFalRealtime(options: FalRealtimeOptions): FalRealtimeConn
 
     pc.ontrack = (event) => {
       if (disconnected) return;
-      // Combine the transformed video with the creator's local audio so the
-      // stream handed to viewers matches the Decart path exactly.
-      const videoTracks = event.streams[0]?.getVideoTracks() ?? [];
-      const audioTracks = localStream.getAudioTracks() ?? [];
-      const merged = new MediaStream([...videoTracks, ...audioTracks]);
-      onRemoteStream?.(merged);
-      // The lucy-2.5 realtime relay does NOT send a `generation_started`
-      // message (its output schema is only type/sdp/candidate/iceServers/
-      // error) — the first remote track is the authoritative "AI is actually
-      // producing frames" signal. Without this, the countdown never starts
-      // and the streamer pays fal per-second while credits stay frozen.
-      setState("generating");
-      startGenerationTimer();
+      // fal does not always attach the outgoing track to a MediaStream, so fall
+      // back to the track itself rather than announcing an audio-only stream.
+      const inStreams = event.streams?.[0]?.getVideoTracks() ?? [];
+      const videoTracks = inStreams.length
+        ? inStreams
+        : event.track?.kind === "video" ? [event.track] : [];
+      if (videoTracks.length === 0) return;
+      const announce = () => {
+        if (disconnected || announced) return;
+        announced = true;
+        // Combine the transformed video with the creator's local audio so the
+        // stream handed to viewers matches the Decart path exactly.
+        onRemoteStream?.(new MediaStream([...videoTracks, ...(localStream.getAudioTracks() ?? [])]));
+        // Only now is the AI truly producing output: start the countdown and
+        // report `generating`, so the streamer is never billed for a declared
+        // track that turns out to be silent.
+        setState("generating");
+        startGenerationTimer();
+      };
+      watchForFrames(videoTracks[0], event.receiver ?? null, announce);
     };
 
     pc.onicecandidate = (event) => {
@@ -141,10 +196,24 @@ export function connectFalRealtime(options: FalRealtimeOptions): FalRealtimeConn
 
     pc.onconnectionstatechange = () => {
       if (!pc) return;
-      if (pc.connectionState === "failed" || pc.connectionState === "disconnected") {
-        setState("disconnected");
-        onError?.(new Error("The AI video connection was lost."));
+      const state = pc.connectionState;
+      if (state === "connected") {
+        if (connectionGraceTimer) { clearTimeout(connectionGraceTimer); connectionGraceTimer = null; }
+        return;
       }
+      if (state !== "failed" && state !== "disconnected") return;
+      // "disconnected" is routinely transient (an ICE path switching, a mobile
+      // radio sleeping). Failing the paid session on the first sight of it ends
+      // usable streams, so give the path a moment to recover.
+      if (connectionGraceTimer) return;
+      connectionGraceTimer = setTimeout(() => {
+        connectionGraceTimer = null;
+        if (disconnected || !pc) return;
+        if (pc.connectionState === "failed" || pc.connectionState === "disconnected") {
+          setState("disconnected");
+          onError?.(new Error("The AI video connection was lost."));
+        }
+      }, CONNECTION_GRACE_MS);
     };
 
     return pc;
@@ -169,12 +238,19 @@ export function connectFalRealtime(options: FalRealtimeOptions): FalRealtimeConn
       case "answer":
         if (result.sdp && pc) {
           await pc.setRemoteDescription({ type: "answer", sdp: result.sdp });
+          remoteDescriptionSet = true;
+          // Release the candidates that arrived while the answer was in flight.
+          for (const candidate of pendingRemoteCandidates.splice(0)) {
+            await pc.addIceCandidate(new RTCIceCandidate(candidate)).catch(() => {});
+          }
         }
         break;
 
       case "icecandidate":
         if (result.candidate && pc) {
-          await pc.addIceCandidate(new RTCIceCandidate(result.candidate)).catch(() => {});
+          if (!remoteDescriptionSet) { pendingRemoteCandidates.push(result.candidate); break; }
+          await pc.addIceCandidate(new RTCIceCandidate(result.candidate))
+            .catch((error) => console.warn("Discarded a remote ICE candidate", error));
         }
         break;
 
@@ -235,8 +311,12 @@ export function connectFalRealtime(options: FalRealtimeOptions): FalRealtimeConn
   if (referenceImage) initialInput.reference_image_url = referenceImage;
   let latestInput = initialInput;
   connection.onopen = () => connection?.send(encode(latestInput));
+  // Signaling messages must be applied in order: each one used to run in its
+  // own floating task, so an `answer` and the ICE candidates behind it raced and
+  // candidates were thrown away. Chain them instead.
+  let signalingQueue: Promise<void> = Promise.resolve();
   connection.onmessage = (event) => {
-    void (async () => {
+    signalingQueue = signalingQueue.then(async () => {
       try {
         const bytes = event.data instanceof ArrayBuffer
           ? new Uint8Array(event.data)
@@ -248,7 +328,7 @@ export function connectFalRealtime(options: FalRealtimeOptions): FalRealtimeConn
       } catch {
         onError?.(new Error("The AI service returned an invalid response."));
       }
-    })();
+    });
   };
   connection.onerror = () => onError?.(new Error("The AI signaling connection failed."));
   connection.onclose = () => {
@@ -262,6 +342,8 @@ export function connectFalRealtime(options: FalRealtimeOptions): FalRealtimeConn
       state = "disconnected";
       disconnected = true;
       stopGenerationTimer();
+      if (connectionGraceTimer) { clearTimeout(connectionGraceTimer); connectionGraceTimer = null; }
+      pendingRemoteCandidates.length = 0;
       if (pc) {
         pc.close();
         pc = null;
