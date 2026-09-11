@@ -139,7 +139,8 @@ ws.on("error", (e) => log(`CLIENT error: ${e.message}`));
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 // Observe the retry storm window before simulating a Stop.
-await wait(MODE === "busy" ? 22_000 : 4_000);
+// Long enough to observe the whole retry schedule when the provider is busy.
+await wait(MODE === "busy" ? 34_000 : 4_000);
 const stopAt = Date.now();
 
 if (MODE === "abrupt") {
@@ -176,10 +177,11 @@ const stillOpen = upstreams.filter((u) => !u.closed);
 const abrupt = upstreams.filter((u) => u.closed && !u.closed.graceful);
 
 const check = (ok, name, detail = "") => (ok ? PASS(name, detail) : FAIL(name, detail));
-const budget = MODE === "busy" ? 3 : 1;
+// One initial attempt plus the schedule entries.
+const budget = MODE === "busy" ? 4 : 1;
 
 check(upstreams.length <= budget, `provider sockets per Go Live = ${upstreams.length}`,
-  MODE === "busy" ? `bounded at ${budget}, was 11 before the fix` : "exactly one, as it must be");
+  MODE === "busy" ? `bounded at ${budget} across the whole schedule, was 11 before the fix` : "exactly one, as it must be");
 check(stillOpen.length === 0, "client Stop released every provider socket",
   stillOpen.length ? `${stillOpen.length} still open` : "nothing left behind");
 check(abrupt.length === 0, "every provider socket closed with a close frame",

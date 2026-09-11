@@ -12,15 +12,14 @@ const CREDIT_SAFETY_RESERVE_MS = 5_000;
 // open and re-open the upstream for a bounded window so a session that is still
 // winding down on fal's side delays the stream instead of failing the paid one.
 //
-// The retry budget is deliberately small and widely spaced. fal counts sessions
-// per account, so a tight retry loop does not wait a slot out — it competes for
-// the same slot, opening a new session every couple of seconds while the
-// previous one is still being reaped, which keeps the account busy. Three
-// attempts five seconds apart still absorb a session that is merely winding
-// down, without manufacturing a queue of our own.
-const FAL_CONCURRENCY_WAIT_MS = 15_000;
-const FAL_CONCURRENCY_RETRY_MS = 5_000;
-const FAL_CONCURRENCY_MAX_ATTEMPTS = 3;
+// fal does not free the account the moment a session closes: measured release
+// lag ranges from about four seconds to over thirty. The retry waits escalate to
+// cover that window without hammering, because a tight loop does not wait a slot
+// out — it competes for the same slot, opening a new session every couple of
+// seconds while the previous one is still being reaped. Past the last entry the
+// session is given up on, so a creator is never left hanging indefinitely.
+const FAL_CONCURRENCY_RETRY_SCHEDULE_MS = [4_000, 9_000, 15_000];
+const FAL_CONCURRENCY_WAIT_MS = 30_000;
 // How long a released upstream may take to acknowledge a close frame before the
 // socket is torn down at the TCP level.
 const UPSTREAM_CLOSE_GRACE_MS = 1_000;
@@ -170,6 +169,8 @@ function attachDecartProxy(server, { allowedOrigins, getDb }) {
       }
       let upstream = null;
       let startedAt = null, ticks = 0, endedSeconds = null, opened = false, finished = false;
+      // One initial attempt plus one per entry in the retry schedule.
+      const falAttemptBudget = FAL_CONCURRENCY_RETRY_SCHEDULE_MS.length + 1;
       let queued = [], queuedBytes = 0, messageBytes = 0, messageCount = 0, windowAt = Date.now();
       let unsubscribe = () => {};
       let retryTimer = null;
@@ -325,8 +326,8 @@ function attachDecartProxy(server, { allowedOrigins, getDb }) {
         const rejected = upstream;
         upstream = null;
         releaseUpstream(rejected, "Provider slot busy");
-        const attemptsLeft = FAL_CONCURRENCY_MAX_ATTEMPTS - falUpstreamAttempts;
-        if (attemptsLeft <= 0 || Date.now() >= retryUntil) {
+        const waitMs = FAL_CONCURRENCY_RETRY_SCHEDULE_MS[falUpstreamAttempts - 1];
+        if (waitMs === undefined || Date.now() + waitMs >= retryUntil) {
           // Out of wait: hand the browser the provider's own message so the
           // failure is explanatory, then settle normally (nothing billed).
           if (lastRejection) forwardToClient(lastRejection.raw, lastRejection.binary);
@@ -337,14 +338,21 @@ function attachDecartProxy(server, { allowedOrigins, getDb }) {
           close();
           return;
         }
-        retryTimer = setTimeout(() => { retryTimer = null; openUpstream(); }, FAL_CONCURRENCY_RETRY_MS);
+        retryTimer = setTimeout(() => { retryTimer = null; openUpstream(); }, waitMs);
       };
       function openUpstream() {
         if (finished || client.readyState !== WebSocket.OPEN) return;
         const attempt = new WebSocket(upstreamUrl, { origin, handshakeTimeout: 20_000,
           maxPayload: 3 * 1024 * 1024, perMessageDeflate: false });
         upstream = attempt;
-        if (isFal) falUpstreamAttempts++;
+        if (isFal) {
+          falUpstreamAttempts++;
+          // Never exceed the schedule: the last entry's wait ends the session.
+          if (falUpstreamAttempts > falAttemptBudget) {
+            void finish(1001);
+            return;
+          }
+        }
         attempt.on("open", () => {
           opened = true;
           if (!isFal && startedAt === null) startedAt = Date.now();
