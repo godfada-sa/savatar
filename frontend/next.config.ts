@@ -24,8 +24,14 @@ const commonContentSecurityPolicy = [
   "object-src 'none'",
 ].join("; ");
 
+// Short commit the deployment was built from, surfaced in the page metadata so
+// "did the frontend actually redeploy?" can be answered with one request (the
+// signaling service reports the same thing on /health).
+const deployCommit = (process.env.VERCEL_GIT_COMMIT_SHA || "local").slice(0, 7);
+
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  env: { NEXT_PUBLIC_DEPLOY_COMMIT: deployCommit },
   serverExternalPackages: ["firebase-admin", "jose", "jwks-rsa"],
   async headers() {
     return [

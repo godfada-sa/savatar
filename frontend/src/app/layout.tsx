@@ -23,6 +23,9 @@ export const metadata: Metadata = {
   icons: {
     icon: "/favicon.svg",
   },
+  other: {
+    "savatar-build": process.env.NEXT_PUBLIC_DEPLOY_COMMIT ?? "local",
+  },
 };
 
 export default async function RootLayout({
