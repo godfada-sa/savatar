@@ -153,9 +153,6 @@ export function connectFalRealtime(options: FalRealtimeOptions): FalRealtimeConn
   // (and billing starts) only then. Until it does, the creator keeps seeing the
   // camera instead of a black rectangle.
   const watchForFrames = (track: MediaStreamTrack, receiver: RTCRtpReceiver | null, onFrames: () => void) => {
-    // A remote track only unmutes once the receiver is actually getting media,
-    // which covers browsers where the inbound-rtp frame counters lag.
-    try { track.addEventListener("unmute", () => { if (!disconnected) onFrames(); }); } catch { /* unsupported */ }
     const startedAt = Date.now();
     const poll = async () => {
       if (disconnected) return;
@@ -173,8 +170,15 @@ export function connectFalRealtime(options: FalRealtimeOptions): FalRealtimeConn
       } catch {
         // Stats unavailable this tick; retry below.
       }
-      if (decoded > 0) { onFrames(); return; }
-      if (Date.now() - startedAt < FRAME_WAIT_TIMEOUT_MS) setTimeout(poll, 250);
+      if (decoded > 0 && track.readyState === "live" && !track.muted) { onFrames(); return; }
+      if (Date.now() - startedAt < FRAME_WAIT_TIMEOUT_MS) {
+        setTimeout(poll, 250);
+      } else {
+        // A declared/unmuted track can still contain no video. Never replace
+        // the working camera preview with it; end and refund the empty session.
+        setState("disconnected");
+        onError?.(new Error("The AI did not produce video. The session was stopped without charging for output."));
+      }
     };
     void poll();
   };

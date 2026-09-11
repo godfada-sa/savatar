@@ -570,13 +570,12 @@ export default function Dashboard() {
           ...videoTracks,
           ...(incomingAudio.length ? incomingAudio : streamRef.current?.getAudioTracks() ?? []),
         ]);
+        // A declared WebRTC track can be empty. Do not hand it to OBS or
+        // viewers until decoded frames prove that it contains AI video.
+        if (!info.framesFlowing) return;
         transformedStreamRef.current = outputStream;
-        // Viewers, OBS and the broadcast output get the stream immediately — the
-        // creator's preview is the only thing that waits for real frames, so a
-        // slow (or silent) provider never leaves the output blank.
         for (const id of waitingViewersRef.current) void offerViewerRef.current?.(id);
         waitingViewersRef.current.clear();
-        if (!info.framesFlowing) return;
         if (localVideoRef.current) localVideoRef.current.srcObject = outputStream;
         setStartupStatus("AI output live");
         const transformedVideoTrack = transformedStream.getVideoTracks()[0];
@@ -747,7 +746,10 @@ export default function Dashboard() {
       });
 
       const offerViewer = async (viewerId: string) => {
-        const aiStream = transformedStreamRef.current;
+        // Before AI frames are verified, viewers receive the real camera rather
+        // than an empty provider track. The sender is replaced atomically once
+        // AI output is live.
+        const aiStream = transformedStreamRef.current ?? streamRef.current;
         if (!aiStream) { waitingViewersRef.current.add(viewerId); return; }
 
         peerConnectionsRef.current.get(viewerId)?.close();
