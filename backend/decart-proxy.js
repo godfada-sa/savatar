@@ -24,6 +24,13 @@ const FAL_CONCURRENCY_MAX_ATTEMPTS = 3;
 // How long a released upstream may take to acknowledge a close frame before the
 // socket is torn down at the TCP level.
 const UPSTREAM_CLOSE_GRACE_MS = 1_000;
+// A creator's phone can stop answering without ever closing the socket (sleep,
+// tunnel, carrier handover). The connection stays half-open, so no close event
+// arrives and the provider session keeps running and billing until the paid
+// deadline — minutes of AI time nobody used. Ping the browser and end the
+// session once it stops answering; the browser replies to pings on its own.
+const CLIENT_PING_INTERVAL_MS = 15_000;
+const CLIENT_LIVENESS_TIMEOUT_MS = 45_000;
 // fal reports the rejection a fraction of a second after the messages it sends
 // on a socket it accepted, so the acceptance window is idle-based: it restarts
 // on every upstream message and only flushes once fal has gone quiet. The
@@ -167,6 +174,8 @@ function attachDecartProxy(server, { allowedOrigins, getDb }) {
       let unsubscribe = () => {};
       let retryTimer = null;
       let probeTimer = null;
+      let livenessTimer = null;
+      let lastClientPongAt = Date.now();
       const releaseSlot = () => {
         const slot = slots.get(ref.id);
         if (slot && slot.client === client) slots.delete(ref.id);
@@ -193,8 +202,10 @@ function attachDecartProxy(server, { allowedOrigins, getDb }) {
         releaseUpstream(upstream, "Session ended");
         clearTimeout(retryTimer);
         clearTimeout(probeTimer);
+        clearInterval(livenessTimer);
         retryTimer = null;
         probeTimer = null;
+        livenessTimer = null;
         if (client.readyState === WebSocket.OPEN) client.close(1000, "Session ended");
       };
       // Stop upstream before the paid deadline even if the browser timer is
@@ -207,8 +218,10 @@ function attachDecartProxy(server, { allowedOrigins, getDb }) {
         clearTimeout(deadline);
         clearTimeout(retryTimer);
         clearTimeout(probeTimer);
+        clearInterval(livenessTimer);
         retryTimer = null;
         probeTimer = null;
+        livenessTimer = null;
         unsubscribe();
         releaseSlot();
         releaseUpstream(upstream, "Session ended");
@@ -383,6 +396,20 @@ function attachDecartProxy(server, { allowedOrigins, getDb }) {
         attempt.on("error", () => { if (!isFal) close(); });
       }
       openUpstream();
+      // End the provider session when the browser stops answering. 1001 ("going
+      // away") keeps the settlement honest: usage is the time actually spent,
+      // refunding the rest, instead of the whole reservation.
+      client.on("pong", () => { lastClientPongAt = Date.now(); });
+      livenessTimer = setInterval(() => {
+        if (finished) return;
+        if (Date.now() - lastClientPongAt > CLIENT_LIVENESS_TIMEOUT_MS) {
+          console.warn("Client stopped answering; ending the provider session", ref.id);
+          void finish(1001);
+          return;
+        }
+        try { client.ping(); } catch { /* closing */ }
+      }, CLIENT_PING_INTERVAL_MS);
+      livenessTimer.unref?.();
       client.on("close", () => { void finish(1001); });
       client.on("error", close);
     });

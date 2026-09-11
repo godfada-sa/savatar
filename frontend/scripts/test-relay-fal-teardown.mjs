@@ -30,7 +30,7 @@ const { WebSocketServer, WebSocket } = backendRequire("ws");
 const { cert, initializeApp } = backendRequire("firebase-admin/app");
 const { getFirestore } = backendRequire("firebase-admin/firestore");
 
-const MODE = process.argv[2] ?? "busy"; // busy | healthy
+const MODE = process.argv[2] ?? "busy"; // busy | healthy | abrupt
 const RELAY_PORT = 47802;
 // Seconds the harness pretends the app reserved for this session.
 const reserved = 120;
@@ -72,6 +72,11 @@ falWss.on("connection", (socket) => {
   // A couple of binary frames that look like fal's msgpack acceptance burst.
   socket.send(Buffer.concat([Buffer.from([0x82]), Buffer.from("iceServers")]));
   socket.send(Buffer.concat([Buffer.from([0x81]), Buffer.from("ready")]));
+  // A provider that keeps the session open the way fal does while it waits.
+  const keepAlive = setInterval(() => {
+    try { socket.send(jsonFrame({ type: "x-fal-message", action: "timings", timing: 1 })); } catch { /* gone */ }
+  }, 5_000);
+  socket.on("close", () => clearInterval(keepAlive));
   if (MODE === "busy") {
     socket.send(Buffer.from(JSON.stringify({
       type: "error", error: "Concurrent session limit reached.",
@@ -135,8 +140,18 @@ ws.on("error", (e) => log(`CLIENT error: ${e.message}`));
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 // Observe the retry storm window before simulating a Stop.
 await wait(MODE === "busy" ? 22_000 : 4_000);
-log(`--- Stop: client closing its WebSocket (this is what the Stop button does) ---`);
-ws.close(1000, "Session ended");
+const stopAt = Date.now();
+
+if (MODE === "abrupt") {
+  // A phone that sleeps or loses signal: the connection stays half-open at the
+  // TCP level and the peer simply stops answering. Nothing sends a close frame,
+  // so only a liveness check can tell the relay the creator is gone.
+  log("--- half-open: peer stops answering, socket stays up (phone slept) ---");
+  ws._socket.pause();
+} else {
+  log(`--- Stop: client closing its WebSocket (this is what the Stop button does) ---`);
+  ws.close(1000, "Session ended");
+}
 
 // Poll until the relay's settlement lands, so the refund timing is visible.
 let settled = null;
@@ -146,7 +161,15 @@ for (let i = 0; i < 40; i++) {
   if (snap?.status && snap.status !== "active") { settled = { waitedMs: (i + 1) * 250, ...snap }; break; }
 }
 const wallet = (await db.collection("users").doc(uid).get()).data() ?? {};
-log(`settlement observed after ${settled ? `${settled.waitedMs}ms` : "40x250ms (STILL ACTIVE)"}`);console.log(`\n================ RESULTS (${MODE}) ================`);
+log(`settlement observed after ${settled ? `${settled.waitedMs}ms` : "40x250ms (STILL ACTIVE)"}`);
+
+// A vanished browser must not leave the provider running until the deadline.
+if (MODE === "abrupt") {
+  for (let i = 0; i < 90 && upstreams.every((u) => !u.closed); i++) await wait(1_000);
+  log(`provider socket ${upstreams.every((u) => !u.closed) ? "IS STILL OPEN (provider still billing)" : "was released"}`);
+}
+
+console.log(`\n================ RESULTS (${MODE}) ================`);
 const PASS = (name, detail = "") => console.log(`PASS ${name}${detail ? ` — ${detail}` : ""}`);
 const FAIL = (name, detail = "") => { console.error(`FAIL ${name}${detail ? ` — ${detail}` : ""}`); process.exitCode = 1; };
 const stillOpen = upstreams.filter((u) => !u.closed);
@@ -162,7 +185,13 @@ check(stillOpen.length === 0, "client Stop released every provider socket",
 check(abrupt.length === 0, "every provider socket closed with a close frame",
   abrupt.length ? `${abrupt.length} killed at the TCP level` : "no TCP-level kills that strand the slot");
 
-if (MODE === "busy") {
+if (MODE === "abrupt") {
+  const heldMs = upstreams[0]?.closed ? upstreams[0].closed.at - stopAt : null;
+  const deadlineMs = 120_000; // the harness session's paid deadline
+  check(heldMs !== null && heldMs < deadlineMs - 20_000, "a sleeping phone releases the provider early",
+    heldMs === null ? `socket never closed within 90s (provider ran to the ${deadlineMs / 1000}s deadline)`
+      : `released after ${Math.round(heldMs / 1000)}s`);
+} else if (MODE === "busy") {
   check(settled?.status === "completed" && settled?.usedSeconds === 0,
     "a provider-busy session bills nothing", `status=${settled?.status} used=${settled?.usedSeconds}`);
   check(wallet.wallet?.balanceSeconds === reserved * 2,
@@ -177,10 +206,17 @@ if (MODE === "busy") {
   check(relayMessages >= 3, "healthy handshake reaches the browser", `${relayMessages} messages`);
 }
 
-// cleanup
+// Cleanup. The lock is checked too: a leftover lock blocks the real app with
+// "another AI stream is already active" until it expires, so a test that walked
+// away from one must never be allowed to leave it behind.
 await db.collection("streamSessions").doc(sessionId).delete().catch(() => {});
 await db.collection("transactions").doc(`stream-${sessionId}`).delete().catch(() => {});
+const lockRef = db.collection("_streamLocks").doc("shared-ai-provider");
+if ((await lockRef.get().catch(() => null))?.data()?.sessionId === sessionId) {
+  await lockRef.delete().catch(() => {});
+}
 await db.collection("users").doc(uid).delete().catch(() => {});
+console.log("cleanup: session, transaction, lock and user removed");
 falWss.close(); relayServer.close();
 await wait(300);
 process.exit(0);
