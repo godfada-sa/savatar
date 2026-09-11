@@ -77,6 +77,11 @@ function withinRateLimit(socket, scope, limit, windowMs) {
 }
 
 const rooms = new Map();
+// Reported by /health so a deploy can be confirmed from the outside: the relay
+// and this service ship together, and knowing which commit is running turns
+// "did the backend actually redeploy?" into a single request.
+const DEPLOY_COMMIT = (process.env.RENDER_GIT_COMMIT || "unknown").slice(0, 7);
+const PROCESS_STARTED_AT = new Date().toISOString();
 
 const server = http.createServer((req, res) => {
   res.setHeader("Cache-Control", "no-store");
@@ -88,7 +93,13 @@ const server = http.createServer((req, res) => {
 
   if (req.method === "GET" && req.url === "/health") {
     res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
-    res.end(JSON.stringify({ status: "ok", rooms: rooms.size }));
+    res.end(JSON.stringify({
+      status: "ok",
+      rooms: rooms.size,
+      commit: DEPLOY_COMMIT,
+      startedAt: PROCESS_STARTED_AT,
+      uptimeSeconds: Math.round(process.uptime()),
+    }));
     return;
   }
   res.writeHead(404);
@@ -263,5 +274,5 @@ function leaveCurrentRoom(socket) {
 }
 
 server.listen(PORT, () => {
-  console.log(`Savatar signaling service listening on port ${PORT}`);
+  console.log(`Savatar signaling service listening on port ${PORT} (commit ${DEPLOY_COMMIT})`);
 });
