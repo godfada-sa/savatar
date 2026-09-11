@@ -3,7 +3,7 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { FieldValue } from "firebase-admin/firestore";
 import { NextRequest } from "next/server";
 import { getAdminServices } from "@/lib/firebase-admin";
-import { streamLockRef } from "@/lib/stream-sessions";
+import { streamLockRefs } from "@/lib/stream-sessions";
 import {
   assertSameOrigin,
   enforceRateLimit,
@@ -123,7 +123,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Every authorization is a real reserve/settle cycle, and a provider that
-    // rejects the session (fal allows one concurrent session per account) must
+    // rejects the session must
     // not lock the creator out of retrying. The wallet is the real cost bound,
     // so this only has to stop hammering.
     await enforceRateLimit(db, "realtime-token", user.uid, 10, 5 * 60_000);
@@ -134,22 +134,23 @@ export async function POST(req: NextRequest) {
     const ticket = `${sessionId}.${randomBytes(32).toString("hex")}`;
     const sessionRef = db.collection("streamSessions").doc(sessionId);
     const transactionRef = db.collection("transactions").doc(`stream-${sessionId}`);
-    const lockRef = streamLockRef(db);
+    const lockRefs = streamLockRefs(db);
     const reservationStartedAt = new Date();
     const reservedSeconds = await db.runTransaction(async (transaction) => {
-      const [lockSnapshot, userSnapshot] = await Promise.all([
-        transaction.get(lockRef),
-        transaction.get(userRef),
-      ]);
-      const lock = lockSnapshot.data();
-      const lockExpiresAt = lock?.expiresAt?.toMillis?.();
-      if (lock?.sessionId && Number.isFinite(lockExpiresAt) && lockExpiresAt > Date.now()) {
+      const lockSnapshots = await Promise.all(lockRefs.map((ref) => transaction.get(ref)));
+      const userSnapshot = await transaction.get(userRef);
+      const providerSlot = lockSnapshots.findIndex((snapshot) => {
+        const lock = snapshot.data();
+        const expiresAt = lock?.expiresAt?.toMillis?.();
+        return !lock?.sessionId || !Number.isFinite(expiresAt) || expiresAt <= Date.now();
+      });
+      if (providerSlot < 0) {
         throw new RequestError(
           409,
-          "Another AI stream is already active. Please wait a moment and try again.",
-          Math.max(1, Math.ceil((lockExpiresAt - Date.now()) / 1000)),
+          "All 5 AI stream slots are currently in use. Please wait a moment and try again.",
         );
       }
+      const lockRef = lockRefs[providerSlot];
       const balanceSeconds = Math.floor(Number(userSnapshot.data()?.wallet?.balanceSeconds ?? 0));
       if (!userSnapshot.exists || !Number.isSafeInteger(balanceSeconds) || balanceSeconds < MINIMUM_STREAM_SECONDS) {
         throw new RequestError(402, "At least one minute of streaming credits is required");
@@ -165,6 +166,7 @@ export async function POST(req: NextRequest) {
         model,
         reservedSeconds: seconds,
         status: "reserved",
+        providerSlot,
         createdAt: FieldValue.serverTimestamp(),
       });
       transaction.set(transactionRef, {
@@ -227,10 +229,13 @@ export async function POST(req: NextRequest) {
     const providerAuthorizedAt = new Date();
     const deadlineAt = new Date(providerAuthorizedAt.getTime() + reservedSeconds * 1000);
     await db.runTransaction(async (transaction) => {
-      const [freshSessionSnapshot, lockSnapshot] = await Promise.all([
-        transaction.get(sessionRef),
-        transaction.get(lockRef),
-      ]);
+      const freshSessionSnapshot = await transaction.get(sessionRef);
+      const candidateSlot = Number(freshSessionSnapshot.data()?.providerSlot ?? 0);
+      const providerSlot = Number.isInteger(candidateSlot) && candidateSlot >= 0 && candidateSlot < lockRefs.length
+        ? candidateSlot
+        : 0;
+      const lockRef = lockRefs[providerSlot];
+      const lockSnapshot = await transaction.get(lockRef);
       if (freshSessionSnapshot.data()?.status !== "reserved" || lockSnapshot.data()?.sessionId !== sessionId) {
         throw new RequestError(409, "The AI session reservation expired before it could start");
       }
@@ -252,6 +257,7 @@ export async function POST(req: NextRequest) {
         sessionId,
         userId: user.uid,
         provider,
+        providerSlot,
         status: "active",
         expiresAt: deadlineAt,
         updatedAt: FieldValue.serverTimestamp(),
@@ -276,11 +282,10 @@ export async function POST(req: NextRequest) {
       const transactionRef = activeDb.collection("transactions").doc(`stream-${failedReservation.sessionId}`);
       try {
         await activeDb.runTransaction(async (transaction) => {
-          const lockRef = streamLockRef(activeDb);
-          const [session, lock] = await Promise.all([
-            transaction.get(sessionRef),
-            transaction.get(lockRef),
-          ]);
+          const session = await transaction.get(sessionRef);
+          const providerSlot = Number(session.data()?.providerSlot ?? 0);
+          const lockRef = streamLockRefs(activeDb)[Number.isInteger(providerSlot) && providerSlot >= 0 && providerSlot < 5 ? providerSlot : 0];
+          const lock = await transaction.get(lockRef);
           if (session.data()?.status !== "reserved") return;
           transaction.update(userRef, {
             "wallet.balanceSeconds": FieldValue.increment(failedReservation.seconds),

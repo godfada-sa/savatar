@@ -13,8 +13,15 @@ export type FalConnectionState =
 
 export interface FalRealtimeHandlers {
   onStateChange?: (state: FalConnectionState) => void;
-  /** Called with the transformed MediaStream once AI frames arrive. */
-  onRemoteStream?: (stream: MediaStream) => void;
+  /**
+   * Called with the transformed stream as soon as the provider declares it
+   * (`framesFlowing: false`) and again once it actually delivers frames
+   * (`framesFlowing: true`). The stream must be handed to viewers immediately:
+   * gating the handover on the frame check left the broadcast output blank for
+   * as long as the provider took to start, and would leave it blank forever if a
+   * browser reports no frame counters.
+   */
+  onRemoteStream?: (stream: MediaStream, info: { framesFlowing: boolean }) => void;
   onError?: (error: Error) => void;
   /** Called with accumulated AI generation seconds (for heartbeats/refunds). */
   onGenerationTick?: (seconds: number) => void;
@@ -194,15 +201,18 @@ export function connectFalRealtime(options: FalRealtimeOptions): FalRealtimeConn
         ? inStreams
         : event.track?.kind === "video" ? [event.track] : [];
       if (videoTracks.length === 0) return;
+      // Combine the transformed video with the creator's local audio so the
+      // stream handed to viewers matches the Decart path exactly.
+      const merged = new MediaStream([...videoTracks, ...(localStream.getAudioTracks() ?? [])]);
+      // Wire the output for viewers now; only the creator's own preview and the
+      // billing countdown wait for real frames.
+      onRemoteStream?.(merged, { framesFlowing: false });
       const announce = () => {
         if (disconnected || announced) return;
         announced = true;
-        // Combine the transformed video with the creator's local audio so the
-        // stream handed to viewers matches the Decart path exactly.
-        onRemoteStream?.(new MediaStream([...videoTracks, ...(localStream.getAudioTracks() ?? [])]));
-        // Only now is the AI truly producing output: start the countdown and
-        // report `generating`, so the streamer is never billed for a declared
-        // track that turns out to be silent.
+        onRemoteStream?.(merged, { framesFlowing: true });
+        // Only now is the AI truly producing output, so the countdown starts
+        // here rather than for a declared track that may stay silent.
         setState("generating");
         startGenerationTimer();
       };

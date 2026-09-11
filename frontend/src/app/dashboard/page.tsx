@@ -551,7 +551,7 @@ export default function Dashboard() {
 
       // Handle the transformed stream the same way for both providers: hand
       // it to viewers, show it locally, and switch existing viewer tracks.
-      const attachTransformedStream = (transformedStream: MediaStream) => {
+      const attachTransformedStream = (transformedStream: MediaStream, info: { framesFlowing: boolean } = { framesFlowing: true }) => {
         // A stream with no video track is not AI output: swapping the preview to
         // it is what turned a stalled session into a black rectangle. Keep the
         // camera on screen until there is something real to show.
@@ -566,8 +566,12 @@ export default function Dashboard() {
           ...(incomingAudio.length ? incomingAudio : streamRef.current?.getAudioTracks() ?? []),
         ]);
         transformedStreamRef.current = outputStream;
+        // Viewers, OBS and the broadcast output get the stream immediately — the
+        // creator's preview is the only thing that waits for real frames, so a
+        // slow (or silent) provider never leaves the output blank.
         for (const id of waitingViewersRef.current) void offerViewerRef.current?.(id);
         waitingViewersRef.current.clear();
+        if (!info.framesFlowing) return;
         if (localVideoRef.current) localVideoRef.current.srcObject = outputStream;
         setStartupStatus("AI output live");
         const transformedVideoTrack = transformedStream.getVideoTracks()[0];

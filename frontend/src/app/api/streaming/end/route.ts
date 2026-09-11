@@ -33,16 +33,15 @@ export async function POST(req: NextRequest) {
     const sessionRef = db.collection("streamSessions").doc(sessionId);
     const transactionRef = db.collection("transactions").doc(`stream-${sessionId}`);
     const userRef = db.collection("users").doc(user.uid);
-    const lockRef = streamLockRef(db);
     const endedAtMs = Date.now();
 
     const refundResult = await db.runTransaction(async (transaction) => {
-      const [sessionSnap, lockSnap] = await Promise.all([
-        transaction.get(sessionRef),
-        transaction.get(lockRef),
-      ]);
+      const sessionSnap = await transaction.get(sessionRef);
       if (!sessionSnap.exists) throw new RequestError(404, "Session not found");
       const session = sessionSnap.data()!;
+      const providerSlot = Number(session.providerSlot ?? 0);
+      const lockRef = streamLockRef(db, Number.isInteger(providerSlot) && providerSlot >= 0 && providerSlot < 5 ? providerSlot : 0);
+      const lockSnap = await transaction.get(lockRef);
 
       if (session.userId !== user.uid) throw new RequestError(403, "Not your session");
       if (session.status !== "active") {

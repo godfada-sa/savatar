@@ -188,7 +188,9 @@ async function attempt(label) {
       // The browser's shape: offer first, candidates afterwards, one message each.
       const withoutCandidates = sdp.split("\r\n").filter((line) => !line.startsWith("a=candidate:")).join("\r\n");
       send({ type: "offer", sdp: withoutCandidates });
-      await wait(700);
+      // Send them immediately, the way a browser does: host candidates are ready
+      // within milliseconds, well before fal answers.
+      await wait(20);
       const mid = sdp.match(/^a=mid:(.*)$/m)?.[1] ?? "0";
       const inline = sdp.split("\r\n").filter((line) => line.startsWith("a=candidate:"));
       for (const line of inline) {

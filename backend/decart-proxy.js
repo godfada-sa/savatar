@@ -5,8 +5,9 @@ const { FieldValue } = require("firebase-admin/firestore");
 const TICKET = /^([0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\.[0-9a-f]{64}$/;
 const STREAM_LOCK_COLLECTION = "_streamLocks";
 const STREAM_LOCK_DOCUMENT = "shared-ai-provider";
+const MAX_CONCURRENT_AI_STREAMS = 5;
 const CREDIT_SAFETY_RESERVE_MS = 5_000;
-// fal permits a single concurrent realtime session per account, and it reports
+// The provider account supports multiple realtime sessions, and it reports
 // the rejection only AFTER acknowledging the socket (ready + iceServers, then
 // {type:"error",error:"Concurrent session limit reached."}). Hold the browser
 // open and re-open the upstream for a bounded window so a session that is still
@@ -86,13 +87,15 @@ async function recordPartialUsage(db, ref, usedSeconds) {
 
 async function settleSession(db, ref, usedSeconds, reconciliationRequired = false) {
   await db.runTransaction(async (tx) => {
-    const lockRef = db.collection(STREAM_LOCK_COLLECTION).doc(STREAM_LOCK_DOCUMENT);
-    const [sessionSnapshot, lockSnapshot] = await Promise.all([
-      tx.get(ref),
-      tx.get(lockRef),
-    ]);
+    const sessionSnapshot = await tx.get(ref);
     const data = sessionSnapshot.data();
     if (!data || data.status !== "active") return;
+    const providerSlot = Number(data.providerSlot ?? 0);
+    const lockDocument = Number.isInteger(providerSlot) && providerSlot >= 0 && providerSlot < MAX_CONCURRENT_AI_STREAMS
+      ? (providerSlot === 0 ? STREAM_LOCK_DOCUMENT : `${STREAM_LOCK_DOCUMENT}-${providerSlot}`)
+      : STREAM_LOCK_DOCUMENT;
+    const lockRef = db.collection(STREAM_LOCK_COLLECTION).doc(lockDocument);
+    const lockSnapshot = await tx.get(lockRef);
     const accumulated = Math.max(0, Math.floor(Number(data.accumulatedSeconds ?? 0)));
     const used = Math.max(0, Math.min(data.reservedSeconds, accumulated + Math.ceil(usedSeconds)));
     if (!Number.isSafeInteger(used)) throw new Error("Invalid provider usage");

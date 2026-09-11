@@ -14,13 +14,12 @@ export async function POST(req: NextRequest) {
     const snapshot = await db.collection("streamSessions").where("userId", "==", user.uid).where("status", "==", "active").limit(30).get();
     const now = Date.now();
     const results = await Promise.all(snapshot.docs.map((doc) => db.runTransaction(async (tx) => {
-      const lockRef = streamLockRef(db);
-      const [currentSnapshot, lockSnapshot] = await Promise.all([
-        tx.get(doc.ref),
-        tx.get(lockRef),
-      ]);
+      const currentSnapshot = await tx.get(doc.ref);
       const current = currentSnapshot.data();
       if (!current || current.status !== "active") return { finalized: 0, refunded: 0 };
+      const providerSlot = Number(current.providerSlot ?? 0);
+      const lockRef = streamLockRef(db, Number.isInteger(providerSlot) && providerSlot >= 0 && providerSlot < 5 ? providerSlot : 0);
+      const lockSnapshot = await tx.get(lockRef);
       const unclaimed = !current.claimedAt;
       const expiry = current.transport === "fal-realtime" || current.transport === "fal-proxy-v1"
         ? Math.min(

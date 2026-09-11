@@ -7,9 +7,20 @@ import {
 
 export const STREAM_LOCK_COLLECTION = "_streamLocks";
 export const STREAM_LOCK_DOCUMENT = "shared-ai-provider";
+export const MAX_CONCURRENT_AI_STREAMS = 5;
 
-export function streamLockRef(db: Firestore) {
-  return db.collection(STREAM_LOCK_COLLECTION).doc(STREAM_LOCK_DOCUMENT);
+/**
+ * Fixed provider leases make the account-wide cap transactional without a
+ * single hot counter document. Slot zero deliberately keeps the legacy name,
+ * so a live pre-upgrade stream remains accounted for.
+ */
+export function streamLockRef(db: Firestore, slot = 0) {
+  return db.collection(STREAM_LOCK_COLLECTION)
+    .doc(slot === 0 ? STREAM_LOCK_DOCUMENT : `${STREAM_LOCK_DOCUMENT}-${slot}`);
+}
+
+export function streamLockRefs(db: Firestore) {
+  return Array.from({ length: MAX_CONCURRENT_AI_STREAMS }, (_, slot) => streamLockRef(db, slot));
 }
 
 function timestampMillis(value: unknown): number | null {
