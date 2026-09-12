@@ -43,7 +43,7 @@ export default function Dashboard() {
   const {
     isStreaming, isDecartActive, cameraActive, micEnabled, micAvailable,
     remainingSeconds, reservedSeconds, streamDuration, viewerCount,
-    error, setError, startupStatus,
+    error, setError, notice, setNotice, startupStatus,
     goLive, stopStream, openCamera, stopCamera, toggleMic,
     pushLookIfChanged,
   } = useAiStreamEngine({
@@ -156,6 +156,17 @@ export default function Dashboard() {
             <button
               onClick={() => setError("")}
               className="mt-2 px-3 py-1 bg-white hover:bg-red-100 border border-red-200 rounded text-[11px] text-red-600 transition"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+        {!error && notice && (
+          <div className="flex items-start justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs text-emerald-700" role="status" aria-live="polite">
+            <span>{notice}</span>
+            <button
+              onClick={() => setNotice("")}
+              className="shrink-0 rounded border border-emerald-200 bg-white px-2 py-0.5 text-[11px] text-emerald-600 transition hover:bg-emerald-100"
             >
               Dismiss
             </button>

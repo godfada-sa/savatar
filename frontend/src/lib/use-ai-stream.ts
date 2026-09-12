@@ -41,6 +41,10 @@ export function useAiStreamEngine(params: {
   const [micAvailable, setMicAvailable] = useState(false);
   const [viewerCount, setViewerCount] = useState(0);
   const [error, setError] = useState("");
+  // Informational end-of-session message. Deliberate stops and clean provider
+  // disconnects are not errors — they get a calm notice instead of the red
+  // banner, which is reserved for genuine failures.
+  const [notice, setNotice] = useState("");
   const [startupStatus, setStartupStatus] = useState("");
 
   const streamRef = useRef<MediaStream | null>(null);
@@ -144,6 +148,7 @@ export function useAiStreamEngine(params: {
         sessionIdRef.current = null;
         idTokenRef.current = null;
         setStartupStatus("");
+        setNotice("Stream ended. Unused seconds were refunded to the balance.");
         return;
       } catch {
         if (attempt === 0) {
@@ -174,6 +179,7 @@ export function useAiStreamEngine(params: {
     startingRef.current = true;
     try {
       setError("");
+      setNotice("");
       setStartupStatus("Authorizing a secure AI session");
       const { createDecartClient, models } = await import("@decartai/sdk");
       const modelId = (STREAM_MODEL_FOR_MODE[activeMode] || "lucy-2.5") as DecartModelId;
@@ -267,7 +273,7 @@ export function useAiStreamEngine(params: {
                 sendStreamHeartbeat(lastTickSecondsRef.current, state === "generating" ? "generating" : "connected");
               }
               if (state === "disconnected") {
-                setError("The AI session ended. Your balance will update after the server settles usage.");
+                setNotice("The AI session ended. Your balance will update automatically.");
                 setTimeout(() => stopStream(), 0);
               }
             },
@@ -318,7 +324,7 @@ export function useAiStreamEngine(params: {
             }
             // Auto-end and settle as soon as the provider disconnects.
             if (state === "disconnected") {
-              setError("The AI session ended. Your balance will update after the server settles usage.");
+              setNotice("The AI session ended. Your balance will update automatically.");
               setTimeout(() => stopStream(), 0);
             }
           },
@@ -715,7 +721,7 @@ export function useAiStreamEngine(params: {
     // state
     isStreaming, isDecartActive, cameraActive, micEnabled, micAvailable,
     remainingSeconds, reservedSeconds, streamDuration, viewerCount,
-    error, setError, startupStatus,
+    error, setError, notice, setNotice, startupStatus,
     // camera + stream controls
     goLive, stopStream, openCamera, stopCamera, stopCameraTracksOnly, toggleMic,
     pushLookIfChanged,
