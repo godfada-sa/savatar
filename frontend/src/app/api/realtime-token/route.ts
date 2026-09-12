@@ -34,15 +34,76 @@ const FAL_ENDPOINTS: Record<string, string> = {
   "lucy-2.5": "decart/lucy-2-5/realtime",
 };
 
-/** fal is the master provider once FAL_KEY is set and FAL_PROVIDER=1. */
+/** fal is the fallback provider once FAL_KEY is set and FAL_PROVIDER=1. */
 function isFalProviderEnabled() {
   return process.env.FAL_PROVIDER === "1" && Boolean(process.env.FAL_KEY);
+}
+
+/**
+ * Provider order for stream authorization: **Decart first, fal second**.
+ *
+ * fal's realtime media leg returned zero RTP to browsers for days (its own
+ * reference client included) while still billing per wall-second, so Decart —
+ * the same Lucy model family over a transport proven in browsers — is the
+ * primary, and fal serves as the automatic fallback if a Decart authorization
+ * ever fails. `AI_PROVIDER=decart|fal` pins the attempt order explicitly.
+ * Both mints are free (billing starts only when a media session opens), so
+ * trying the primary first costs nothing.
+ */
+function resolveProviderOrder(model: string): { preferred: "decart" | "fal"; fallback: "decart" | "fal" | null } {
+  const decartReady = Boolean(process.env.DECART_API_KEY);
+  const falReady = isFalProviderEnabled();
+  // fal does not serve every model (see FAL_ENDPOINTS); Decart serves all of
+  // ALLOWED_MODELS, so a model-capable provider always sorts first.
+  const candidates: Array<"decart" | "fal"> = [];
+  const override = process.env.AI_PROVIDER === "fal" || process.env.AI_PROVIDER === "decart"
+    ? (process.env.AI_PROVIDER as "decart" | "fal")
+    : null;
+  if (override) candidates.push(override);
+  candidates.push(decartReady ? "decart" : "fal");
+  candidates.push(decartReady ? "fal" : "decart");
+  const capable = candidates.filter((p) =>
+    p === "decart" ? decartReady : falReady && Boolean(FAL_ENDPOINTS[model])
+  );
+  const order = [...new Set(capable)];
+  if (order.length === 0) {
+    throw new RequestError(503, "No AI provider is configured for this stream. Please contact support.");
+  }
+  return { preferred: order[0], fallback: order[1] ?? null };
 }
 
 function permanentApiKey() {
   const value = process.env.DECART_API_KEY;
   if (!value) throw new Error("DECART_API_KEY is not configured");
   return value;
+}
+
+/**
+ * Mint a provider session credential for one authorization. Free on both
+ * providers: billing starts only when the relay opens the media session.
+ */
+async function mintProviderSession(
+  provider: "decart" | "fal",
+  ctx: { model: string; origin: string; maxSessionDuration: number; tokenDuration: number; userId: string }
+) {
+  if (provider === "fal") {
+    const endpoint = FAL_ENDPOINTS[ctx.model];
+    if (!endpoint) {
+      throw new RequestError(400, "This mode is not available on the fal provider yet.");
+    }
+    const falToken = await mintFalRealtimeToken(endpoint, FAL_TOKEN_TTL_SECONDS);
+    return { transport: "fal-proxy-v1" as const, token: falToken.token, expiresAt: falToken.expiresAt as Date | string };
+  }
+  const decart = createDecartClient({ apiKey: permanentApiKey() });
+  const token = await decart.tokens.create({
+    // Only the authenticated proxy receives this provider credential.
+    expiresIn: ctx.tokenDuration,
+    allowedModels: [ctx.model],
+    allowedOrigins: [ctx.origin],
+    constraints: { realtime: { maxSessionDuration: ctx.maxSessionDuration } },
+    metadata: { userId: ctx.userId, service: "savatar" },
+  });
+  return { transport: "proxy-v1" as const, token: token.apiKey, expiresAt: token.expiresAt as Date | string };
 }
 
 /**
@@ -141,10 +202,9 @@ export async function POST(req: NextRequest) {
       throw new RequestError(503, "Go Live is temporarily paused while we fix an AI provider issue. Nothing was charged — please check back soon.");
     }
 
-    const provider = isFalProviderEnabled() ? "fal" : "decart";
-    if (provider === "fal" && !FAL_ENDPOINTS[model]) {
-      throw new RequestError(400, "This mode is not available on the configured AI provider.");
-    }
+    // Decart first, fal as automatic fallback (AI_PROVIDER overrides the order).
+    const { preferred, fallback } = resolveProviderOrder(model);
+    let provider: "decart" | "fal" = preferred;
 
     // Every authorization is a real reserve/settle cycle, and a provider that
     // rejects the session must
@@ -217,33 +277,28 @@ export async function POST(req: NextRequest) {
     const maxSessionDuration = reservedSeconds;
     const tokenDuration = Math.max(120, reservedSeconds + 120);
 
-    let sessionTransport: string;
+    let sessionTransport: "proxy-v1" | "fal-proxy-v1";
     const apiKey = ticket;
     let providerToken: string;
     // The Decart SDK returns expiresAt as a string; fal returns a Date.
     let tokenExpiresAt: Date | string;
-    if (provider === "fal") {
-      const endpoint = FAL_ENDPOINTS[model];
-      if (!endpoint) {
-        throw new RequestError(400, "This mode is not available on the fal provider yet.");
-      }
-      const falToken = await mintFalRealtimeToken(endpoint, FAL_TOKEN_TTL_SECONDS);
-      sessionTransport = "fal-proxy-v1";
-      providerToken = falToken.token;
-      tokenExpiresAt = falToken.expiresAt;
-    } else {
-      const decart = createDecartClient({ apiKey: permanentApiKey() });
-      const token = await decart.tokens.create({
-        // Only the authenticated proxy receives this provider credential.
-        expiresIn: tokenDuration,
-        allowedModels: [model],
-        allowedOrigins: [origin],
-        constraints: { realtime: { maxSessionDuration } },
-        metadata: { userId: user.uid, service: "savatar" },
-      });
-      sessionTransport = "proxy-v1";
-      providerToken = token.apiKey;
-      tokenExpiresAt = token.expiresAt;
+    // Mint against the preferred provider; on failure (key revoked, provider
+    // outage, endpoint refusal) retry once against the fallback. Both mints
+    // are free — billing starts only when a media session opens.
+    try {
+      const minted = await mintProviderSession(preferred, { model, origin, maxSessionDuration, tokenDuration, userId: user.uid });
+      provider = preferred;
+      sessionTransport = minted.transport;
+      providerToken = minted.token;
+      tokenExpiresAt = minted.expiresAt;
+    } catch (primaryError) {
+      if (!fallback) throw primaryError;
+      console.error(`Provider ${preferred} authorization failed, falling back to ${fallback}:`, primaryError instanceof Error ? primaryError.message : primaryError);
+      const minted = await mintProviderSession(fallback, { model, origin, maxSessionDuration, tokenDuration, userId: user.uid });
+      provider = fallback;
+      sessionTransport = minted.transport;
+      providerToken = minted.token;
+      tokenExpiresAt = minted.expiresAt;
     }
 
     // deadlineAt is the server-side hard deadline: activatedAt + reservedSeconds.
