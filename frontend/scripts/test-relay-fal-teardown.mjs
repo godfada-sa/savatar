@@ -5,7 +5,8 @@
 // real Firestore session (disposable user, deleted afterwards), so it can prove,
 // without touching production or fal:
 //   1. how many upstream sockets ONE client session opens while the provider
-//      keeps reporting "Concurrent session limit reached" (was 11, must be <= 3)
+//      keeps reporting "Concurrent session limit reached" (was 11, must be <= 2:
+//      the provider bills every open, even a refused one, so retries are dear)
 //   2. that every provider socket is released with a close frame, never killed
 //      at the TCP level (an abrupt kill leaves the provider holding the session,
 //      which is what keeps an account locked out after Stop)
@@ -138,9 +139,9 @@ ws.on("close", (code) => log(`CLIENT closed code=${code}`));
 ws.on("error", (e) => log(`CLIENT error: ${e.message}`));
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-// Observe the retry storm window before simulating a Stop.
-// Long enough to observe the whole retry schedule when the provider is busy.
-await wait(MODE === "busy" ? 34_000 : 4_000);
+// Observe the retry window before simulating a Stop. Long enough to watch the
+// whole schedule (one delayed re-open) when the provider is busy.
+await wait(MODE === "busy" ? 12_000 : 4_000);
 const stopAt = Date.now();
 
 if (MODE === "abrupt") {
@@ -177,8 +178,9 @@ const stillOpen = upstreams.filter((u) => !u.closed);
 const abrupt = upstreams.filter((u) => u.closed && !u.closed.graceful);
 
 const check = (ok, name, detail = "") => (ok ? PASS(name, detail) : FAIL(name, detail));
-// One initial attempt plus the schedule entries.
-const budget = MODE === "busy" ? 4 : 1;
+// One initial attempt plus the schedule entries. The schedule is a single retry
+// because every provider open is billed even when the provider refuses it.
+const budget = MODE === "busy" ? 2 : 1;
 
 check(upstreams.length <= budget, `provider sockets per Go Live = ${upstreams.length}`,
   MODE === "busy" ? `bounded at ${budget} across the whole schedule, was 11 before the fix` : "exactly one, as it must be");

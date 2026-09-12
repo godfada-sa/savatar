@@ -14,13 +14,16 @@ const CREDIT_SAFETY_RESERVE_MS = 5_000;
 // winding down on fal's side delays the stream instead of failing the paid one.
 //
 // fal does not free the account the moment a session closes: measured release
-// lag ranges from about four seconds to over thirty. The retry waits escalate to
-// cover that window without hammering, because a tight loop does not wait a slot
-// out — it competes for the same slot, opening a new session every couple of
-// seconds while the previous one is still being reaped. Past the last entry the
-// session is given up on, so a creator is never left hanging indefinitely.
-const FAL_CONCURRENCY_RETRY_SCHEDULE_MS = [4_000, 9_000, 15_000];
-const FAL_CONCURRENCY_WAIT_MS = 30_000;
+// lag is a few seconds after a clean close. The retry is deliberately a SINGLE
+// delayed re-open, enough to ride that out, because every re-open is a real
+// session on the provider side and the provider bills it even when it refuses
+// it — a measured Go Live that produced nothing but refusals still cost about
+// 12 cents. A longer escalating schedule therefore bought a couple of extra
+// seconds at several times the price, so past this one retry the session fails
+// fast with the provider's own message instead of paying for another doomed
+// attempt.
+const FAL_CONCURRENCY_RETRY_SCHEDULE_MS = [4_000];
+const FAL_CONCURRENCY_WAIT_MS = 8_000;
 // How long a released upstream may take to acknowledge a close frame before the
 // socket is torn down at the TCP level.
 const UPSTREAM_CLOSE_GRACE_MS = 1_000;
