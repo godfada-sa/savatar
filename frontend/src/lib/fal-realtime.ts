@@ -55,6 +55,15 @@ interface FalRealtimeOptions {
 // track-level check cannot cover it. Arming the deadline on acceptance is what
 // stops a blank session from being held (and paid for) indefinitely.
 const AI_FIRST_FRAME_TIMEOUT_MS = 15_000;
+// A media path that is STILL CONNECTING when the no-frame deadline arrives is
+// not the same as one that connected and stayed silent: measured on a real
+// session, ICE needed ~9s (TURN over mobile-friendly UDP) before "connected",
+// leaving no fair window inside a fixed 15s. Arming media's own deadline from
+// the moment the peer connection actually connects gives the provider the full
+// window to deliver its first frame — while an accepted session that never
+// connects at all still ends at the fixed acceptance deadline, so a black
+// screen can never be held open indefinitely.
+const AI_CONNECTED_FIRST_FRAME_TIMEOUT_MS = 15_000;
 // How long an ICE "disconnected" state may persist before it is treated as a
 // real loss (the state is often transient during a path switch).
 const CONNECTION_GRACE_MS = 5_000;
@@ -130,6 +139,11 @@ export function connectFalRealtime(options: FalRealtimeOptions): FalRealtimeConn
   let announced = false;
   let connectionGraceTimer: ReturnType<typeof setTimeout> | null = null;
   let outputWatchdog: ReturnType<typeof setTimeout> | null = null;
+  // When the provider accepted the session (billing starts) and when the media
+  // path actually connected — the two moments the no-frame deadline is measured
+  // from, whichever is later wins.
+  let acceptedAt = 0;
+  let connectedWatchdogArmedAt = 0;
 
   const setState = (next: FalConnectionState) => {
     if (disconnected) return;
@@ -185,10 +199,15 @@ export function connectFalRealtime(options: FalRealtimeOptions): FalRealtimeConn
   // (and billing starts) only then. Until it does, the creator keeps seeing the
   // camera instead of a black rectangle.
   const watchForFrames = (track: MediaStreamTrack, receiver: RTCRtpReceiver | null, onFrames: () => void) => {
-    // A declared track is also proof that the provider is generating, so it gets
-    // the same deadline as the acceptance watchdog.
-    armOutputWatchdog();
-    const startedAt = Date.now();
+    const deadline = () => {
+      // Before the media path exists, the acceptance deadline rules. Once the
+      // peer connection is connected, media gets its own full deadline counted
+      // from the connected moment (see AI_CONNECTED_FIRST_FRAME_TIMEOUT_MS).
+      if (pc?.connectionState === "connected" && connectedWatchdogArmedAt) {
+        return connectedWatchdogArmedAt + AI_CONNECTED_FIRST_FRAME_TIMEOUT_MS;
+      }
+      return acceptedAt + AI_FIRST_FRAME_TIMEOUT_MS;
+    };
     const poll = async () => {
       if (disconnected) return;
       if (announced) return;
@@ -206,7 +225,7 @@ export function connectFalRealtime(options: FalRealtimeOptions): FalRealtimeConn
         // Stats unavailable this tick; retry below.
       }
       if (decoded > 0 && track.readyState === "live" && !track.muted) { onFrames(); return; }
-      if (Date.now() - startedAt < AI_FIRST_FRAME_TIMEOUT_MS) {
+      if (Date.now() < deadline()) {
         setTimeout(poll, 250);
       } else {
         // A declared/unmuted track can still contain no video. Never replace
@@ -228,7 +247,13 @@ export function connectFalRealtime(options: FalRealtimeOptions): FalRealtimeConn
         ...(s.credential ? { credential: s.credential } : {}),
       }));
     pc = new RTCPeerConnection({ iceServers });
-    localStream.getTracks().forEach((track) => pc!.addTrack(track, localStream));
+    // Video-only toward the provider. The proven Node harness negotiates a bare
+    // video m-line and receives RTP from fal; every browser session that also
+    // offered the microphone (audio m-line plus Opus RTP flowing into fal's
+    // gateway) returned zero packets. The mic is merged into the viewer stream
+    // client-side in ontrack, so this costs nothing audibly — it only matches
+    // the offer shape fal demonstrably streams video against.
+    localStream.getVideoTracks().forEach((track) => pc!.addTrack(track, localStream));
 
     pc.ontrack = (event) => {
       if (disconnected) return;
@@ -277,6 +302,14 @@ export function connectFalRealtime(options: FalRealtimeOptions): FalRealtimeConn
       const state = pc.connectionState;
       if (state === "connected") {
         if (connectionGraceTimer) { clearTimeout(connectionGraceTimer); connectionGraceTimer = null; }
+        // The media path is up only now. Whatever is left of the acceptance
+        // deadline is unfair to a provider whose model needs seconds to warm
+        // up, so the no-frame window restarts from the connected moment.
+        if (!connectedWatchdogArmedAt && !announced && !disconnected) {
+          connectedWatchdogArmedAt = Date.now();
+          clearOutputWatchdog();
+          outputWatchdog = setTimeout(failWithoutOutput, AI_CONNECTED_FIRST_FRAME_TIMEOUT_MS);
+        }
         return;
       }
       if (state !== "failed" && state !== "disconnected") return;
@@ -301,6 +334,7 @@ export function connectFalRealtime(options: FalRealtimeOptions): FalRealtimeConn
     switch (result.type) {
       case "ready":
         setState("connected");
+        acceptedAt = Date.now();
         // Acceptance starts the provider's bill and may never produce a track.
         armOutputWatchdog();
         break;
@@ -309,12 +343,34 @@ export function connectFalRealtime(options: FalRealtimeOptions): FalRealtimeConn
       case "iceServers": {
         const servers = result.iceservers || result.iceServers || result.ice_servers || [];
         const peer = ensurePeerConnection(servers);
+        // Match the proven harness offer as closely as the browser allows:
+        // VP8 only, no RTP header extensions. The extra elements a default
+        // browser offer carries are things fal's raw media endpoint never
+        // proved it can handle, and its answer declares a track while its
+        // demuxer stays silent — so every non-essential part goes.
+        const videoTransceiver = peer
+          .getTransceivers()
+          .find((t) => t.sender.track?.kind === "video" || t.receiver.track?.kind === "video");
+        if (videoTransceiver && typeof videoTransceiver.setCodecPreferences === "function") {
+          const vp8 = RTCRtpSender.getCapabilities("video")?.codecs?.filter((c) => c.mimeType === "video/VP8") ?? [];
+          if (vp8.length) {
+            try { videoTransceiver.setCodecPreferences(vp8); } catch { /* preference is best-effort */ }
+          }
+        }
         const offer = await peer.createOffer();
-        await peer.setLocalDescription(offer);
+        // Strip the header extensions from the SDP before applying it, so the
+        // RTP we later send carries no extension bytes either (the browser adds
+        // them per the negotiated offer — werift must demux exactly what the
+        // offer advertised).
+        const bareSdp = offer.sdp
+          ?.split("\r\n")
+          .filter((line) => !line.startsWith("a=extmap:"))
+          .join("\r\n");
+        await peer.setLocalDescription({ type: offer.type, sdp: bareSdp });
         // Let ICE gathering finish so the offer can carry its candidates.
         const gathered = await waitForIceGathering(peer, ICE_GATHER_TIMEOUT_MS);
         trickleCandidates = !gathered;
-        connection?.send(encode({ type: "offer", sdp: peer.localDescription?.sdp ?? offer.sdp }));
+        connection?.send(encode({ type: "offer", sdp: peer.localDescription?.sdp ?? bareSdp }));
         break;
       }
 

@@ -131,6 +131,16 @@ export async function POST(req: NextRequest) {
     const model = typeof body.model === "string" ? body.model : "";
     if (!ALLOWED_MODELS.has(model)) throw new RequestError(400, "Unsupported realtime model");
 
+    // Kill switch for paid AI sessions. fal bills every accepted realtime
+    // session by wall time whether or not a single frame is delivered, so
+    // while the provider silently returns zero video, every Go Live is a
+    // paid blank screen. Setting AI_STREAMS_DISABLED=1 (Vercel env) rejects
+    // authorizations BEFORE the rate limit or any wallet reservation —
+    // nothing is charged, nothing is reserved, nobody's attempt is consumed.
+    if (process.env.AI_STREAMS_DISABLED === "1") {
+      throw new RequestError(503, "Go Live is temporarily paused while we fix an AI provider issue. Nothing was charged — please check back soon.");
+    }
+
     const provider = isFalProviderEnabled() ? "fal" : "decart";
     if (provider === "fal" && !FAL_ENDPOINTS[model]) {
       throw new RequestError(400, "This mode is not available on the configured AI provider.");
