@@ -120,6 +120,7 @@ export default function Dashboard() {
   const isDecartActiveRef = useRef(false);
   // Diagnostic provider counter plus heartbeat throttle.
   const lastTickSecondsRef = useRef(0);
+  const lastHeartbeatPhaseRef = useRef<"connected" | "generating" | null>(null);
   const lastHeartbeatSentAtRef = useRef(0);
 
   // Report liveness and diagnostics. Billing is always server-authoritative.
@@ -128,8 +129,14 @@ export default function Dashboard() {
     const token = idTokenRef.current;
     if (!sid || !token) return;
     const now = Date.now();
-    if (now - lastHeartbeatSentAtRef.current < 8_000) return; // throttle ~7/min
+    // The connected→generating upgrade must never be throttled away: the server
+    // starts the billable window from the first "generating" heartbeat, and the
+    // throttle (armed by the "connected" heartbeat sent moments earlier) would
+    // otherwise drop exactly that one call.
+    const upgrade = phase === "generating" && lastHeartbeatPhaseRef.current !== "generating";
+    if (!upgrade && now - lastHeartbeatSentAtRef.current < 8_000) return; // throttle ~7/min
     lastHeartbeatSentAtRef.current = now;
+    lastHeartbeatPhaseRef.current = phase;
     void fetch("/api/streaming/heartbeat", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
@@ -641,7 +648,9 @@ export default function Dashboard() {
             onRemoteStream: attachTransformedStream,
             onGenerationTick: (seconds) => {
               lastTickSecondsRef.current = Math.max(lastTickSecondsRef.current, Math.floor(Number(seconds) || 0));
-              sendStreamHeartbeat(lastTickSecondsRef.current);
+              // "generating" is what starts the billable window on the server;
+              // fal ticks only flow once frames are actually decoding.
+              sendStreamHeartbeat(lastTickSecondsRef.current, "generating");
             },
             onError: (err) => {
               console.error("fal error:", err);
