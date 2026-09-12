@@ -67,33 +67,27 @@ const AI_CONNECTED_FIRST_FRAME_TIMEOUT_MS = 15_000;
 // How long an ICE "disconnected" state may persist before it is treated as a
 // real loss (the state is often transient during a path switch).
 const CONNECTION_GRACE_MS = 5_000;
+// Mirrors fal's reference client (@fal-ai/client src/realtime/lucy.js): if the
+// `ready` frame carries no ICE servers, wait this long for a separate
+// `iceservers` frame before falling back to plain STUN and starting anyway.
+const ICE_SERVER_GRACE_MS = 1_000;
 
-// fal only forms the media path when the offer already carries the ICE
-// candidates. Measured against the real service (sessions gen=25–125s on
-// Sep 11 while this shape was live): a trickled offer — candidates sent as
-// their own messages, which is what browsers do by default — leaves ICE
-// stuck at the provider and returns zero RTP, while the same offer with
-// candidates inline connects and returns video. So gathering is allowed to
-// finish first, and trickling is kept only as a fallback for when gathering
-// does not complete in time.
-const ICE_GATHER_TIMEOUT_MS = 3_000;
-
-function waitForIceGathering(pc: RTCPeerConnection, timeoutMs: number): Promise<boolean> {
-  if (pc.iceGatheringState === "complete") return Promise.resolve(true);
-  return new Promise((resolve) => {
-    let settled = false;
-    const finish = (gathered: boolean) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      pc.removeEventListener("icegatheringstatechange", onChange);
-      resolve(gathered);
-    };
-    const onChange = () => { if (pc.iceGatheringState === "complete") finish(true); };
-    pc.addEventListener("icegatheringstatechange", onChange);
-    const timer = setTimeout(() => finish(pc.iceGatheringState === "complete"), timeoutMs);
-  });
-}
+// WebRTC handshake shape — PORTED FROM fal's reference client
+// (@fal-ai/client src/realtime/lucy.js, "fal/lucy-webrtc" extension).
+// Every deviation we previously shipped (gathered inline candidates,
+// VP8-only codec prefs, stripped RTP header extensions, video-only track
+// sets) made our offers look foreign to fal's media servers, which answer
+// but never return a single RTP packet. The reference is the contract; we
+// now match it exactly and keep only our billing watchdogs on top:
+//   * all local tracks are added, audio included, in stream order
+//   * the offer is the bare createOffer() SDP — no gathering wait, no SDP
+//     rewriting, no codec preferences
+//   * ICE trickles: local candidates are sent as their own messages, remote
+//     candidates arriving pre-answer are buffered and flushed after it
+//   * `ready` may itself carry ICE servers (any of the three known spellings)
+//     and the peer is created from them immediately; otherwise a separate
+//     `iceservers` frame is awaited within a 1s grace, then plain-STUN
+//     fallback applies
 
 interface FalResult {
   type?: string;
@@ -133,8 +127,8 @@ export function connectFalRealtime(options: FalRealtimeOptions): FalRealtimeConn
   // which silently dropped ICE and left a negotiated track with no media.
   let remoteDescriptionSet = false;
   const pendingRemoteCandidates: RTCIceCandidateInit[] = [];
-  // Whether candidates still need to be sent separately (see the offer above).
-  let trickleCandidates = false;
+  // True once the reference-shaped offer has been sent for this session.
+  let peerSignaled = false;
   // True once the transformed track has actually decoded frames.
   let announced = false;
   let connectionGraceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -236,24 +230,36 @@ export function connectFalRealtime(options: FalRealtimeOptions): FalRealtimeConn
     void poll();
   };
 
-  // ── WebRTC negotiation ─────────────────────────────────────────────
-  const ensurePeerConnection = (servers: NonNullable<FalResult["iceServers"]>) => {
+  // ── WebRTC negotiation (ported from @fal-ai/client src/realtime/lucy.js) ──
+  // fal's reference builds the peer connection from the ICE servers the service
+  // hands over, adds ALL local tracks (audio included), sends the bare
+  // createOffer() SDP, trickles candidates, and buffers remote candidates until
+  // the answer lands. We mirror that contract exactly — the only additions are
+  // our own billing watchdogs, which live above the transport and change
+  // nothing about the wire shape.
+  const FALLBACK_ICE_SERVERS: RTCIceServer[] = [{ urls: "stun:stun.l.google.com:19302" }];
+  let iceServerGraceTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const createPeer = (servers: Array<{ urls?: string | string[]; username?: string; credential?: string }> | null | undefined) => {
     if (pc) return pc;
-    const iceServers: RTCIceServer[] = servers
+    const iceServers: RTCIceServer[] = (servers ?? FALLBACK_ICE_SERVERS)
       .filter((s) => !!s.urls)
       .map((s) => ({
         urls: s.urls as string | string[],
         ...(s.username ? { username: s.username } : {}),
         ...(s.credential ? { credential: s.credential } : {}),
       }));
-    pc = new RTCPeerConnection({ iceServers });
-    // Video-only toward the provider. The proven Node harness negotiates a bare
-    // video m-line and receives RTP from fal; every browser session that also
-    // offered the microphone (audio m-line plus Opus RTP flowing into fal's
-    // gateway) returned zero packets. The mic is merged into the viewer stream
-    // client-side in ontrack, so this costs nothing audibly — it only matches
-    // the offer shape fal demonstrably streams video against.
-    localStream.getVideoTracks().forEach((track) => pc!.addTrack(track, localStream));
+    pc = new RTCPeerConnection({ iceServers: iceServers.length ? iceServers : FALLBACK_ICE_SERVERS });
+
+    // Reference behavior: every local track joins the session, audio included,
+    // each tagged with its owning stream. (Track COUNT matters upstream: a
+    // valid-but-empty stream would otherwise produce an offer with no video
+    // media section at all — the reference adds a recvonly video transceiver
+    // in that case; the studio always has a live camera before Go Live.)
+    const localTracks = localStream.getTracks();
+    for (const track of localTracks) {
+      pc.addTrack(track, localStream);
+    }
 
     pc.ontrack = (event) => {
       if (disconnected) return;
@@ -283,10 +289,11 @@ export function connectFalRealtime(options: FalRealtimeOptions): FalRealtimeConn
       watchForFrames(videoTracks[0], event.receiver ?? null, announce);
     };
 
+    // Reference behavior: trickle unconditionally — every local candidate goes
+    // out as its own message the moment gathering produces it. No gathering
+    // wait, no inline candidates, no SDP rewriting.
     pc.onicecandidate = (event) => {
-      // Only when gathering did not finish in time: otherwise the candidates
-      // are already inside the offer fal accepted.
-      if (disconnected || !event.candidate || !connection || !trickleCandidates) return;
+      if (disconnected || !event.candidate || !connection) return;
       connection.send(encode({
         type: "icecandidate",
         candidate: {
@@ -330,47 +337,55 @@ export function connectFalRealtime(options: FalRealtimeOptions): FalRealtimeConn
     return pc;
   };
 
+  // Reference flow: the `ready` frame may carry ICE servers itself; if it does
+  // not, a separate `iceservers` frame is awaited inside a 1s grace before the
+  // plain-STUN fallback builds the peer. Either way the peer is created the
+  // moment servers are known — never deferred to a later frame.
+  const initializePeerFromReady = (servers: FalResult["iceServers"]) => {
+    if (iceServerGraceTimer) { clearTimeout(iceServerGraceTimer); iceServerGraceTimer = null; }
+    createPeer(servers ?? undefined);
+    const peer = pc;
+    if (!peer || peerSignaled) return;
+    peerSignaled = true;
+    void (async () => {
+      const offer = await peer.createOffer();
+      await peer.setLocalDescription(offer);
+      connection?.send(encode({ type: "offer", sdp: offer.sdp }));
+    })().catch((error) => {
+      onError?.(error instanceof Error ? error : new Error("The AI session could not start."));
+    });
+  };
+
   const handleResult = async (result: FalResult) => {
     switch (result.type) {
-      case "ready":
+      case "ready": {
         setState("connected");
         acceptedAt = Date.now();
         // Acceptance starts the provider's bill and may never produce a track.
         armOutputWatchdog();
+        // Reference flow: `ready` itself may carry the ICE servers (any of the
+        // three known spellings). Build the peer from them right away; only a
+        // server-less `ready` starts the 1s grace for a separate frame.
+        const supplied = result.iceServers ?? result.ice_servers ?? result.iceservers;
+        if (supplied && supplied.length) {
+          initializePeerFromReady(supplied);
+        } else {
+          if (iceServerGraceTimer) clearTimeout(iceServerGraceTimer);
+          iceServerGraceTimer = setTimeout(() => {
+            iceServerGraceTimer = null;
+            if (!disconnected && !pc) initializePeerFromReady(null);
+          }, ICE_SERVER_GRACE_MS);
+        }
         break;
+      }
 
       case "iceservers":
       case "iceServers": {
-        const servers = result.iceservers || result.iceServers || result.ice_servers || [];
-        const peer = ensurePeerConnection(servers);
-        // Match the proven harness offer as closely as the browser allows:
-        // VP8 only, no RTP header extensions. The extra elements a default
-        // browser offer carries are things fal's raw media endpoint never
-        // proved it can handle, and its answer declares a track while its
-        // demuxer stays silent — so every non-essential part goes.
-        const videoTransceiver = peer
-          .getTransceivers()
-          .find((t) => t.sender.track?.kind === "video" || t.receiver.track?.kind === "video");
-        if (videoTransceiver && typeof videoTransceiver.setCodecPreferences === "function") {
-          const vp8 = RTCRtpSender.getCapabilities("video")?.codecs?.filter((c) => c.mimeType === "video/VP8") ?? [];
-          if (vp8.length) {
-            try { videoTransceiver.setCodecPreferences(vp8); } catch { /* preference is best-effort */ }
-          }
-        }
-        const offer = await peer.createOffer();
-        // Strip the header extensions from the SDP before applying it, so the
-        // RTP we later send carries no extension bytes either (the browser adds
-        // them per the negotiated offer — werift must demux exactly what the
-        // offer advertised).
-        const bareSdp = offer.sdp
-          ?.split("\r\n")
-          .filter((line) => !line.startsWith("a=extmap:"))
-          .join("\r\n");
-        await peer.setLocalDescription({ type: offer.type, sdp: bareSdp });
-        // Let ICE gathering finish so the offer can carry its candidates.
-        const gathered = await waitForIceGathering(peer, ICE_GATHER_TIMEOUT_MS);
-        trickleCandidates = !gathered;
-        connection?.send(encode({ type: "offer", sdp: peer.localDescription?.sdp ?? bareSdp }));
+        // Reference behavior: if the peer already exists (built during the
+        // ready-frame grace), a late ICE-server config cannot join the running
+        // negotiation and is dropped — fal's client surfaces a warning instead.
+        if (pc) break;
+        initializePeerFromReady(result.iceservers || result.iceServers || result.ice_servers);
         break;
       }
 
@@ -413,9 +428,9 @@ export function connectFalRealtime(options: FalRealtimeOptions): FalRealtimeConn
           }
           const offer = await pc.createOffer({ iceRestart: true });
           await pc.setLocalDescription(offer);
-          const gathered = await waitForIceGathering(pc, ICE_GATHER_TIMEOUT_MS);
-          trickleCandidates = !gathered;
-          connection?.send(encode({ type: "offer", sdp: pc.localDescription?.sdp ?? offer.sdp }));
+          // Same wire shape as the initial offer: bare SDP, candidates trickle
+          // from onicecandidate as usual.
+          connection?.send(encode({ type: "offer", sdp: offer.sdp }));
         }
         break;
 
@@ -495,6 +510,7 @@ export function connectFalRealtime(options: FalRealtimeOptions): FalRealtimeConn
       stopGenerationTimer();
       clearOutputWatchdog();
       if (connectionGraceTimer) { clearTimeout(connectionGraceTimer); connectionGraceTimer = null; }
+      if (iceServerGraceTimer) { clearTimeout(iceServerGraceTimer); iceServerGraceTimer = null; }
       pendingRemoteCandidates.length = 0;
       if (pc) {
         pc.close();
