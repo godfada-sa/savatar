@@ -22,6 +22,29 @@ function canvasToWebp(canvas: HTMLCanvasElement): Promise<Blob> {
   });
 }
 
+/**
+ * Convert a stored reference image into a Blob without network activity.
+ * fetch() on a data: URL violates CSP connect-src in Chromium and is rejected
+ * outright in Safari, which killed every AI session that attached a character
+ * reference. Data URLs are decoded locally; remote URLs still use fetch.
+ */
+export async function dataUrlToBlob(dataUrl: string): Promise<Blob> {
+  if (!dataUrl.startsWith("data:")) {
+    const response = await fetch(dataUrl);
+    if (!response.ok) throw new Error("The reference image could not be loaded.");
+    return response.blob();
+  }
+  const commaAt = dataUrl.indexOf(",");
+  const meta = dataUrl.slice(5, commaAt);
+  const isBase64 = /;base64$/i.test(meta);
+  const mime = meta.replace(/;base64$/i, "") || "application/octet-stream";
+  const raw = dataUrl.slice(commaAt + 1);
+  const binary = isBase64 ? atob(raw) : decodeURIComponent(raw);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return new Blob([bytes], { type: mime });
+}
+
 /** Validate provider constraints and shrink large images before local storage. */
 export async function prepareReferenceImage(file?: File): Promise<string> {
   if (!file || !ACCEPTED_REFERENCE_TYPES.has(file.type) || file.size > MAX_REFERENCE_BYTES) {

@@ -6,7 +6,7 @@ import { io, Socket } from "socket.io-client";
 import { useAuth } from "@/lib/auth-context";
 import { getIceServers, signalingUrl } from "@/lib/client-config";
 import { getOrCreateStreamRoomId } from "@/lib/stream-room";
-import { prepareReferenceImage, savePreparedReferenceImage } from "@/lib/reference-image";
+import { prepareReferenceImage, savePreparedReferenceImage, dataUrlToBlob } from "@/lib/reference-image";
 import { FULL_BODY_SWAP_PROMPT, FULL_OUTFIT_SWAP_PROMPT } from "@/lib/ai-prompts";
 import { clearLiveSessionDisplay, publishLiveSessionDisplay } from "@/lib/live-session-display";
 import DashboardLayout from "@/components/DashboardLayout";
@@ -31,19 +31,34 @@ const DEFAULT_PROMPTS: Record<Mode, string> = {
 
 const LEGACY_FULL_BODY_SWAP_PROMPT = "Replace the visible person's full body, face, hair, clothing, and visible limbs with the character from the reference image. Preserve pose, motion, framing, and background.";
 
+// Lucy 2.5 rejects prompts over this length outright ("Prompt is too long"),
+// which killed the AI session right after the media path connected — the base
+// swap prompt itself exceeded the limit. Clamp every prompt to fit, cutting
+// back to the last complete sentence so the model always gets coherent text.
+const LUCY_PROMPT_LIMIT = 1015;
+
+function clampPrompt(text: string): string {
+  const trimmed = text.trim();
+  if (trimmed.length <= LUCY_PROMPT_LIMIT) return trimmed;
+  const cut = trimmed.slice(0, LUCY_PROMPT_LIMIT);
+  const lastSentenceEnd = Math.max(cut.lastIndexOf(". "), cut.lastIndexOf(".\n"));
+  return (lastSentenceEnd > LUCY_PROMPT_LIMIT * 0.5 ? cut.slice(0, lastSentenceEnd + 1) : cut).trim();
+}
+
 function streamPrompt(mode: Mode, savedPrompt: string, hasReference: boolean) {
   if (hasReference && mode === "vton") {
-    return FULL_OUTFIT_SWAP_PROMPT;
+    return clampPrompt(FULL_OUTFIT_SWAP_PROMPT);
   }
   if (hasReference) {
     const saved = savedPrompt.trim();
-    if (!saved) return FULL_BODY_SWAP_PROMPT;
-    if (saved.includes(FULL_BODY_SWAP_PROMPT)) return saved;
+    if (!saved) return clampPrompt(FULL_BODY_SWAP_PROMPT);
+    if (saved.includes(FULL_BODY_SWAP_PROMPT)) return clampPrompt(saved);
     const modifiers = saved.replace(LEGACY_FULL_BODY_SWAP_PROMPT, "").trim();
-    return modifiers ? `${FULL_BODY_SWAP_PROMPT} ${modifiers}` : FULL_BODY_SWAP_PROMPT;
+    if (!modifiers) return clampPrompt(FULL_BODY_SWAP_PROMPT);
+    return clampPrompt(`${FULL_BODY_SWAP_PROMPT} ${modifiers}`);
   }
-  if (savedPrompt.trim()) return savedPrompt.trim();
-  return DEFAULT_PROMPTS[mode];
+  if (savedPrompt.trim()) return clampPrompt(savedPrompt);
+  return clampPrompt(DEFAULT_PROMPTS[mode]);
 }
 
 type DecartModelId = "lucy-2.5" | "lucy-restyle-2" | "lucy-vton-3.5";
@@ -234,7 +249,7 @@ export default function Dashboard() {
       enhance: true,
     };
     if (referenceImage !== appliedReferenceRef.current) {
-      update.image = referenceImage ? await (await fetch(referenceImage)).blob() : null;
+      update.image = referenceImage ? await dataUrlToBlob(referenceImage) : null;
     }
     await client.set(update);
     appliedReferenceRef.current = referenceImage;
@@ -644,7 +659,7 @@ export default function Dashboard() {
         const model = models.realtime(modelId as Parameters<typeof models.realtime>[0]);
         const client = createDecartClient({ apiKey: tokenResult.apiKey,
           realtimeBaseUrl: signalingUrl.replace(/^http/, "ws"), telemetry: false });
-        const initialImage = referenceImage ? await (await fetch(referenceImage)).blob() : undefined;
+        const initialImage = referenceImage ? await dataUrlToBlob(referenceImage) : undefined;
         appliedReferenceRef.current = referenceImage;
         const initialPrompt = streamPrompt(activeMode, prompt, Boolean(referenceImage));
         appliedPromptRef.current = initialPrompt;
