@@ -1,0 +1,33 @@
+# Keep the Render free-tier signaling backend warm.
+#
+# Render spins the service down after ~15 minutes without inbound traffic,
+# and a cold start takes 30-60s — long enough for a creator's Go Live to
+# fail with "Load failed" while the WebSocket upgrade times out. This
+# workflow pings /health every 10 minutes so the service never sleeps.
+# (Render treats any HTTPS request as activity; /health is the cheapest.)
+#
+# Note: GitHub disables scheduled workflows after ~60 days without repo
+# activity — an occasional push keeps this alive, or trigger it manually
+# via workflow_dispatch.
+name: Keep signaling backend warm
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Ping health endpoint
+        run: |
+          for i in 1 2 3; do
+            code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 https://savatar-signaling.onrender.com/health || true)
+            echo "attempt $i: HTTP $code"
+            [ "$code" = "200" ] && exit 0
+            sleep 15
+          done
+          echo "backend did not answer 200 after retries" >&2
+          exit 1
