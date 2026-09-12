@@ -92,7 +92,11 @@ export async function POST(req: NextRequest) {
       // and relayed Fal sessions here so Stop refunds and releases the global
       // provider lock atomically instead of depending on a later relay callback.
       if (session.transport === "fal-realtime" || session.transport === "fal-proxy-v1") {
-        const usedSeconds = authoritativeFalUsageSeconds(session, endedAtMs);
+        // Stop is a deliberate user action: the client was provably alive at
+        // this instant. Pass it as a live-heartbeat override so the 1-second
+        // crash ceiling (meant for vanished clients) cannot under-bill the
+        // final real seconds of a normal stop.
+        const usedSeconds = authoritativeFalUsageSeconds(session, endedAtMs, endedAtMs);
         const unusedSeconds = reservedSeconds - usedSeconds;
         const deadlineHit = endedAtMs >= (session.deadlineAt?.toMillis?.() ?? Infinity);
         if (unusedSeconds > 0) {

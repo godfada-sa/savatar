@@ -32,8 +32,8 @@ const UPSTREAM_CLOSE_GRACE_MS = 1_000;
 // arrives and the provider session keeps running and billing until the paid
 // deadline — minutes of AI time nobody used. Ping the browser and end the
 // session once it stops answering; the browser replies to pings on its own.
-const CLIENT_PING_INTERVAL_MS = 5_000;
-const CLIENT_LIVENESS_TIMEOUT_MS = 15_000;
+const CLIENT_PING_INTERVAL_MS = 3_000;
+const CLIENT_LIVENESS_TIMEOUT_MS = 9_000;
 // fal reports the rejection a fraction of a second after the messages it sends
 // on a socket it accepted, so the acceptance window is idle-based: it restarts
 // on every upstream message and only flushes once fal has gone quiet. The
@@ -104,9 +104,18 @@ async function settleSession(db, ref, usedSeconds, reconciliationRequired = fals
     // charge for a reserved token or an empty negotiated track: generation is
     // billable only after the frame-confirmed client heartbeat is recorded.
     const generatedAt = data.generationStartedAt?.toMillis?.() ?? data.generationStartedAt?.getTime?.();
-    const measuredFalSeconds = Number.isFinite(generatedAt)
+    let measuredFalSeconds = Number.isFinite(generatedAt)
       ? Math.max(0, Math.ceil((Date.now() - generatedAt) / 1000))
       : 0;
+    // Crash protection: a vanished browser stops heartbeating. Bill at most
+    // ONE second past the last heartbeat (the end route overrides this for
+    // deliberate Stops by passing its own live timestamp), so a user's crash
+    // costs ~what they watched instead of the detection window.
+    const lastHeartbeatAt = data.lastHeartbeatAt?.toMillis?.() ?? data.lastHeartbeatAt?.getTime?.();
+    if (Number.isFinite(lastHeartbeatAt) && Number.isFinite(generatedAt)) {
+      const ceiling = Math.max(0, Math.ceil((lastHeartbeatAt + 1_000 - generatedAt) / 1000));
+      measuredFalSeconds = Math.min(measuredFalSeconds, ceiling);
+    }
     const providerSeconds = data.transport === "fal-proxy-v1" ? measuredFalSeconds : usedSeconds;
     const used = Math.max(0, Math.min(data.reservedSeconds, accumulated + Math.ceil(providerSeconds)));
     if (!Number.isSafeInteger(used)) throw new Error("Invalid provider usage");
@@ -122,6 +131,16 @@ async function settleSession(db, ref, usedSeconds, reconciliationRequired = fals
       accumulatedSeconds: FieldValue.delete() });
     tx.update(db.collection("transactions").doc(`stream-${ref.id}`), updates);
     if (lockSnapshot.data()?.sessionId === ref.id) tx.delete(lockRef);
+    // fal holds its account-wide slot for a while after every session (and each
+    // refused connect re-arms that cooldown). Record when this fal session
+    // ended so the token route can send the NEXT user to the fallback provider
+    // during the cooldown window instead of burning billed refusals on fal.
+    if (data.transport === "fal-proxy-v1") {
+      tx.set(db.collection("providerCooldowns").doc("fal"), {
+        until: FieldValue.serverTimestamp(),
+        note: "set at settle time; the token route adds its own 45s",
+      });
+    }
   });
 }
 

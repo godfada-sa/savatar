@@ -40,6 +40,7 @@ function timestampMillis(value: unknown): number | null {
 export function authoritativeFalUsageSeconds(
   session: Record<string, unknown>,
   endedAtMs = Date.now(),
+  liveHeartbeatOverrideMs?: number,
 ) {
   const reserved = Math.floor(Number(session.reservedSeconds ?? 0));
   if (!Number.isSafeInteger(reserved) || reserved <= 0) return 0;
@@ -49,7 +50,19 @@ export function authoritativeFalUsageSeconds(
 
   const deadlineAt = timestampMillis(session.deadlineAt) ?? (startedAt + reserved * 1000);
   const tokenExpiresAt = timestampMillis(session.tokenExpiresAt) ?? deadlineAt;
-  const billableEnd = Math.min(endedAtMs, deadlineAt, tokenExpiresAt);
+  // A crashed browser stops heartbeating. The relay normally notices the dead
+  // socket within ~15s and settles with exact usage — the ceiling below never
+  // binds there. It only matters when the relay ALSO died (nothing settles
+  // until the next sweep): the user then pays at most ONE second past their
+  // last heartbeat, so a crash costs ~what was actually watched. A caller that
+  // knows the client was alive at `endedAtMs` (the Stop route) passes it as
+  // liveHeartbeatOverrideMs so the final real seconds still bill.
+  const lastHeartbeatMs = timestampMillis(session.lastHeartbeatAt);
+  const effectiveHeartbeatMs = liveHeartbeatOverrideMs !== undefined
+    ? Math.max(lastHeartbeatMs ?? 0, liveHeartbeatOverrideMs)
+    : lastHeartbeatMs;
+  const heartbeatCeiling = effectiveHeartbeatMs !== null ? effectiveHeartbeatMs + 1_000 : Infinity;
+  const billableEnd = Math.min(endedAtMs, deadlineAt, tokenExpiresAt, heartbeatCeiling);
   return Math.max(0, Math.min(reserved, Math.ceil((billableEnd - startedAt) / 1000)));
 }
 

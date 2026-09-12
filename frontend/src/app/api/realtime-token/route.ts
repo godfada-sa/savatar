@@ -1,6 +1,6 @@
 import { createDecartClient } from "@decartai/sdk";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { FieldValue } from "firebase-admin/firestore";
+import { FieldValue, type Firestore } from "firebase-admin/firestore";
 import { NextRequest } from "next/server";
 import { getAdminServices } from "@/lib/firebase-admin";
 import { streamLockRefs } from "@/lib/stream-sessions";
@@ -50,9 +50,9 @@ function isFalProviderEnabled() {
  * Both mints are free (billing starts only when a media session opens), so
  * trying the primary first costs nothing.
  */
-function resolveProviderOrder(model: string): { preferred: "decart" | "fal"; fallback: "decart" | "fal" | null } {
+function resolveProviderOrder(model: string, falCoolingDown = false): { preferred: "decart" | "fal"; fallback: "decart" | "fal" | null } {
   const decartReady = Boolean(process.env.DECART_API_KEY);
-  const falReady = isFalProviderEnabled();
+  const falReady = isFalProviderEnabled() && !falCoolingDown;
   // fal does not serve every model (see FAL_ENDPOINTS); Decart serves all of
   // ALLOWED_MODELS, so a model-capable provider always sorts first.
   const candidates: Array<"decart" | "fal"> = [];
@@ -70,6 +70,23 @@ function resolveProviderOrder(model: string): { preferred: "decart" | "fal"; fal
     throw new RequestError(503, "No AI provider is configured for this stream. Please contact support.");
   }
   return { preferred: order[0], fallback: order[1] ?? null };
+}
+
+/**
+ * fal keeps its account-wide slot warm for a while after each session ends —
+ * and every connect attempt during that window is a BILLED refusal that also
+ * re-arms the cooldown. The relay stamps providerCooldowns/fal at settle time;
+ * a session that ended less than 45s ago routes new users to the fallback
+ * instead of hammering fal. No-op when the doc is missing or stale.
+ */
+async function falCooldownActive(db: Firestore): Promise<boolean> {
+  try {
+    const snap = await db.collection("providerCooldowns").doc("fal").get();
+    const endedAt = snap.data()?.until?.toMillis?.();
+    return typeof endedAt === "number" && Date.now() - endedAt < 45_000;
+  } catch {
+    return false;
+  }
 }
 
 function permanentApiKey() {
@@ -203,7 +220,9 @@ export async function POST(req: NextRequest) {
     }
 
     // Decart first, fal as automatic fallback (AI_PROVIDER overrides the order).
-    const { preferred, fallback } = resolveProviderOrder(model);
+    // During fal's post-session slot cooldown the order flips automatically so
+    // the next creator connects on the first try instead of a billed refusal.
+    const { preferred, fallback } = resolveProviderOrder(model, await falCooldownActive(db));
     let provider: "decart" | "fal" = preferred;
 
     // Every authorization is a real reserve/settle cycle, and a provider that
