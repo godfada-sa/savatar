@@ -315,7 +315,10 @@ function attachDecartProxy(server, { allowedOrigins, getDb }) {
         probeTimer = null;
         const buffered = probeBuffer;
         probeBuffer = [];
-        if (startedAt === null) startedAt = Date.now();
+        // Only a provider that actually SAID something has accepted the session.
+        // fal closes wind-down connections silently; billing (and the
+        // close-before-acceptance retry) must treat that as "never accepted".
+        if (startedAt === null && buffered.length > 0) startedAt = Date.now();
         for (const item of buffered) forwardToClient(item.raw, item.binary);
       };
       // Re-arm the acceptance window. Returns false once the cap is reached, at
@@ -326,6 +329,18 @@ function attachDecartProxy(server, { allowedOrigins, getDb }) {
         if (remainingCap <= 0) { flushProbe(); return false; }
         probeTimer = setTimeout(flushProbe, Math.min(FAL_ACCEPT_IDLE_MS, remainingCap));
         return true;
+      };
+      // fal chats a `timings` message every few hundred milliseconds while it
+      // sets the runner up. Re-arming the acceptance window on that chatter held
+      // the whole burst for FAL_ACCEPT_MAX_MS, and the browser cannot even build
+      // its WebRTC offer until it has received `iceServers` — so a 6s hold sent
+      // the offer so late that the provider accepted it, answered it, and then
+      // never started producing video at all (a blank AI output with a
+      // healthy-looking handshake). Arm once: a concurrency rejection follows
+      // fal's ack immediately, so a single window still catches it.
+      const noteProbeMessage = () => {
+        if (probeTimer) return;
+        armProbe();
       };
       const retryFalUpstream = () => {
         if (finished || !isFal) return;
@@ -401,7 +416,7 @@ function attachDecartProxy(server, { allowedOrigins, getDb }) {
             // reach the browser (which would tear the paid session down).
             if (raw.includes(FAL_CONCURRENCY_MARKER)) { lastRejection = { raw, binary }; retryFalUpstream(); return; }
             probeBuffer.push({ raw, binary });
-            armProbe();
+            noteProbeMessage();
             return;
           }
           forwardToClient(raw, binary);

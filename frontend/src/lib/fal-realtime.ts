@@ -59,6 +59,33 @@ const AI_FIRST_FRAME_TIMEOUT_MS = 15_000;
 // real loss (the state is often transient during a path switch).
 const CONNECTION_GRACE_MS = 5_000;
 
+// fal only forms the media path when the offer already carries the ICE
+// candidates. Measured against the real service (sessions gen=25–125s on
+// Sep 11 while this shape was live): a trickled offer — candidates sent as
+// their own messages, which is what browsers do by default — leaves ICE
+// stuck at the provider and returns zero RTP, while the same offer with
+// candidates inline connects and returns video. So gathering is allowed to
+// finish first, and trickling is kept only as a fallback for when gathering
+// does not complete in time.
+const ICE_GATHER_TIMEOUT_MS = 3_000;
+
+function waitForIceGathering(pc: RTCPeerConnection, timeoutMs: number): Promise<boolean> {
+  if (pc.iceGatheringState === "complete") return Promise.resolve(true);
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (gathered: boolean) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      pc.removeEventListener("icegatheringstatechange", onChange);
+      resolve(gathered);
+    };
+    const onChange = () => { if (pc.iceGatheringState === "complete") finish(true); };
+    pc.addEventListener("icegatheringstatechange", onChange);
+    const timer = setTimeout(() => finish(pc.iceGatheringState === "complete"), timeoutMs);
+  });
+}
+
 interface FalResult {
   type?: string;
   sdp?: string | null;
@@ -97,6 +124,8 @@ export function connectFalRealtime(options: FalRealtimeOptions): FalRealtimeConn
   // which silently dropped ICE and left a negotiated track with no media.
   let remoteDescriptionSet = false;
   const pendingRemoteCandidates: RTCIceCandidateInit[] = [];
+  // Whether candidates still need to be sent separately (see the offer above).
+  let trickleCandidates = false;
   // True once the transformed track has actually decoded frames.
   let announced = false;
   let connectionGraceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -230,7 +259,9 @@ export function connectFalRealtime(options: FalRealtimeOptions): FalRealtimeConn
     };
 
     pc.onicecandidate = (event) => {
-      if (disconnected || !event.candidate || !connection) return;
+      // Only when gathering did not finish in time: otherwise the candidates
+      // are already inside the offer fal accepted.
+      if (disconnected || !event.candidate || !connection || !trickleCandidates) return;
       connection.send(encode({
         type: "icecandidate",
         candidate: {
@@ -280,7 +311,10 @@ export function connectFalRealtime(options: FalRealtimeOptions): FalRealtimeConn
         const peer = ensurePeerConnection(servers);
         const offer = await peer.createOffer();
         await peer.setLocalDescription(offer);
-        connection?.send(encode({ type: "offer", sdp: offer.sdp }));
+        // Let ICE gathering finish so the offer can carry its candidates.
+        const gathered = await waitForIceGathering(peer, ICE_GATHER_TIMEOUT_MS);
+        trickleCandidates = !gathered;
+        connection?.send(encode({ type: "offer", sdp: peer.localDescription?.sdp ?? offer.sdp }));
         break;
       }
 
@@ -323,7 +357,9 @@ export function connectFalRealtime(options: FalRealtimeOptions): FalRealtimeConn
           }
           const offer = await pc.createOffer({ iceRestart: true });
           await pc.setLocalDescription(offer);
-          connection?.send(encode({ type: "offer", sdp: offer.sdp }));
+          const gathered = await waitForIceGathering(pc, ICE_GATHER_TIMEOUT_MS);
+          trickleCandidates = !gathered;
+          connection?.send(encode({ type: "offer", sdp: pc.localDescription?.sdp ?? offer.sdp }));
         }
         break;
 
