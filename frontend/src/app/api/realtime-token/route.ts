@@ -74,7 +74,15 @@ async function mintFalRealtimeToken(endpoint: string, durationSeconds: number) {
     }),
   });
   if (!response.ok) {
-    throw new Error(`fal token endpoint rejected the request (${response.status})`);
+    // A revoked/invalid FAL_KEY surfaces here. Without this wrapper the raw
+    // Error falls into errorJson's 500 fallback and users see a useless
+    // "Unexpected server error" instead of the actionable cause.
+    throw new RequestError(
+      502,
+      response.status === 401 || response.status === 403
+        ? "The AI provider rejected the stream authorization — the configured provider key is invalid or revoked."
+        : `The AI provider could not authorize the stream (${response.status}).`,
+    );
   }
   // Body is the bare JWT as a JSON string (fal-js also handles a wrapped
   // { detail } shape from older proxies, so accept both).
@@ -87,12 +95,18 @@ async function mintFalRealtimeToken(endpoint: string, durationSeconds: number) {
   } else if (trimmed.startsWith('"')) {
     token = JSON.parse(trimmed) as string;
   }
-  if (!token) throw new Error("fal token endpoint returned no token");
+  if (!token) throw new RequestError(502, "The AI provider returned an empty stream authorization.");
   // Decode the JWT's exp claim for a precise expiry.
-  const claims = JSON.parse(Buffer.from(token.split(".")[1], "base64url").toString("utf8")) as { exp?: number };
+  let expiresAtMs = Date.now() / 1000 + durationSeconds;
+  try {
+    const claims = JSON.parse(Buffer.from(token.split(".")[1], "base64url").toString("utf8")) as { exp?: number };
+    if (typeof claims.exp === "number") expiresAtMs = claims.exp;
+  } catch {
+    // Non-JWT body: keep the fallback expiry rather than crashing the route.
+  }
   return {
     token,
-    expiresAt: new Date((claims.exp ?? Date.now() / 1000 + durationSeconds) * 1000),
+    expiresAt: new Date(expiresAtMs * 1000),
   };
 }
 
