@@ -16,7 +16,11 @@ const commonContentSecurityPolicy = [
   "img-src 'self' data: blob: https://*.googleusercontent.com https://*.googleapis.com",
   "font-src 'self' data:",
   "media-src 'self' blob: data:",
-  `connect-src 'self' ${signalingOrigin} ${signalingWebSocketOrigin} https://*.googleapis.com https://apis.google.com https://*.firebaseio.com wss://*.firebaseio.com https://*.fal.ai https://*.fal.run wss://*.fal.run`,
+  // Decart realtime: signaling goes through our relay, but the SDK's media plane
+  // connects DIRECTLY to the LiveKit URL Decart returns in the livekit_join frame
+  // (*.livekit.cloud). Blocking it kills every stream with a generic "Load failed".
+  // *.decart.ai covers direct API/WS use (fallbacks, viewer subscribe paths).
+  `connect-src 'self' ${signalingOrigin} ${signalingWebSocketOrigin} https://*.googleapis.com https://apis.google.com https://*.firebaseio.com wss://*.firebaseio.com https://*.fal.ai https://*.fal.run wss://*.fal.run https://*.decart.ai wss://*.decart.ai wss://*.livekit.cloud wss://*.livekit.io`,
   "worker-src 'self' blob:",
   "frame-src 'self' https://accounts.google.com https://*.firebaseapp.com",
   "base-uri 'self'",
