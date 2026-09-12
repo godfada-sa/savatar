@@ -48,9 +48,13 @@ interface FalRealtimeOptions {
   handlers: FalRealtimeHandlers;
 }
 
-// How long a declared remote video track is given to produce its first decoded
-// frame before the client stops waiting for output.
-const FRAME_WAIT_TIMEOUT_MS = 20_000;
+// How long the provider gets to deliver its first decoded frame after it has
+// ACCEPTED the session. `ready` is that acceptance signal, and it is also the
+// moment the provider starts billing the session — and a session that is
+// accepted but never declares a remote track fires no `ontrack` at all, so a
+// track-level check cannot cover it. Arming the deadline on acceptance is what
+// stops a blank session from being held (and paid for) indefinitely.
+const AI_FIRST_FRAME_TIMEOUT_MS = 15_000;
 // How long an ICE "disconnected" state may persist before it is treated as a
 // real loss (the state is often transient during a path switch).
 const CONNECTION_GRACE_MS = 5_000;
@@ -96,6 +100,7 @@ export function connectFalRealtime(options: FalRealtimeOptions): FalRealtimeConn
   // True once the transformed track has actually decoded frames.
   let announced = false;
   let connectionGraceTimer: ReturnType<typeof setTimeout> | null = null;
+  let outputWatchdog: ReturnType<typeof setTimeout> | null = null;
 
   const setState = (next: FalConnectionState) => {
     if (disconnected) return;
@@ -119,6 +124,31 @@ export function connectFalRealtime(options: FalRealtimeOptions): FalRealtimeConn
     }
   };
 
+  const clearOutputWatchdog = () => {
+    if (outputWatchdog) {
+      clearTimeout(outputWatchdog);
+      outputWatchdog = null;
+    }
+  };
+
+  // The provider accepted the session but never produced a frame. End it instead
+  // of holding a paid provider session open for a blank screen; the dashboard's
+  // error handler stops the stream, which settles the session at zero billable
+  // seconds and releases the provider slot.
+  const failWithoutOutput = () => {
+    if (disconnected || announced) return;
+    clearOutputWatchdog();
+    setState("disconnected");
+    onError?.(new Error("The AI didn't send any video, so the session was ended early — nothing was charged. Please try again."));
+  };
+
+  // Armed when the provider accepts the session; disarmed by the first decoded
+  // frame. Safe to call repeatedly: it only ever holds one deadline.
+  const armOutputWatchdog = () => {
+    if (outputWatchdog || announced || disconnected) return;
+    outputWatchdog = setTimeout(failWithoutOutput, AI_FIRST_FRAME_TIMEOUT_MS);
+  };
+
   // An `ontrack` event only means the answer DECLARED a track: it fires as soon
   // as the remote description is applied, whether or not a single frame ever
   // arrives. Polling the receiver's stats for decoded frames is what actually
@@ -126,6 +156,9 @@ export function connectFalRealtime(options: FalRealtimeOptions): FalRealtimeConn
   // (and billing starts) only then. Until it does, the creator keeps seeing the
   // camera instead of a black rectangle.
   const watchForFrames = (track: MediaStreamTrack, receiver: RTCRtpReceiver | null, onFrames: () => void) => {
+    // A declared track is also proof that the provider is generating, so it gets
+    // the same deadline as the acceptance watchdog.
+    armOutputWatchdog();
     const startedAt = Date.now();
     const poll = async () => {
       if (disconnected) return;
@@ -144,13 +177,12 @@ export function connectFalRealtime(options: FalRealtimeOptions): FalRealtimeConn
         // Stats unavailable this tick; retry below.
       }
       if (decoded > 0 && track.readyState === "live" && !track.muted) { onFrames(); return; }
-      if (Date.now() - startedAt < FRAME_WAIT_TIMEOUT_MS) {
+      if (Date.now() - startedAt < AI_FIRST_FRAME_TIMEOUT_MS) {
         setTimeout(poll, 250);
       } else {
         // A declared/unmuted track can still contain no video. Never replace
-        // the working camera preview with it; end and refund the empty session.
-        setState("disconnected");
-        onError?.(new Error("The AI did not produce video. The session was stopped without charging for output."));
+        // the working camera preview with it; end the empty session.
+        failWithoutOutput();
       }
     };
     void poll();
@@ -187,6 +219,7 @@ export function connectFalRealtime(options: FalRealtimeOptions): FalRealtimeConn
       const announce = () => {
         if (disconnected || announced) return;
         announced = true;
+        clearOutputWatchdog();
         onRemoteStream?.(merged, { framesFlowing: true });
         // Only now is the AI truly producing output, so the countdown starts
         // here rather than for a declared track that may stay silent.
@@ -237,6 +270,8 @@ export function connectFalRealtime(options: FalRealtimeOptions): FalRealtimeConn
     switch (result.type) {
       case "ready":
         setState("connected");
+        // Acceptance starts the provider's bill and may never produce a track.
+        armOutputWatchdog();
         break;
 
       case "iceservers":
@@ -300,14 +335,24 @@ export function connectFalRealtime(options: FalRealtimeOptions): FalRealtimeConn
         break;
 
       case "generation_started":
-        setState("generating");
-        startGenerationTimer();
+        // The provider announces this before a single frame exists, and it says
+        // so for sessions that never deliver one at all. It is therefore a
+        // status, not proof of output: the countdown and the billable window
+        // start on decoded frames (announce(), reached from watchForFrames).
+        // Arming them here billed creators for blank sessions.
         break;
 
-      case "error":
+      case "error": {
         setState("disconnected");
-        onError?.(new Error(result.error || "The AI session failed."));
+        // The provider allows one realtime session per account, so a slot that is
+        // still winding down after a previous stream comes back as provider
+        // jargon. Say what actually happened, and that it cost nothing.
+        const providerMessage = result.error ?? "";
+        onError?.(new Error(/concurrent session limit/i.test(providerMessage)
+          ? "The AI service is still finishing your previous session. Nothing was charged — try again in a few seconds."
+          : providerMessage || "The AI session failed."));
         break;
+      }
     }
   };
 
@@ -356,6 +401,7 @@ export function connectFalRealtime(options: FalRealtimeOptions): FalRealtimeConn
       state = "disconnected";
       disconnected = true;
       stopGenerationTimer();
+      clearOutputWatchdog();
       if (connectionGraceTimer) { clearTimeout(connectionGraceTimer); connectionGraceTimer = null; }
       pendingRemoteCandidates.length = 0;
       if (pc) {
