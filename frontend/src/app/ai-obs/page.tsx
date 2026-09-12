@@ -40,6 +40,13 @@ export default function AiObsPage() {
     return localStorage.getItem("savatar-mirror-preview") !== "off";
   });
   const [isFrontCamera, setIsFrontCamera] = useState(true);
+  // Mirror for the OBS monitor box. Purely cosmetic and local: the flag only
+  // flips THIS page's monitor rendering, never the stream itself, so OBS and
+  // viewers always receive the unmirrored output with readable text.
+  const [mirrorMonitor, setMirrorMonitor] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem("savatar-mirror-monitor") === "on";
+  });
 
   // The same engine the Studio dashboard uses: token mint → provider session
   // → viewer/OBS broadcast, with identical billing, heartbeat, and teardown.
@@ -195,6 +202,14 @@ export default function AiObsPage() {
     });
   };
 
+  const toggleMonitorMirror = () => {
+    setMirrorMonitor((current) => {
+      const next = !current;
+      try { localStorage.setItem("savatar-mirror-monitor", next ? "on" : "off"); } catch { /* storage unavailable */ }
+      return next;
+    });
+  };
+
   // Live-look updates while streaming (same behavior as the Studio page).
   useEffect(() => {
     pushLookIfChanged(referenceImage, prompt);
@@ -325,7 +340,23 @@ export default function AiObsPage() {
                   </span>
                 </div>
                 <div className="force-dark relative h-[72svh] min-h-[520px] max-h-[760px] bg-gradient-to-br from-[#0c1d3b] via-[#08213b] to-[#030811] sm:h-auto sm:max-h-none sm:aspect-video sm:min-h-[360px] xl:min-h-[440px]">
-                  {obsUrl && <iframe title="AI program output monitor" src={`${obsUrl}?muted=1`} className="absolute inset-0 h-full w-full border-0" allow="autoplay" />}
+                  {obsUrl && <iframe title="AI program output monitor" src={`${obsUrl}?muted=1`} className="absolute inset-0 h-full w-full border-0" style={{ transform: mirrorMonitor ? "scaleX(-1)" : undefined }} allow="autoplay" />}
+                  <button
+                    type="button"
+                    onClick={toggleMonitorMirror}
+                    aria-label={mirrorMonitor ? "Turn off monitor mirror" : "Turn on monitor mirror"}
+                    title="Mirror this monitor only — OBS and viewers always see the normal, unmirrored output"
+                    className="absolute bottom-2 right-2 z-10 grid h-8 w-8 place-items-center rounded-lg bg-black/60 text-neutral-300 hover:bg-black/80"
+                  >
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d="M8 7l-4 5 4 5m8-10l4 5-4 5M4 12h16M12 5v14" />
+                    </svg>
+                  </button>
+                  {mirrorMonitor && (
+                    <span className="absolute left-2 top-2 z-10 rounded bg-black/55 px-2 py-0.5 text-[9px] font-medium uppercase tracking-wide text-neutral-300">
+                      Mirrored locally only
+                    </span>
+                  )}
                 </div>
                 <div className="grid grid-cols-[1fr_auto] gap-2 p-2 border-t border-stone-200 items-center">
                   <button
