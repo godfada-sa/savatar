@@ -1,11 +1,11 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { getOrCreateStreamRoomId } from "@/lib/stream-room";
 import { prepareReferenceImage, savePreparedReferenceImage } from "@/lib/reference-image";
 import { FULL_BODY_SWAP_PROMPT } from "@/lib/ai-prompts";
+import { useAiStreamEngine } from "@/lib/use-ai-stream";
 import DashboardLayout from "@/components/DashboardLayout";
 
 interface Background {
@@ -17,13 +17,8 @@ interface Background {
 
 export default function AiObsPage() {
   const { user, userData } = useAuth();
-  const router = useRouter();
   const videoRef = useRef<HTMLVideoElement>(null);
-  const cameraStreamRef = useRef<MediaStream | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [cameraActive, setCameraActive] = useState(false);
-  const [micEnabled, setMicEnabled] = useState(false);
-  const [micAvailable, setMicAvailable] = useState(false);
   const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>([]);
   const [cameraDevice, setCameraDevice] = useState(() => {
     if (typeof window === "undefined") return "default";
@@ -36,8 +31,8 @@ export default function AiObsPage() {
   const [bgCategory, setBgCategory] = useState("all");
   const [backgroundsOpen, setBackgroundsOpen] = useState(false);
   const [referenceImage, setReferenceImage] = useState<string | null>(null);
+  const [prompt, setPrompt] = useState("");
   const [lookModalOpen, setLookModalOpen] = useState(false);
-  const [error, setError] = useState("");
   // iOS-style front-camera mirroring for the self-view only: the outgoing
   // camera track stays unmirrored so text reads correctly to viewers.
   const [mirrorPreview, setMirrorPreview] = useState(() => {
@@ -45,6 +40,23 @@ export default function AiObsPage() {
     return localStorage.getItem("savatar-mirror-preview") !== "off";
   });
   const [isFrontCamera, setIsFrontCamera] = useState(true);
+
+  // The same engine the Studio dashboard uses: token mint → provider session
+  // → viewer/OBS broadcast, with identical billing, heartbeat, and teardown.
+  const {
+    isStreaming, isDecartActive, cameraActive, micEnabled, micAvailable,
+    remainingSeconds, reservedSeconds, streamDuration, viewerCount,
+    error, setError, startupStatus,
+    goLive, stopStream, openCamera, stopCamera, toggleMic,
+    pushLookIfChanged,
+  } = useAiStreamEngine({
+    user,
+    balanceSeconds: userData?.wallet?.balanceSeconds ?? 0,
+    activeMode: "character",
+    prompt,
+    referenceImage,
+    localVideoRef: videoRef,
+  });
 
   const backgrounds: Background[] = [
     { id: "original", name: "Original", category: "all" },
@@ -78,13 +90,13 @@ export default function AiObsPage() {
     }).catch(() => { if (!cancelled) setError("Unable to load your stream room."); });
     const frame = requestAnimationFrame(() => {
       setReferenceImage(localStorage.getItem("savatar-reference-image"));
+      setPrompt(localStorage.getItem("savatar-ai-prompt") || "");
       setSelectedBg(localStorage.getItem("savatar-background-id") || "original");
       setSelectedLook(localStorage.getItem("savatar-style-id") || "default");
     });
     return () => { cancelled = true; cancelAnimationFrame(frame); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
-
-  useEffect(() => () => { cameraStreamRef.current?.getTracks().forEach((track) => track.stop()); }, []);
 
   useEffect(() => {
     void navigator.mediaDevices.enumerateDevices().then((devices) => {
@@ -110,48 +122,20 @@ export default function AiObsPage() {
     });
   };
 
-  const openCamera = async (targetDevice = cameraDevice) => {
-    try {
-      const video: MediaTrackConstraints = { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30, max: 30 } };
-      if (targetDevice !== "default") video.deviceId = { exact: targetDevice };
-      let stream: MediaStream;
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({ video, audio: true });
-      } catch {
-        stream = await navigator.mediaDevices.getUserMedia({ video, audio: false });
-      }
-      const previousStream = videoRef.current?.srcObject as MediaStream | null;
-      if (!videoRef.current) { stream.getTracks().forEach((track) => track.stop()); return; }
-      cameraStreamRef.current = stream;
-      if (videoRef.current) videoRef.current.srcObject = stream;
-      previousStream?.getTracks().forEach((track) => track.stop());
-      setCameraActive(true);
-      setIsFrontCamera(stream.getVideoTracks()[0]?.getSettings().facingMode !== "environment");
-      setMicEnabled(stream.getAudioTracks().some((track) => track.enabled));
-      setMicAvailable(stream.getAudioTracks().length > 0);
-      await refreshCameraList();
-      setError("");
-    } catch {
-      setError("Camera access was denied or no camera is available.");
-    }
+  const applyFrontCamera = (stream: MediaStream | null) => {
+    setIsFrontCamera(stream?.getVideoTracks()[0]?.getSettings().facingMode !== "environment");
+    void refreshCameraList();
   };
 
-  const startCamera = () => openCamera();
+  const startCamera = () => {
+    void openCamera(cameraDevice, "user").then(applyFrontCamera);
+  };
 
   const changeCameraDevice = (nextDevice: string) => {
     setCameraDevice(nextDevice);
     if (nextDevice === "default") localStorage.removeItem("savatar-camera-device");
     else localStorage.setItem("savatar-camera-device", nextDevice);
-    if (cameraActive) void openCamera(nextDevice);
-  };
-
-  const toggleMic = () => {
-    const stream = videoRef.current?.srcObject as MediaStream | null;
-    const tracks = stream?.getAudioTracks() ?? [];
-    if (!tracks.length) return;
-    const next = !micEnabled;
-    tracks.forEach((track) => { track.enabled = next; });
-    setMicEnabled(next);
+    if (cameraActive && !isStreaming) void openCamera(nextDevice, "user").then(applyFrontCamera);
   };
 
   const saveCombinedPrompt = (backgroundId: string, look: string, hasReference: boolean) => {
@@ -166,8 +150,10 @@ export default function AiObsPage() {
     if (look !== "default") {
       instructions.push(`Apply a ${look} visual style while preserving subject identity and camera motion.`);
     }
-    if (instructions.length) localStorage.setItem("savatar-ai-prompt", instructions.join(" "));
+    const combined = instructions.join(" ");
+    if (combined) localStorage.setItem("savatar-ai-prompt", combined);
     else localStorage.removeItem("savatar-ai-prompt");
+    setPrompt(combined);
   };
 
   const uploadReference = async (file?: File) => {
@@ -209,26 +195,39 @@ export default function AiObsPage() {
     });
   };
 
-  const stopCamera = () => {
-    if (videoRef.current?.srcObject) {
-      const stream = videoRef.current.srcObject as MediaStream;
-      stream.getTracks().forEach((t) => t.stop());
-      videoRef.current.srcObject = null;
-      cameraStreamRef.current = null;
-    }
-    setCameraActive(false);
-    setMicEnabled(false);
-    setMicAvailable(false);
+  // Live-look updates while streaming (same behavior as the Studio page).
+  useEffect(() => {
+    pushLookIfChanged(referenceImage, prompt);
+  }, [isStreaming, prompt, pushLookIfChanged, referenceImage]);
+
+  const formatTime = (s: number) => {
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    return `${m.toString().padStart(2, "0")}:${sec.toString().padStart(2, "0")}`;
   };
 
+  const previewMirrored = cameraActive && mirrorPreview && isFrontCamera;
+  const creditsLabel = formatTime(remainingSeconds);
+
   return (
-    <DashboardLayout>
+    <DashboardLayout streamActive={isStreaming}>
       <div className="p-3 sm:p-6 space-y-4">
         {/* Error banner */}
         {error && (
           <div className="mb-4 p-4 rounded-xl bg-red-50 border border-red-200">
             <div className="text-sm font-semibold text-red-600">Streaming error</div>
             <div className="text-xs text-red-500 mt-0.5">{error}</div>
+            <button
+              onClick={() => setError("")}
+              className="mt-2 px-3 py-1 bg-white hover:bg-red-100 border border-red-200 rounded text-[11px] text-red-600 transition"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+        {!error && startupStatus && (
+          <div className="rounded-xl border border-[#e84314]/25 bg-[#e84314]/8 px-4 py-3 text-xs text-[#c73608]" role="status" aria-live="polite">
+            {startupStatus}
           </div>
         )}
 
@@ -250,7 +249,7 @@ export default function AiObsPage() {
                     muted
                     playsInline
                     className="w-full h-full object-cover"
-                    style={{ transform: cameraActive && mirrorPreview && isFrontCamera ? "scaleX(-1)" : undefined }}
+                    style={{ transform: previewMirrored ? "scaleX(-1)" : undefined }}
                   />
                   {!cameraActive && (
                     <div className="absolute inset-0 flex flex-col items-center justify-center text-neutral-600">
@@ -281,8 +280,9 @@ export default function AiObsPage() {
                   <select
                     value={cameraDevice}
                     onChange={(event) => changeCameraDevice(event.target.value)}
+                    disabled={isStreaming}
                     aria-label="Camera device"
-                    className="col-span-2 min-w-0 rounded-lg border border-stone-300 bg-white px-3 py-2.5 text-xs text-stone-700"
+                    className="col-span-2 min-w-0 rounded-lg border border-stone-300 bg-white px-3 py-2.5 text-xs text-stone-700 disabled:opacity-50"
                   >
                     <option value="default">Default camera</option>
                     {availableCameras.filter((camera) => Boolean(camera.deviceId)).map((camera, index) => (
@@ -316,20 +316,31 @@ export default function AiObsPage() {
                 <div className="force-dark relative h-[72svh] min-h-[520px] max-h-[760px] bg-gradient-to-br from-[#0c1d3b] via-[#08213b] to-[#030811] sm:h-auto sm:max-h-none sm:aspect-video sm:min-h-[360px] xl:min-h-[440px]">
                   {obsUrl && <iframe title="AI program output monitor" src={`${obsUrl}?muted=1`} className="absolute inset-0 h-full w-full border-0" allow="autoplay" />}
                 </div>
-                <div className="grid grid-cols-[1fr_auto] gap-2 p-2 border-t border-stone-200">
+                <div className="grid grid-cols-[1fr_auto] gap-2 p-2 border-t border-stone-200 items-center">
                   <button
-                    onClick={() => {
-                      if (!userData || (userData.wallet?.balanceSeconds ?? 0) < 60) { router.push("/credits"); return; }
-                      stopCamera();
-                      const studio = window.open("/dashboard", "savatar-studio");
-                      if (!studio) router.push("/dashboard");
-                    }}
+                    onClick={isStreaming ? stopStream : cameraActive ? goLive : startCamera}
                     disabled={!userData}
-                    className="px-4 py-1.5 rounded-lg text-xs font-medium transition bg-[#e84314] hover:bg-[#c73608] text-white"
+                    className={`w-full px-4 py-2.5 rounded-lg text-xs font-medium transition ${
+                      isStreaming
+                        ? "bg-red-500 hover:bg-red-600 text-white"
+                        : "bg-[#e84314] hover:bg-[#c73608] text-white"
+                    } disabled:cursor-not-allowed disabled:opacity-50`}
                   >
-                    {!userData ? "Loading credits…" : (userData.wallet?.balanceSeconds ?? 0) < 60 ? "Buy credits" : "Open Studio"}
+                    {!userData ? "Loading credits…" : isStreaming ? "Stop Stream" : cameraActive ? "Start Stream" : "Start camera"}
                   </button>
-                  <span className="rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-xs text-stone-600" title="The real-time AI model is optimized for 720p output">720p / 30 FPS</span>
+                  <div className="flex items-center gap-2">
+                    {isStreaming && reservedSeconds > 0 && isDecartActive && (
+                      <span
+                        className={`rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-xs font-mono font-bold ${
+                          remainingSeconds <= 30 ? "text-red-600" : remainingSeconds <= 60 ? "text-amber-600" : "text-stone-700"
+                        }`}
+                        aria-label={`${creditsLabel} of streaming credits remaining`}
+                      >
+                        {creditsLabel}
+                      </span>
+                    )}
+                    <span className="rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-xs text-stone-600" title="The real-time AI model is optimized for 720p output">720p / 30 FPS</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -373,11 +384,12 @@ export default function AiObsPage() {
                     <button
                       key={bg.id}
                       onClick={() => selectBackground(bg)}
+                      disabled={isStreaming}
                       className={`group relative aspect-[4/3] overflow-hidden rounded-xl border text-left transition ${
                         selectedBg === bg.id
                           ? "border-[#e84314] ring-2 ring-[#e84314]/30"
                           : "border-stone-200 bg-white hover:-translate-y-0.5 hover:border-stone-400"
-                      }`}
+                      } disabled:cursor-not-allowed disabled:opacity-60`}
                     >
                       {bg.image ? (
                         <img src={bg.image} alt={bg.name} loading="lazy" className="h-full w-full object-cover transition duration-300 group-hover:scale-105" />
@@ -404,11 +416,12 @@ export default function AiObsPage() {
                     <button
                       key={look}
                       onClick={() => selectLook(look)}
+                      disabled={isStreaming}
                       className={`flex h-24 w-20 shrink-0 flex-col items-center justify-center gap-1 overflow-hidden rounded-xl border p-1.5 text-center transition ${
                         selectedLook === look
                           ? "border-[#e84314] bg-[#e84314]/10"
                           : "border-stone-200 bg-stone-50 hover:border-stone-400"
-                      }`}
+                      } disabled:cursor-not-allowed disabled:opacity-60`}
                     >
                       {look === "default" && referenceImage ? (
                         <img src={referenceImage} alt="Uploaded reference" className="min-h-0 w-full flex-1 rounded-lg object-cover" />
@@ -473,19 +486,24 @@ export default function AiObsPage() {
               <div className="grid grid-cols-3 gap-2">
                 <div className="text-center p-2 rounded-lg bg-stone-100">
                   <div className="text-[10px] text-stone-500">Status</div>
-                  <div className="text-xs font-medium mt-0.5 text-stone-500">
-                    Studio controls this
+                  <div className={`text-xs font-medium mt-0.5 ${isDecartActive ? "text-emerald-600" : isStreaming ? "text-amber-600" : "text-stone-500"}`}>
+                    {isDecartActive ? "Generating" : isStreaming ? "Connecting" : "Offline"}
                   </div>
+                </div>
+                <div className="text-center p-2 rounded-lg bg-stone-100">
+                  <div className="text-[10px] text-stone-500">Elapsed</div>
+                  <div className="text-xs font-medium text-stone-900 mt-0.5">{formatTime(streamDuration)}</div>
                 </div>
                 <div className="text-center p-2 rounded-lg bg-stone-100">
                   <div className="text-[10px] text-stone-500">Resolution</div>
                   <div className="text-xs font-medium text-stone-900 mt-0.5">{resolution}</div>
                 </div>
-                <div className="text-center p-2 rounded-lg bg-stone-100">
-                  <div className="text-[10px] text-stone-500">FPS</div>
-                  <div className="text-xs font-medium text-stone-900 mt-0.5">30</div>
-                </div>
               </div>
+              {isStreaming && (
+                <p className="mt-2 text-center text-[10px] text-stone-500">
+                  {viewerCount} {viewerCount === 1 ? "viewer" : "viewers"} watching · stop any time; unused seconds are refunded
+                </p>
+              )}
             </div>
           </div>
         </div>

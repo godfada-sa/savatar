@@ -1,84 +1,20 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
-import { useRouter } from "next/navigation";
-import { io, Socket } from "socket.io-client";
+import { useState, useRef, useEffect } from "react";
 import { useAuth } from "@/lib/auth-context";
-import { getIceServers, signalingUrl } from "@/lib/client-config";
-import { getOrCreateStreamRoomId } from "@/lib/stream-room";
-import { prepareReferenceImage, savePreparedReferenceImage, dataUrlToBlob } from "@/lib/reference-image";
-import { FULL_BODY_SWAP_PROMPT, FULL_OUTFIT_SWAP_PROMPT } from "@/lib/ai-prompts";
-import { clearLiveSessionDisplay, publishLiveSessionDisplay } from "@/lib/live-session-display";
+import { prepareReferenceImage, savePreparedReferenceImage } from "@/lib/reference-image";
+import { STREAM_MODES, type StreamMode } from "@/lib/ai-prompts";
+import { useAiStreamEngine } from "@/lib/use-ai-stream";
 import DashboardLayout from "@/components/DashboardLayout";
-
-type Mode = "character" | "style" | "background" | "vton" | "vfx";
-
-const MODES: { id: Mode; label: string; model: string }[] = [
-  { id: "character", label: "Character", model: "lucy-2.5" },
-  { id: "style", label: "Style Transfer", model: "lucy-2.5" },
-  { id: "background", label: "Background", model: "lucy-2.5" },
-  { id: "vton", label: "Virtual Try-On", model: "lucy-2.5" },
-  { id: "vfx", label: "VFX Effects", model: "lucy-2.5" },
-];
-
-const DEFAULT_PROMPTS: Record<Mode, string> = {
-  character: "Transform the visible person into a consistent, realistic character while preserving their full-body pose, motion, framing, and background.",
-  style: "Apply a polished cinematic visual style while preserving the subject, motion, and scene composition.",
-  background: "Replace the background with a clean professional studio while preserving the subject, lighting, and motion.",
-  vton: "Apply a tasteful virtual outfit to the visible person while preserving their full-body pose, face, hands, and motion.",
-  vfx: "Add subtle cinematic visual effects around the subject while preserving their identity, pose, and motion.",
-};
-
-const LEGACY_FULL_BODY_SWAP_PROMPT = "Replace the visible person's full body, face, hair, clothing, and visible limbs with the character from the reference image. Preserve pose, motion, framing, and background.";
-
-// Lucy 2.5 rejects prompts over this length outright ("Prompt is too long"),
-// which killed the AI session right after the media path connected — the base
-// swap prompt itself exceeded the limit. Clamp every prompt to fit, cutting
-// back to the last complete sentence so the model always gets coherent text.
-const LUCY_PROMPT_LIMIT = 1015;
-
-function clampPrompt(text: string): string {
-  const trimmed = text.trim();
-  if (trimmed.length <= LUCY_PROMPT_LIMIT) return trimmed;
-  const cut = trimmed.slice(0, LUCY_PROMPT_LIMIT);
-  const lastSentenceEnd = Math.max(cut.lastIndexOf(". "), cut.lastIndexOf(".\n"));
-  return (lastSentenceEnd > LUCY_PROMPT_LIMIT * 0.5 ? cut.slice(0, lastSentenceEnd + 1) : cut).trim();
-}
-
-function streamPrompt(mode: Mode, savedPrompt: string, hasReference: boolean) {
-  if (hasReference && mode === "vton") {
-    return clampPrompt(FULL_OUTFIT_SWAP_PROMPT);
-  }
-  if (hasReference) {
-    const saved = savedPrompt.trim();
-    if (!saved) return clampPrompt(FULL_BODY_SWAP_PROMPT);
-    if (saved.includes(FULL_BODY_SWAP_PROMPT)) return clampPrompt(saved);
-    const modifiers = saved.replace(LEGACY_FULL_BODY_SWAP_PROMPT, "").trim();
-    if (!modifiers) return clampPrompt(FULL_BODY_SWAP_PROMPT);
-    return clampPrompt(`${FULL_BODY_SWAP_PROMPT} ${modifiers}`);
-  }
-  if (savedPrompt.trim()) return clampPrompt(savedPrompt);
-  return clampPrompt(DEFAULT_PROMPTS[mode]);
-}
-
-type DecartModelId = "lucy-2.5" | "lucy-restyle-2" | "lucy-vton-3.5";
 
 export default function Dashboard() {
   const { user, userData } = useAuth();
-  const router = useRouter();
-  const [, setIsConnected] = useState(false);
-  const [isDecartActive, setIsDecartActive] = useState(false);
-  const [isStreaming, setIsStreaming] = useState(false);
-  const [activeMode, setActiveMode] = useState<Mode>("character");
+  const [activeMode, setActiveMode] = useState<StreamMode>("character");
   const [prompt, setPrompt] = useState("");
-  const [streamDuration, setStreamDuration] = useState(0);
-  const [remainingSeconds, setRemainingSeconds] = useState(0);
-  const [reservedSeconds, setReservedSeconds] = useState(0);
-  const [cameraActive, setCameraActive] = useState(false);
-  const [micEnabled, setMicEnabled] = useState(true);
-  const [micAvailable, setMicAvailable] = useState(false);
-  const [roomId, setRoomId] = useState("");
-  const [viewerCount, setViewerCount] = useState(0);
+  // Decart's realtime models currently produce a 720p-class stream. Matching
+  // the capture to that output avoids an unnecessary 1080p upload and reduces
+  // connection failures on slower browsers.
+  const [resolution, setResolution] = useState("720p");
   const [cameraDevice, setCameraDevice] = useState(() => {
     if (typeof window === "undefined") return "default";
     return localStorage.getItem("savatar-camera-device") || "default";
@@ -90,12 +26,7 @@ export default function Dashboard() {
     return localStorage.getItem("savatar-facing-mode") === "environment" ? "environment" : "user";
   });
   const facingModeRef = useRef(facingMode);
-  // Decart's realtime models currently produce a 720p-class stream. Matching
-  // the capture to that output avoids an unnecessary 1080p upload and reduces
-  // connection failures on slower browsers.
-  const [resolution, setResolution] = useState("720p");
   const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>([]);
-  const [error, setError] = useState("");
   // iOS-style front-camera mirroring for the self-view only: the outgoing
   // camera track and AI output stay unmirrored so text reads correctly to
   // viewers, matching how phone front cameras behave.
@@ -104,129 +35,43 @@ export default function Dashboard() {
     return localStorage.getItem("savatar-mirror-preview") !== "off";
   });
   const [isFrontCamera, setIsFrontCamera] = useState(true);
-  // Use the active track's reported direction so selecting a specific rear
-  // device can never inherit a stale front-camera mirror setting.
-  const previewMirrored = cameraActive && mirrorPreview && isFrontCamera;
-  const [startupStatus, setStartupStatus] = useState("");
   const [lookModalOpen, setLookModalOpen] = useState(false);
   const [referenceImage, setReferenceImage] = useState<string | null>(null);
   const lookInputRef = useRef<HTMLInputElement>(null);
-  const appliedReferenceRef = useRef<string | null>(null);
-  const appliedPromptRef = useRef("");
-  const sessionIdRef = useRef<string | null>(null);
-  const sessionDeadlineRef = useRef<number | null>(null);
-  const idTokenRef = useRef<string | null>(null);
-  // Tracks whether transformed frames are currently arriving for UI status.
-  const isDecartActiveRef = useRef(false);
-  // Diagnostic provider counter plus heartbeat throttle.
-  const lastTickSecondsRef = useRef(0);
-  const lastHeartbeatPhaseRef = useRef<"connected" | "generating" | null>(null);
-  const lastHeartbeatSentAtRef = useRef(0);
-
-  // Report liveness and diagnostics. Billing is always server-authoritative.
-  const sendStreamHeartbeat = useCallback((generationSeconds: number, phase: "connected" | "generating" = "connected") => {
-    const sid = sessionIdRef.current;
-    const token = idTokenRef.current;
-    if (!sid || !token) return;
-    const now = Date.now();
-    // The connected→generating upgrade must never be throttled away: the server
-    // starts the billable window from the first "generating" heartbeat, and the
-    // throttle (armed by the "connected" heartbeat sent moments earlier) would
-    // otherwise drop exactly that one call.
-    const upgrade = phase === "generating" && lastHeartbeatPhaseRef.current !== "generating";
-    if (!upgrade && now - lastHeartbeatSentAtRef.current < 8_000) return; // throttle ~7/min
-    lastHeartbeatSentAtRef.current = now;
-    lastHeartbeatPhaseRef.current = phase;
-    void fetch("/api/streaming/heartbeat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({
-        sessionId: sid,
-        generationSeconds: Math.max(0, Math.floor(generationSeconds)),
-        phase,
-      }),
-    }).catch(() => {});
-  }, []);
-
   const localVideoRef = useRef<HTMLVideoElement>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const clientRef = useRef<any>(null);
-  const socketRef = useRef<Socket | null>(null);
-  const transformedStreamRef = useRef<MediaStream | null>(null);
-  const peerConnectionsRef = useRef(new Map<string, RTCPeerConnection>());
-  const pendingPeerCandidatesRef = useRef(new Map<string, RTCIceCandidateInit[]>());
 
-  const waitingViewersRef = useRef(new Set<string>());
-  const offerViewerRef = useRef<((viewerId: string) => Promise<void>) | null>(null);
-  const startingRef = useRef(false);
+  const {
+    isStreaming, isDecartActive, cameraActive, micEnabled, micAvailable,
+    remainingSeconds, reservedSeconds, streamDuration, viewerCount,
+    error, setError, startupStatus,
+    goLive, stopStream, openCamera, stopCamera, toggleMic,
+    pushLookIfChanged,
+  } = useAiStreamEngine({
+    user,
+    balanceSeconds: userData?.wallet?.balanceSeconds ?? 0,
+    activeMode,
+    prompt,
+    referenceImage,
+    localVideoRef,
+  });
 
-  const stopStream = useCallback(async () => {
-    // Stop local/provider media first so clicking Stop is immediate even if the
-    // settlement request is slow. The short fal token is only a final fallback.
-    startingRef.current = false;
-    isDecartActiveRef.current = false;
-    setIsDecartActive(false);
-    setIsStreaming(false);
-    clearLiveSessionDisplay();
-    setStartupStatus("Stopping AI session");
-    const activeClient = clientRef.current;
-    clientRef.current = null;
-    try { activeClient?.disconnect(); } catch { /* Already disconnected. */ }
+  // Use the active track's reported direction so selecting a specific rear
+  // device can never inherit a stale front-camera mirror setting.
+  const previewMirrored = cameraActive && mirrorPreview && isFrontCamera;
 
-    const currentSessionId = sessionIdRef.current;
-    const currentToken = idTokenRef.current;
-    if (socketRef.current) {
-      socketRef.current.emit("broadcaster-stopped", { roomId });
-      socketRef.current.disconnect();
-      socketRef.current = null;
-    }
-    for (const connection of peerConnectionsRef.current.values()) connection.close();
-    peerConnectionsRef.current.clear();
-    pendingPeerCandidatesRef.current.clear();
-    transformedStreamRef.current = null;
-    appliedReferenceRef.current = null;
-    appliedPromptRef.current = "";
-    if (localVideoRef.current && streamRef.current) {
-      localVideoRef.current.srcObject = streamRef.current;
-    }
-    setIsConnected(false);
-    setStreamDuration(0);
-    setRemainingSeconds(0);
-    setReservedSeconds(0);
-    sessionDeadlineRef.current = null;
-    setViewerCount(0);
+  const formatTime = (s: number) => {
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    return `${m.toString().padStart(2, "0")}:${sec.toString().padStart(2, "0")}`;
+  };
 
-    if (!currentSessionId || !currentToken) {
-      setStartupStatus("");
-      return;
-    }
+  const applyFrontCamera = (stream: MediaStream | null) => {
+    setIsFrontCamera(stream?.getVideoTracks()[0]?.getSettings().facingMode !== "environment");
+  };
 
-    // Retry once before leaving settlement to the short-token sweeper. Session
-    // refs are cleared only after the server acknowledges the idempotent end.
-    for (let attempt = 0; attempt < 2; attempt += 1) {
-      try {
-        const response = await fetch("/api/streaming/end", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${currentToken}` },
-          body: JSON.stringify({ sessionId: currentSessionId }),
-          signal: AbortSignal.timeout(8_000),
-        });
-        if (!response.ok) throw new Error("Settlement was not accepted");
-        sessionIdRef.current = null;
-        idTokenRef.current = null;
-        setStartupStatus("");
-        return;
-      } catch {
-        if (attempt === 0) {
-          await new Promise((resolve) => setTimeout(resolve, 500));
-          continue;
-        }
-      }
-    }
-    setStartupStatus("");
-    setError("The stream stopped, but the balance update is still pending. The server will reconcile it automatically.");
-  }, [roomId]);
+  const startCamera = () => {
+    void openCamera(cameraDevice, facingMode).then(applyFrontCamera);
+  };
 
   // List cameras
   useEffect(() => {
@@ -247,28 +92,41 @@ export default function Dashboard() {
     return () => window.removeEventListener("storage", syncSavedLook);
   }, []);
 
-  const applyCurrentLook = useCallback(async () => {
-    const client = clientRef.current;
-    if (!client) return;
-    const nextPrompt = streamPrompt(activeMode, prompt, Boolean(referenceImage));
-    const update: { image?: Blob | null; prompt: string; enhance: boolean } = {
-      prompt: nextPrompt,
-      enhance: true,
-    };
-    if (referenceImage !== appliedReferenceRef.current) {
-      update.image = referenceImage ? await dataUrlToBlob(referenceImage) : null;
-    }
-    await client.set(update);
-    appliedReferenceRef.current = referenceImage;
-    appliedPromptRef.current = nextPrompt;
-  }, [activeMode, prompt, referenceImage]);
-
+  // Live-look updates: push prompt/reference changes into the running session.
   useEffect(() => {
-    const nextPrompt = streamPrompt(activeMode, prompt, Boolean(referenceImage));
-    if (isStreaming && (referenceImage !== appliedReferenceRef.current || nextPrompt !== appliedPromptRef.current)) {
-      void applyCurrentLook().catch(() => setError("The live AI look could not be updated."));
-    }
-  }, [activeMode, applyCurrentLook, isStreaming, prompt, referenceImage]);
+    pushLookIfChanged(referenceImage, prompt);
+  }, [activeMode, isStreaming, prompt, pushLookIfChanged, referenceImage]);
+
+  const changeResolution = (nextResolution: string) => {
+    setResolution(nextResolution);
+    if (cameraActive && !isStreaming) void openCamera(cameraDevice, facingMode).then(applyFrontCamera);
+  };
+
+  const changeCameraDevice = (nextDevice: string) => {
+    setCameraDevice(nextDevice);
+    if (nextDevice === "default") localStorage.removeItem("savatar-camera-device");
+    else localStorage.setItem("savatar-camera-device", nextDevice);
+    if (cameraActive && !isStreaming) void openCamera(nextDevice, facingMode).then(applyFrontCamera);
+  };
+
+  const flipCamera = () => {
+    if (isStreaming) return;
+    const next = facingModeRef.current === "user" ? "environment" : "user";
+    facingModeRef.current = next;
+    setFacingMode(next);
+    try { localStorage.setItem("savatar-facing-mode", next); } catch { /* storage unavailable */ }
+    setCameraDevice("default");
+    localStorage.removeItem("savatar-camera-device");
+    if (cameraActive) void openCamera("default", next).then(applyFrontCamera);
+  };
+
+  const toggleMirror = () => {
+    setMirrorPreview((current) => {
+      const next = !current;
+      try { localStorage.setItem("savatar-mirror-preview", next ? "on" : "off"); } catch { /* storage unavailable */ }
+      return next;
+    });
+  };
 
   const saveReferenceImage = async (file?: File) => {
     try {
@@ -286,572 +144,6 @@ export default function Dashboard() {
     localStorage.removeItem("savatar-reference-image");
     setReferenceImage(null);
   };
-
-  // Follow the server clock instead of decrementing local state, which prevents
-  // background-tab timer throttling from extending a paid session. Stop with a
-  // five-second safety reserve; settlement returns those unused seconds.
-  useEffect(() => {
-    if (!isStreaming) return;
-    let stopping = false;
-    const enforceCutoff = () => {
-      const deadline = sessionDeadlineRef.current;
-      if (!deadline) return;
-      const remaining = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
-      setRemainingSeconds(remaining);
-      if (remaining <= 5 && !stopping) {
-        stopping = true;
-        void stopStream();
-      }
-    };
-    enforceCutoff();
-    const cutoffTimer = window.setInterval(enforceCutoff, 250);
-    const durationTimer = window.setInterval(() => setStreamDuration((duration) => duration + 1), 1000);
-    return () => {
-      window.clearInterval(cutoffTimer);
-      window.clearInterval(durationTimer);
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isStreaming]);
-
-  // Reconcile abandoned sessions from a previous visit: the server-side hard
-  // deadline (/api/streaming/sweep) finalizes any session whose reserved
-  // window elapsed without a client "end" call, so records never stay dangling.
-  useEffect(() => {
-    if (!user) return;
-    void user
-      .getIdToken()
-      .then((token) =>
-        fetch("/api/streaming/sweep", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-          body: JSON.stringify({}),
-        })
-      )
-      .catch(() => {});
-  }, [user]);
-
-  // While live, periodically ask the server to finalize any session whose
-  // client is gone (deadline passed or heartbeats stale), and refresh our own
-  // presence heartbeat so the sweep never finalizes a live session.
-  useEffect(() => {
-    if (!isStreaming) return;
-    const sweep = () => {
-      const token = idTokenRef.current;
-      if (!token) return;
-      void fetch("/api/streaming/sweep", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({}),
-      }).catch(() => {});
-      sendStreamHeartbeat(lastTickSecondsRef.current);
-    };
-    sweep();
-    const timer = setInterval(sweep, 30_000);
-    return () => clearInterval(timer);
-  }, [isStreaming, sendStreamHeartbeat]);
-
-  // Notify server on tab close / navigation so the relay tears down the
-  // provider immediately and refunds all unused reservation time.
-  useEffect(() => {
-    const handleBeforeUnload = () => {
-      clearLiveSessionDisplay();
-      const sid = sessionIdRef.current;
-      const token = idTokenRef.current;
-      if (!sid || !token) return;
-      // Authenticated keepalive; sendBeacon cannot carry the required token.
-      void fetch("/api/streaming/end", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ sessionId: sid }),
-        keepalive: true,
-      }).catch(() => {});
-    };
-    window.addEventListener("beforeunload", handleBeforeUnload);
-    window.addEventListener("pagehide", handleBeforeUnload);
-    return () => {
-      window.removeEventListener("beforeunload", handleBeforeUnload);
-      window.removeEventListener("pagehide", handleBeforeUnload);
-    };
-  }, []);
-
-  useEffect(() => {
-    const peers = peerConnectionsRef.current;
-    const pendingCandidates = pendingPeerCandidatesRef.current;
-    return () => {
-      // Notify server to refund unused time on unmount
-      clearLiveSessionDisplay();
-      const sid = sessionIdRef.current;
-      const token = idTokenRef.current;
-      if (sid && token) {
-        void fetch("/api/streaming/end", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ sessionId: sid }),
-          keepalive: true,
-        }).catch(() => {});
-      }
-      clientRef.current?.disconnect();
-      socketRef.current?.disconnect();
-      for (const connection of peers.values()) connection.close();
-      peers.clear();
-      pendingCandidates.clear();
-      streamRef.current?.getTracks().forEach((track) => track.stop());
-    };
-  }, []);
-
-  // A failed debit or signaling authorization must also release the paid AI
-  // session; merely changing the UI state would leave it running remotely.
-  useEffect(() => {
-    if (isStreaming) return;
-    clientRef.current?.disconnect();
-    clientRef.current = null;
-    socketRef.current?.disconnect();
-    socketRef.current = null;
-    for (const connection of peerConnectionsRef.current.values()) connection.close();
-    peerConnectionsRef.current.clear();
-    pendingPeerCandidatesRef.current.clear();
-    transformedStreamRef.current = null;
-  }, [isStreaming]);
-
-  const formatTime = (s: number) => {
-    const m = Math.floor(s / 60);
-    const sec = s % 60;
-    return `${m.toString().padStart(2, "0")}:${sec.toString().padStart(2, "0")}`;
-  };
-
-  const openCamera = useCallback(async (targetResolution: string, targetDevice: string) => {
-    try {
-      setStartupStatus("Requesting camera and microphone access");
-      const video: MediaTrackConstraints = {
-        width: { ideal: targetResolution === "1080p" ? 1920 : 1280 },
-        height: { ideal: targetResolution === "1080p" ? 1080 : 720 },
-        frameRate: { ideal: 30, max: 30 },
-      };
-      if (targetDevice !== "default") {
-        video.deviceId = { exact: targetDevice };
-      } else {
-        video.facingMode = { ideal: facingModeRef.current };
-      }
-      // Stop the previous stream first so phone browsers reliably hand the
-      // camera over when switching between front and back.
-      streamRef.current?.getTracks().forEach((track) => track.stop());
-      streamRef.current = null;
-      let stream: MediaStream;
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({ video, audio: true });
-      } catch {
-        // A missing/blocked microphone should not prevent a video-only stream.
-        stream = await navigator.mediaDevices.getUserMedia({ video, audio: false });
-      }
-      if (localVideoRef.current) {
-        localVideoRef.current.srcObject = stream;
-      }
-      streamRef.current = stream;
-      setCameraActive(true);
-      setIsFrontCamera(stream.getVideoTracks()[0]?.getSettings().facingMode !== "environment");
-      setMicEnabled(stream.getAudioTracks().some((track) => track.enabled));
-      setMicAvailable(stream.getAudioTracks().length > 0);
-      setError("");
-      setStartupStatus(stream.getAudioTracks().length ? "Camera ready" : "Camera ready; microphone unavailable");
-      return stream;
-    } catch {
-      // The previous stream was already stopped for the switch, so reflect
-      // reality: no camera is active until a new one opens successfully.
-      setCameraActive(false);
-      setError("No camera was found. Connect a camera, then reload this page.");
-      setStartupStatus("");
-      return null;
-    }
-  }, []);
-
-  const startCamera = () => openCamera(resolution, cameraDevice);
-
-  const changeResolution = (nextResolution: string) => {
-    setResolution(nextResolution);
-    if (cameraActive && !isStreaming) void openCamera(nextResolution, cameraDevice);
-  };
-
-  const changeCameraDevice = (nextDevice: string) => {
-    setCameraDevice(nextDevice);
-    if (nextDevice === "default") localStorage.removeItem("savatar-camera-device");
-    else localStorage.setItem("savatar-camera-device", nextDevice);
-    if (cameraActive && !isStreaming) void openCamera(resolution, nextDevice);
-  };
-
-  const flipCamera = () => {
-    if (isStreaming) return;
-    const next = facingModeRef.current === "user" ? "environment" : "user";
-    facingModeRef.current = next;
-    setFacingMode(next);
-    try { localStorage.setItem("savatar-facing-mode", next); } catch { /* storage unavailable */ }
-    setCameraDevice("default");
-    localStorage.removeItem("savatar-camera-device");
-    if (cameraActive) void openCamera(resolution, "default");
-  };
-
-  const toggleMirror = () => {
-    setMirrorPreview((current) => {
-      const next = !current;
-      try { localStorage.setItem("savatar-mirror-preview", next ? "on" : "off"); } catch { /* storage unavailable */ }
-      return next;
-    });
-  };
-
-  const stopCamera = async () => {
-    // If a stream is active, end it properly to refund credits
-    if (isStreaming) {
-      await stopStream();
-    }
-    if (clientRef.current) {
-      clientRef.current.disconnect();
-      clientRef.current = null;
-    }
-    for (const connection of peerConnectionsRef.current.values()) connection.close();
-    peerConnectionsRef.current.clear();
-    pendingPeerCandidatesRef.current.clear();
-    transformedStreamRef.current = null;
-    appliedReferenceRef.current = null;
-    if (socketRef.current) {
-      socketRef.current.emit("broadcaster-stopped", { roomId });
-      socketRef.current.disconnect();
-      socketRef.current = null;
-    }
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((t) => t.stop());
-      streamRef.current = null;
-    }
-    if (localVideoRef.current) localVideoRef.current.srcObject = null;
-    setCameraActive(false);
-    setMicEnabled(false);
-    setMicAvailable(false);
-    setIsConnected(false);
-    setIsStreaming(false);
-  };
-
-  const goLive = useCallback(async () => {
-    if (!user) {
-      setError("Sign in before starting an AI stream.");
-      return;
-    }
-    if ((userData?.wallet?.balanceSeconds ?? 0) < 60) {
-      router.push("/credits");
-      return;
-    }
-    if (!streamRef.current) {
-      setError("Start your camera first.");
-      return;
-    }
-
-    if (startingRef.current || clientRef.current) return;
-    startingRef.current = true;
-    try {
-      setError("");
-      setStartupStatus("Authorizing a secure AI session");
-      const { createDecartClient, models } = await import("@decartai/sdk");
-      const modelId = (MODES.find((m) => m.id === activeMode)?.model || "lucy-2.5") as DecartModelId;
-      const idToken = await user.getIdToken();
-      const tokenResponse = await fetch("/api/realtime-token", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${idToken}`,
-        },
-        body: JSON.stringify({ model: modelId }),
-      });
-      const tokenResult = await tokenResponse.json() as { apiKey?: string; error?: string; maxSessionDuration?: number; sessionId?: string; provider?: string; deadlineAt?: string };
-      if (!tokenResponse.ok || !tokenResult.apiKey) {
-        throw new Error(tokenResult.error || "Unable to authorize this AI session");
-      }
-
-      // Store session info for countdown and cleanup
-      sessionIdRef.current = tokenResult.sessionId ?? null;
-      idTokenRef.current = idToken;
-      const sessionSeconds = tokenResult.maxSessionDuration ?? 0;
-      setReservedSeconds(sessionSeconds);
-      const paidDeadline = Date.parse(tokenResult.deadlineAt ?? "");
-      const effectiveDeadline = Number.isFinite(paidDeadline) ? paidDeadline : Date.now() + sessionSeconds * 1000;
-      sessionDeadlineRef.current = effectiveDeadline;
-      setRemainingSeconds(Math.max(0, Math.min(sessionSeconds, Math.ceil((effectiveDeadline - Date.now()) / 1000))));
-      publishLiveSessionDisplay(user.uid, effectiveDeadline);
-      lastTickSecondsRef.current = 0;
-      lastHeartbeatSentAtRef.current = 0;
-
-      // Handle the transformed stream the same way for both providers: hand
-      // it to viewers, show it locally, and switch existing viewer tracks.
-      const attachTransformedStream = (transformedStream: MediaStream, info: { framesFlowing: boolean } = { framesFlowing: true }) => {
-        // A stream with no video track is not AI output: swapping the preview to
-        // it is what turned a stalled session into a black rectangle. Keep the
-        // camera on screen until there is something real to show.
-        const videoTracks = transformedStream.getVideoTracks();
-        if (videoTracks.length === 0) return;
-        // The fal path already merges the creator's microphone into the stream
-        // it hands over, so only fall back to the local tracks when it carries
-        // no audio of its own (otherwise viewers hear the creator twice).
-        const incomingAudio = transformedStream.getAudioTracks();
-        const outputStream = new MediaStream([
-          ...videoTracks,
-          ...(incomingAudio.length ? incomingAudio : streamRef.current?.getAudioTracks() ?? []),
-        ]);
-        // A declared WebRTC track can be empty. Do not hand it to OBS or
-        // viewers until decoded frames prove that it contains AI video.
-        if (!info.framesFlowing) return;
-        transformedStreamRef.current = outputStream;
-        for (const id of waitingViewersRef.current) void offerViewerRef.current?.(id);
-        waitingViewersRef.current.clear();
-        if (localVideoRef.current) localVideoRef.current.srcObject = outputStream;
-        setStartupStatus("AI output live");
-        const transformedVideoTrack = transformedStream.getVideoTracks()[0];
-        if (transformedVideoTrack) {
-          for (const pc of peerConnectionsRef.current.values()) {
-            const videoSender = pc.getSenders().find((sender) => sender.track?.kind === "video");
-            void videoSender?.replaceTrack(transformedVideoTrack).catch((error) => {
-              console.error("Unable to switch viewer to the transformed stream:", error);
-            });
-          }
-        }
-      };
-
-      if (tokenResult.provider === "fal") {
-        // ── fal.ai provider (master) ──────────────────────────────────
-        // Browser ↔ Savatar relay ↔ fal signaling, with the provider
-        // credential and paid cutoff controlled server-side.
-        const { connectFalRealtime } = await import("@/lib/fal-realtime");
-        const initialPrompt = streamPrompt(activeMode, prompt, Boolean(referenceImage));
-        appliedReferenceRef.current = referenceImage;
-        appliedPromptRef.current = initialPrompt;
-        const falClient = connectFalRealtime({
-          relayUrl: signalingUrl,
-          ticket: tokenResult.apiKey,
-          localStream: streamRef.current,
-          initialPrompt,
-          referenceImage,
-          handlers: {
-            onStateChange: (state) => {
-              const labels = {
-                connecting: "Connecting to the AI service",
-                connected: "AI connected; waiting for output",
-                generating: "AI output live",
-                reconnecting: "Reconnecting to the AI service",
-                disconnected: "AI stream disconnected",
-              } as const;
-              setStartupStatus(labels[state]);
-              isDecartActiveRef.current = state === "generating";
-              setIsDecartActive(state === "generating");
-              if (state === "connected" || state === "generating") {
-                sendStreamHeartbeat(lastTickSecondsRef.current, state === "generating" ? "generating" : "connected");
-              }
-              if (state === "disconnected") {
-                setError("The AI session ended. Your balance will update after the server settles usage.");
-                setTimeout(() => stopStream(), 0);
-              }
-            },
-            onRemoteStream: attachTransformedStream,
-            onGenerationTick: (seconds) => {
-              lastTickSecondsRef.current = Math.max(lastTickSecondsRef.current, Math.floor(Number(seconds) || 0));
-              // "generating" is what starts the billable window on the server;
-              // fal ticks only flow once frames are actually decoding.
-              sendStreamHeartbeat(lastTickSecondsRef.current, "generating");
-            },
-            onError: (err) => {
-              console.error("fal error:", err);
-              isDecartActiveRef.current = false; setIsDecartActive(false);
-              setError(err.message || "The AI stream disconnected unexpectedly.");
-              setStartupStatus("AI connection failed");
-              setTimeout(() => stopStream(), 0);
-            },
-          },
-        });
-        clientRef.current = falClient;
-        isDecartActiveRef.current = falClient.getConnectionState() === "generating";
-      } else {
-        // ── Decart provider (legacy proxy path) ───────────────────────
-        const model = models.realtime(modelId as Parameters<typeof models.realtime>[0]);
-        const client = createDecartClient({ apiKey: tokenResult.apiKey,
-          realtimeBaseUrl: signalingUrl.replace(/^http/, "ws"), telemetry: false });
-        const initialImage = referenceImage ? await dataUrlToBlob(referenceImage) : undefined;
-        appliedReferenceRef.current = referenceImage;
-        const initialPrompt = streamPrompt(activeMode, prompt, Boolean(referenceImage));
-        appliedPromptRef.current = initialPrompt;
-
-        const realtimeClient = await client.realtime.connect(streamRef.current, {
-          model,
-          onConnectionChange: (state) => {
-            const labels = {
-              connecting: "Connecting to the AI service",
-              connected: "AI connected; waiting for output",
-              generating: "AI output live",
-              reconnecting: "Reconnecting to the AI service",
-              disconnected: "AI stream disconnected",
-            } as const;
-            setStartupStatus(labels[state]);
-
-              isDecartActiveRef.current = state === "generating";
-              setIsDecartActive(state === "generating");
-
-            // Presence heartbeat: from "connected" onward (covers queue time when
-            // there are no generation ticks yet) the server knows the client is
-            // alive, so the sweep never mistakes a queued session for a crash.
-              if (state === "connected" || state === "generating") {
-                sendStreamHeartbeat(lastTickSecondsRef.current, state === "generating" ? "generating" : "connected");
-            }
-
-            // Auto-end and settle as soon as the provider disconnects.
-            if (state === "disconnected") {
-              setError("The AI session ended. Your balance will update after the server settles usage.");
-              setTimeout(() => stopStream(), 0);
-            }
-          },
-          onQueuePosition: ({ position }) => setStartupStatus(`AI queue position: ${position}`),
-          onRemoteStream: attachTransformedStream,
-          initialState: {
-            image: initialImage,
-            prompt: {
-              text: initialPrompt,
-              enhance: true,
-            },
-          },
-          resolution: resolution as "720p" | "1080p",
-        });
-
-        realtimeClient.on("error", (err: { message: string }) => {
-          console.error("Decart error:", err);
-          isDecartActiveRef.current = false; setIsDecartActive(false);
-          setError(err.message || "The AI stream disconnected unexpectedly.");
-          setStartupStatus("AI connection failed");
-          setTimeout(() => stopStream(), 0);
-        });
-
-        // Record provider diagnostics; the proxy remains the billing authority.
-        realtimeClient.on("generationTick", ({ seconds }: { seconds: number }) => {
-          lastTickSecondsRef.current = Math.max(lastTickSecondsRef.current, Math.floor(Number(seconds) || 0));
-          sendStreamHeartbeat(lastTickSecondsRef.current, "generating");
-        });
-
-        clientRef.current = realtimeClient;
-        isDecartActiveRef.current = realtimeClient.getConnectionState() === "generating";
-      }
-      setIsConnected(true);
-      setStreamDuration(0);
-      setIsStreaming(true);
-
-      // Signaling server for viewers
-      // Stable per-creator room lets the OBS browser-source URL attach to the
-      // same live output as viewers.
-      const newRoomId = await getOrCreateStreamRoomId(user);
-      setRoomId(newRoomId);
-
-      const socket = io(signalingUrl, {
-        transports: ["websocket", "polling"],
-        auth: { token: idToken },
-      });
-      socketRef.current = socket;
-
-      socket.on("connect", () => {
-        socket.emit("join-room", { roomId: newRoomId, role: "broadcaster" });
-      });
-
-      socket.on("connect_error", () => {
-        setError("Could not reach the live-stream signaling service.");
-        void stopStream();
-      });
-
-      socket.on("authorization-error", () => {
-        setError("Your account is not authorized to broadcast.");
-        void stopStream();
-      });
-
-      socket.on("room-error", (message: string) => {
-        setError(message || "Unable to open a live stream room.");
-        void stopStream();
-      });
-
-      socket.on("viewer-count", (count: number) => {
-        setViewerCount(count);
-      });
-
-      const offerViewer = async (viewerId: string) => {
-        // Before AI frames are verified, viewers receive the real camera rather
-        // than an empty provider track. The sender is replaced atomically once
-        // AI output is live.
-        const aiStream = transformedStreamRef.current ?? streamRef.current;
-        if (!aiStream) { waitingViewersRef.current.add(viewerId); return; }
-
-        peerConnectionsRef.current.get(viewerId)?.close();
-        pendingPeerCandidatesRef.current.set(viewerId, []);
-        const pc = new RTCPeerConnection({ iceServers: await getIceServers() });
-        peerConnectionsRef.current.set(viewerId, pc);
-        aiStream.getTracks().forEach((track) => pc.addTrack(track, aiStream));
-
-        pc.onicecandidate = (event) => {
-          if (event.candidate) {
-            socket.emit("ice-candidate", {
-              roomId: newRoomId,
-              candidate: event.candidate,
-              targetId: viewerId,
-            });
-          }
-        };
-
-        pc.onconnectionstatechange = () => {
-          if (["closed", "failed", "disconnected"].includes(pc.connectionState)) {
-            pc.close();
-            peerConnectionsRef.current.delete(viewerId);
-            pendingPeerCandidatesRef.current.delete(viewerId);
-          }
-        };
-
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-        socket.emit("offer", { roomId: newRoomId, offer: pc.localDescription, viewerId });
-      };
-      offerViewerRef.current = offerViewer;
-      socket.on("viewer-joined", ({ viewerId }: { viewerId: string }) => {
-        void offerViewer(viewerId).catch(() => setError("A viewer could not connect."));
-      });
-
-      socket.on(
-        "answer",
-        async ({ answer, viewerId }: { answer: RTCSessionDescriptionInit; viewerId: string }) => {
-          const pc = peerConnectionsRef.current.get(viewerId);
-          if (pc) {
-            await pc.setRemoteDescription(answer);
-            for (const candidate of pendingPeerCandidatesRef.current.get(viewerId) ?? []) {
-              await pc.addIceCandidate(candidate);
-            }
-            pendingPeerCandidatesRef.current.delete(viewerId);
-          }
-        }
-      );
-
-      socket.on(
-        "ice-candidate",
-        async ({ candidate, fromId }: { candidate: RTCIceCandidateInit; fromId: string }) => {
-          const pc = peerConnectionsRef.current.get(fromId);
-          if (pc?.remoteDescription) {
-            await pc.addIceCandidate(candidate);
-          } else if (pc) {
-            const pending = pendingPeerCandidatesRef.current.get(fromId) ?? [];
-            pending.push(candidate);
-            pendingPeerCandidatesRef.current.set(fromId, pending);
-          }
-        }
-      );
-
-      socket.on("viewer-left", ({ viewerId }: { viewerId: string }) => {
-        waitingViewersRef.current.delete(viewerId);
-        peerConnectionsRef.current.get(viewerId)?.close();
-        peerConnectionsRef.current.delete(viewerId);
-        pendingPeerCandidatesRef.current.delete(viewerId);
-      });
-    } catch (err) {
-      console.error("SDK connect error:", err);
-      setError(err instanceof Error ? err.message : "Failed to start the AI stream.");
-      setStartupStatus("");
-      if (sessionIdRef.current) await stopStream();
-    } finally {
-      startingRef.current = false;
-    }
-  }, [activeMode, prompt, referenceImage, resolution, router, sendStreamHeartbeat, stopStream, user, userData?.wallet?.balanceSeconds]);
 
   return (
     <DashboardLayout streamActive={isStreaming}>
@@ -974,7 +266,7 @@ export default function Dashboard() {
               <button onClick={cameraActive ? stopCamera : startCamera} className="px-3 py-2 rounded-lg bg-white border border-stone-300 text-xs text-stone-700 hover:bg-stone-50 transition">
                 Camera
               </button>
-              <button onClick={() => { const tracks = streamRef.current?.getAudioTracks() ?? []; if (!tracks.length) return; const next = !micEnabled; tracks.forEach((track) => { track.enabled = next; }); setMicEnabled(next); }} disabled={!cameraActive || !micAvailable} className="px-3 py-2 rounded-lg bg-white border border-stone-300 text-xs text-stone-700 hover:bg-stone-50 transition disabled:opacity-40">
+              <button onClick={toggleMic} disabled={!cameraActive || !micAvailable} className="px-3 py-2 rounded-lg bg-white border border-stone-300 text-xs text-stone-700 hover:bg-stone-50 transition disabled:opacity-40">
                 {!micAvailable ? "Mic unavailable" : micEnabled ? "Mic on" : "Mic off"}
               </button>
               {availableCameras.length > 1 && (
@@ -1111,14 +403,14 @@ export default function Dashboard() {
               <h3 className="text-sm font-semibold text-stone-900 mb-2">AI look</h3>
               <div className="flex items-center gap-2 mb-3">
                 <span className="px-2 py-0.5 rounded bg-stone-100 text-[11px] text-stone-600 border border-stone-200">
-                  {MODES.find((m) => m.id === activeMode)?.label || "Natural"}
+                  {STREAM_MODES.find((m) => m.id === activeMode)?.label || "Natural"}
                 </span>
                 <span className="text-[11px] text-stone-500">
                   {isStreaming ? "AI active — uses credits" : "Real camera — no credits used"}
                 </span>
               </div>
               <div className="space-y-1">
-                {MODES.map((m) => (
+                {STREAM_MODES.map((m) => (
                   <button
                     key={m.id}
                     onClick={() => setActiveMode(m.id)}
